@@ -1,0 +1,316 @@
+"""Composition root.
+
+WHY one place: dependency wiring is centralized so the object graph is auditable
+in a single file and no module self-constructs its dependencies. WHY the audit
+callback: the gateway (infra) must record cost but may not import safety, so we
+inject a thin callback that writes to the AuditLog (safety).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from atlas.infra.bus import MessageBus
+from atlas.infra.clock import Clock, SystemClock
+from atlas.infra.config import AppConfig, Settings, load_app_config, load_permissions, load_settings
+from atlas.infra.db import Database
+from atlas.infra.ids import CorrelationId, IdGenerator, UuidGenerator
+from atlas.infra.lifecycle import Lifecycle
+from atlas.infra.logging import configure_logging, get_logger
+from atlas.infra.metrics import Metrics
+from atlas.infra.registry import ServiceRegistry
+from atlas.infra.tracing import Tracer
+from atlas.infra.types import AuditRecord
+from atlas.intelligence.contracts import Usage
+from atlas.intelligence.gateway import ModelGateway
+from atlas.intelligence.governance.budget import Budgets
+from atlas.intelligence.governance.cost_governor import CostGovernor
+from atlas.intelligence.health.health_monitor import HealthMonitor
+from atlas.intelligence.observability.telemetry import Telemetry
+from atlas.intelligence.providers.ollama import OllamaProvider
+from atlas.intelligence.providers.openai_compatible import OpenAICompatibleProvider
+from atlas.intelligence.registry.capability_index import CapabilityIndex
+from atlas.intelligence.registry.model_registry import ModelRegistry
+from atlas.intelligence.registry.provider_registry import ProviderRegistry
+from atlas.intelligence.runtime.fallback import FallbackEngine
+from atlas.intelligence.runtime.inference import InferenceRuntime
+from atlas.intelligence.selection.router import CapabilityRouter
+from atlas.intelligence.selection.selector import ModelSelector
+from atlas.interfaces.notify import CliConfirmer, CompositeConfirmer, NtfyNotifier
+from atlas.memory.consolidation import Consolidator
+from atlas.memory.embedder import OllamaEmbedder
+from atlas.memory.episodic import EpisodicMemory
+from atlas.memory.pruning import Pruner
+from atlas.memory.retrieval import Retriever
+from atlas.memory.semantic import SemanticMemory
+from atlas.memory.user_model import UserModel
+from atlas.memory.vectorstore import ChromaVectorStore
+from atlas.memory.working import WorkingMemory
+from atlas.orchestration.context_builder import ContextBuilder
+from atlas.orchestration.dispatcher import ToolDispatcher
+from atlas.orchestration.events import EventPublisher
+from atlas.orchestration.limits import ExecutionLimits
+from atlas.orchestration.managers.retry import RetryManager
+from atlas.orchestration.monitor import ExecutionMonitor
+from atlas.orchestration.orchestrator import Orchestrator
+from atlas.orchestration.parser import ResponseParser
+from atlas.orchestration.planner import Planner
+from atlas.orchestration.prompt_builder import PromptBuilder
+from atlas.orchestration.reasoning import ReasoningLoop
+from atlas.orchestration.recorder import ExecutionRecorder
+from atlas.orchestration.reflection import NoOpReflection
+from atlas.orchestration.registry import ToolRegistry
+from atlas.orchestration.router import Router
+from atlas.orchestration.self_critique import SelfCritique
+from atlas.orchestration.tiering import TierEstimator
+from atlas.orchestration.types import Action, Critique
+from atlas.orchestration.validator import OutputValidator
+from atlas.safety.audit import AuditLog
+from atlas.safety.classifier import TierClassifier
+from atlas.safety.engine import SafetyEngine
+from atlas.safety.killswitch import KillSwitch
+from atlas.safety.manifest import Manifest, load_manifest
+from atlas.safety.policy import KillSwitchPolicy, PolicyEngine
+from atlas.safety.sandbox_docker import DockerSandbox, SandboxSpec
+from atlas.tools.base import Tool
+from atlas.tools.filesystem import FilesystemTool
+from atlas.tools.shell import ShellTool
+
+_CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_log = get_logger("atlas.app")
+
+
+@dataclass
+class Atlas:
+    settings: Settings
+    config: AppConfig
+    manifest: Manifest
+    db: Database
+    registry: ServiceRegistry
+    lifecycle: Lifecycle
+    ids: IdGenerator
+    clock: Clock
+    metrics: Metrics
+    tracer: Tracer
+    audit: AuditLog
+    killswitch: KillSwitch
+    classifier: TierClassifier
+    safety: SafetyEngine
+    tools: dict[str, Tool]
+    gateway: ModelGateway
+    notifier: NtfyNotifier | None
+    vectors: ChromaVectorStore
+    embedder: OllamaEmbedder
+    episodic: EpisodicMemory
+    semantic: SemanticMemory
+    user_model: UserModel
+    working: WorkingMemory
+    retriever: Retriever
+    consolidator: Consolidator
+    pruner: Pruner
+    bus: MessageBus
+    orchestrator: Orchestrator
+
+    async def start(self) -> None:
+        await self.lifecycle.start()
+
+    async def close(self) -> None:
+        await self.embedder.close()
+        await self.gateway.close()
+        if self.notifier is not None:
+            await self.notifier.close()
+        await self.lifecycle.stop()
+
+
+async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
+    settings = load_settings()
+    config = load_app_config(config_dir)
+    manifest = load_manifest(load_permissions(config_dir))
+
+    configure_logging(config.logging)
+
+    ids: IdGenerator = UuidGenerator()
+    clock: Clock = SystemClock()
+    metrics = Metrics()
+    tracer = Tracer(config.tracing)
+
+    db = Database(settings.db_path())
+    registry = ServiceRegistry()
+    registry.register("db", db)
+    lifecycle = Lifecycle(registry)
+    
+    bus = MessageBus()
+
+    audit = AuditLog(db)
+    killswitch = KillSwitch(config.safety.stop_flag_path)
+    classifier = TierClassifier(manifest, config.safety.default_tier_on_error)
+    policy = PolicyEngine((KillSwitchPolicy(killswitch),))
+    safety = SafetyEngine(
+        classifier=classifier, policy=policy, audit=audit,
+        killswitch=killswitch, clock=clock, cfg=config.safety,
+    )
+
+    notifier: NtfyNotifier | None = (
+        NtfyNotifier(settings.ntfy_topic, settings.ntfy_callback_base, ids)
+        if settings.ntfy_topic else None
+    )
+    safety.set_confirmer(
+        CompositeConfirmer(notifier, CliConfirmer(), config.notify.confirm_timeout_s)
+    )
+
+    async def on_audit_cost(corr: str, provider: str, model_id: str, usage: Usage, latency_ms: int) -> None:
+        await audit.record(AuditRecord(
+            correlation_id=CorrelationId(corr), ts=clock.now(), actor="intel_platform",
+            action="model.call", outcome="ok",
+            cost_tokens=usage.input_tokens + usage.output_tokens,
+            cost_usd=usage.usd,
+            payload={"model": model_id, "provider": provider, "latency_ms": latency_ms},
+        ))
+
+    telemetry = Telemetry(on_audit_cost)
+    health = HealthMonitor()
+    
+    budgets = Budgets(
+        daily_usd=config.models.daily_usd,
+        weekly_usd=config.models.weekly_usd,
+        monthly_usd=config.models.monthly_usd,
+        per_task_usd=config.models.per_task_usd,
+    )
+    governor = CostGovernor(spend=audit, budgets=budgets)
+
+    provider_registry = ProviderRegistry()
+    provider_registry.register(OllamaProvider(settings.ollama_host, config.models.local_timeout_s))
+    if config.models.allow_cloud:
+        if settings.deepseek_api_key:
+            provider_registry.register(OpenAICompatibleProvider(
+                name="deepseek", base_url="https://api.deepseek.com",
+                api_key=settings.deepseek_api_key, timeout_s=config.models.cloud_timeout_s
+            ))
+        if settings.glm_api_key:
+            provider_registry.register(OpenAICompatibleProvider(
+                name="glm", base_url="https://open.bigmodel.cn/api/paas/v4",
+                api_key=settings.glm_api_key, timeout_s=config.models.cloud_timeout_s
+            ))
+        if settings.kimi_api_key:
+            provider_registry.register(OpenAICompatibleProvider(
+                name="kimi", base_url="https://api.moonshot.cn/v1",
+                api_key=settings.kimi_api_key, timeout_s=config.models.cloud_timeout_s
+            ))
+
+    model_registry = ModelRegistry.from_yaml(_CONFIG_DIR / "models.yaml")
+    capability_index = CapabilityIndex(model_registry)
+    
+    runtime = InferenceRuntime(
+        providers=provider_registry, health=health,
+        governor=governor, telemetry=telemetry,
+        model_timeout_s=config.models.cloud_timeout_s,
+    )
+    fallback = FallbackEngine()
+    cap_router = CapabilityRouter()
+    selector = ModelSelector(capability_index, health)
+    
+    gateway = ModelGateway(
+        router=cap_router, selector=selector,
+        fallback=fallback, runtime=runtime,
+    )
+
+    # Phase 2 Tools
+    sandbox = DockerSandbox(SandboxSpec(
+        image=config.sandbox.image, cpus=config.sandbox.cpus,
+        memory=config.sandbox.memory, pids_limit=config.sandbox.pids_limit,
+        workdir=config.sandbox.workdir
+    ))
+    
+    # We mount the workspace explicitly for the shell tool in Phase 2
+    ws = str(_REPO_ROOT)
+    
+    tools: dict[str, Tool] = {
+        "filesystem": FilesystemTool(
+            read_globs=manifest.allowed_paths.get("read", []),
+            write_globs=manifest.allowed_paths.get("write", []),
+            sandbox=sandbox,
+        ),
+        "shell": ShellTool(
+            read_only=manifest.allowed_commands.get("read_only", []),
+            side_effect=manifest.allowed_commands.get("side_effect", []),
+            sandbox=sandbox,
+            mounts={ws: "/work"}
+        ),
+    }
+
+    vectors = ChromaVectorStore(str(settings.data_dir / "chroma"))
+    embedder = OllamaEmbedder(settings)
+    episodic = EpisodicMemory(db, clock)
+    semantic = SemanticMemory(db, vectors, embedder, ids, clock)
+    user_model = UserModel(db, clock)
+    working = WorkingMemory()
+    retriever = Retriever(semantic=semantic, episodic=episodic, user_model=user_model)
+    consolidator = Consolidator(episodic=episodic, semantic=semantic, gateway=gateway,
+                                db=db, ids=ids, clock=clock)
+    pruner = Pruner(db=db, gateway=gateway, ids=ids, clock=clock)
+
+    tool_registry = ToolRegistry()
+    for t in tools.values():
+        tool_registry.register(t, ("read", "write", "delete", "side_effect", "read_only"))
+
+    events = EventPublisher(bus)
+    router = Router(gateway)
+    planner = Planner(gateway)
+    context_builder = ContextBuilder(
+        retriever=retriever, working=working, system_prompt="You are an autonomous agent."
+    )
+    parser = ResponseParser()
+    validator = OutputValidator()
+    prompts = PromptBuilder()
+    recorder = ExecutionRecorder(episodic, clock)
+    monitor = ExecutionMonitor(killswitch)
+    retry = RetryManager()
+    
+    estimator = TierEstimator(classifier)
+
+    async def critique_audit(corr: str, action: Action, critique: Critique) -> None:
+        await audit.record(AuditRecord(
+            correlation_id=CorrelationId(corr), ts=clock.now(), actor="critique",
+            action="self_critique", tool=action.tool,
+            outcome=critique.verdict.value,
+            payload={"reason": critique.reason, "action": action.model_dump()},
+        ))
+
+    reflection: SelfCritique | NoOpReflection
+    if config.critique.enabled:
+        reflection = SelfCritique(
+            gateway=gateway, estimator=estimator,
+            parser=parser, validator=validator,
+            correlation_id_provider=ids.correlation_id, audit=critique_audit,
+        )
+    else:
+        reflection = NoOpReflection()
+
+    dispatcher = ToolDispatcher(tool_registry, safety)
+    limits = ExecutionLimits(max_steps=15)
+    
+    reasoning = ReasoningLoop(
+        gateway=gateway, dispatcher=dispatcher, parser=parser,
+        validator=validator, prompts=prompts, recorder=recorder,
+        monitor=monitor, retry=retry, reflection=reflection,
+        events=events, limits=limits,
+    )
+    
+    orchestrator = Orchestrator(
+        ids=ids, clock=clock, router=router, planner=planner,
+        context_builder=context_builder, reasoning=reasoning,
+        registry=tool_registry, events=events,
+    )
+
+    _log.info("core.ready", event_type="lifecycle", providers=provider_registry.names())
+    return Atlas(
+        settings=settings, config=config, manifest=manifest, db=db, registry=registry,
+        lifecycle=lifecycle, ids=ids, clock=clock, metrics=metrics, tracer=tracer,
+        audit=audit, killswitch=killswitch, classifier=classifier, safety=safety,
+        tools=tools, gateway=gateway, notifier=notifier,
+        vectors=vectors, embedder=embedder, episodic=episodic, semantic=semantic,
+        user_model=user_model, working=working, retriever=retriever,
+        consolidator=consolidator, pruner=pruner, bus=bus, orchestrator=orchestrator,
+    )

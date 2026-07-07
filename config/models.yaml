@@ -1,0 +1,89 @@
+# The Intelligence Platform Model Registry
+
+models:
+  - id: qwen3-4b
+    provider: ollama
+    provider_model: qwen3:4b
+    context_length: 8192
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
+    latency_estimate_ms: 100
+    capabilities:
+      - tool_calling
+      - structured_output
+      - reflection
+    max_concurrency: 4
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: false
+    supports_vision: false
+    supports_tool_calling: true
+    quality_score: 0.6
+    reliability_score: 0.95
+    enabled: true
+
+  - id: glm-5.2
+    provider: glm
+    provider_model: glm-5.2
+    context_length: 128000
+    usd_per_1m_input: 0.15
+    usd_per_1m_output: 0.60
+    latency_estimate_ms: 800
+    capabilities:
+      - planning
+      - coding
+      - tool_calling
+      - json_generation
+    max_concurrency: 2
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: false
+    supports_vision: false
+    supports_tool_calling: true
+    quality_score: 0.85
+    reliability_score: 0.98
+    enabled: true
+
+  - id: deepseek-v4-pro
+    provider: deepseek
+    provider_model: deepseek-chat
+    context_length: 64000
+    usd_per_1m_input: 0.14
+    usd_per_1m_output: 0.28
+    latency_estimate_ms: 1200
+    capabilities:
+      - reasoning
+      - planning
+      - coding
+      - tool_calling
+      - structured_output
+    max_concurrency: 5
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: true
+    supports_vision: false
+    supports_tool_calling: true
+    quality_score: 0.95
+    reliability_score: 0.99
+    enabled: true
+
+  - id: kimi-k2.7-code
+    provider: kimi
+    provider_model: moonshot-v1-8k
+    context_length: 8192
+    usd_per_1m_input: 0.08
+    usd_per_1m_output: 0.16
+    latency_estimate_ms: 900
+    capabilities:
+      - coding
+      - tool_calling
+      - structured_output
+    max_concurrency: 3
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: false
+    supports_vision: false
+    supports_tool_calling: true
+    quality_score: 0.88
+    reliability_score: 0.97
+    enabled: true

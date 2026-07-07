@@ -1,0 +1,32 @@
+version: 1
+
+allowed_paths:
+  read:  ["~/projects/**", "~/atlas/inbox/**"]
+  write: ["~/projects/scratch/**", "~/atlas/outbox/**"]
+
+allowed_commands:
+  read_only:   ["ls", "cat", "grep", "find", "git status", "git log", "git diff"]
+  side_effect: ["git add", "git commit", "npm install", "python"]
+
+whatsapp:
+  known_contacts: []
+
+safety:
+  mass_deletion_threshold: 25
+  credential_dirs: ["~/.ssh", "~/.aws", "~/.config/gcloud", "~/.kube", "~/.gnupg", "~/.docker"]
+  financial_domains: ["stripe.com", "paypal.com", "coinbase.com", "binance.com", "wise.com", "razorpay.com"]
+
+rules:
+  - {tool: filesystem, operation: read,      tier: 0}
+  - {tool: filesystem, operation: search,    tier: 0}
+  - {tool: filesystem, operation: write,     tier: 1, constraint: within_write_paths}
+  - {tool: filesystem, operation: delete,    tier: 2}
+  - {tool: filesystem, operation: overwrite, tier: 2}
+  - {tool: shell,      operation: read_only,   tier: 1, constraint: cmd_in_read_only}
+  - {tool: shell,      operation: side_effect, tier: 2, constraint: cmd_in_side_effect}
+
+hard_block:
+  - {tool: "*",        operation: "*",      match: credential_access}
+  - {tool: "*",        operation: "*",      match: financial_transaction}
+  - {tool: filesystem, operation: delete,   match: mass_deletion}
+  - {tool: "*",        operation: "*",      match: edit_safety_config}

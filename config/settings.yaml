@@ -1,0 +1,34 @@
+logging:
+  level: INFO
+  format: console        # console | json
+models:
+  gpu_concurrency: 1
+  local_timeout_s: 120
+  cloud_timeout_s: 90
+  allow_cloud: true      # Phase 5A enabled
+  daily_usd: 1.00
+  weekly_usd: 5.00
+  monthly_usd: 15.00
+  per_task_usd: 0.50
+safety:
+  stop_flag_path: STOP.flag
+  confirm_timeout_s: 300
+  default_tier_on_error: 2
+notify:
+  confirm_timeout_s: 300
+  quiet_hours: null      # Phase 6
+metrics:
+  snapshot_interval_s: 60
+tracing:
+  enabled: true
+sandbox:
+  image: "python:3.13-slim"
+  cpus: 1.0
+  memory: "512m"
+  pids_limit: 128
+  workdir: "/work"
+
+critique:
+  enabled: true          # master switch
+  min_tier: 2            # only critique actions at/above this tier (Tier.CONFIRM)
+  revise_max: 1          # bounded regeneration (no ping-pong)
