@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# uv
+# (uv.lock IS committed; the venv is not)
+
+# ATLAS runtime state
+.atlas/
+STOP.flag
+*.db
+*.db-wal
+*.db-shm
+
+# secrets
+.env
+
+# OS
+.DS_Store
