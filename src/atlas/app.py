@@ -10,7 +10,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
+from atlas.capabilities.dispatcher import CapabilityDispatcher
+from atlas.capabilities.observability.telemetry import CapabilityTelemetry
+from atlas.capabilities.registry.capability import CapabilityRegistry
+from atlas.capabilities.registry.health import CapabilityHealth
+from atlas.capabilities.registry.provider_registry import ProviderRegistry as CapProviderRegistry
+from atlas.capabilities.router import CapabilityRouter as ExtCapabilityRouter
 from atlas.infra.bus import MessageBus
 from atlas.infra.clock import Clock, SystemClock
 from atlas.infra.config import AppConfig, Settings, load_app_config, load_permissions, load_settings
@@ -112,6 +119,12 @@ class Atlas:
     pruner: Pruner
     bus: MessageBus
     orchestrator: Orchestrator
+    cap_registry: CapabilityRegistry
+    cap_health: CapabilityHealth
+    cap_providers: CapProviderRegistry
+    ext_cap_router: ExtCapabilityRouter
+    cap_dispatcher: CapabilityDispatcher
+    cap_telemetry: CapabilityTelemetry
 
     async def start(self) -> None:
         await self.lifecycle.start()
@@ -216,6 +229,23 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         fallback=fallback, runtime=runtime,
     )
 
+    cap_registry = CapabilityRegistry()
+    cap_health = CapabilityHealth()
+    cap_providers = CapProviderRegistry(cap_health)
+    ext_cap_router = ExtCapabilityRouter(gateway)
+
+    async def cap_audit(**kw: Any) -> None:
+        await audit.record(AuditRecord(
+            correlation_id=CorrelationId(kw["correlation_id"]), ts=clock.now(), actor=kw["actor"],
+            action=kw["action"], tool=kw.get("tool"), outcome=kw.get("outcome"),
+            payload=kw.get("payload")))
+            
+    cap_telemetry = CapabilityTelemetry(cap_audit)
+
+    cap_dispatcher = CapabilityDispatcher(
+        registry=cap_registry, providers=cap_providers, health=cap_health,
+        safety=safety, telemetry=cap_telemetry)
+
     # Phase 2 Tools
     sandbox = DockerSandbox(SandboxSpec(
         image=config.sandbox.image, cpus=config.sandbox.cpus,
@@ -313,4 +343,6 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         vectors=vectors, embedder=embedder, episodic=episodic, semantic=semantic,
         user_model=user_model, working=working, retriever=retriever,
         consolidator=consolidator, pruner=pruner, bus=bus, orchestrator=orchestrator,
+        cap_registry=cap_registry, cap_health=cap_health, cap_providers=cap_providers,
+        ext_cap_router=ext_cap_router, cap_dispatcher=cap_dispatcher, cap_telemetry=cap_telemetry,
     )

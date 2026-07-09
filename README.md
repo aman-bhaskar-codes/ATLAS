@@ -101,6 +101,18 @@ ReasoningLoop produces Action
 
 ---
 
+## 🔌 External Capabilities Platform (Phase 6.1)
+
+ATLAS makes it incredibly simple to manually integrate external tools via the **Capability Core**:
+
+- **Unified Provider Protocol**: Implement a single `Provider` interface (`initialize`, `execute`, `normalize`, `health`) and it drops cleanly into the framework.
+- **Provider Registry**: Handles automatic circuit breaking and fallback. If a provider fails, the `CapabilityRouter` transparently routes around it.
+- **MCP Ready**: Natively structured to treat Model Context Protocol (MCP) servers identically to local script adapters.
+- **Zero-Friction Tooling**: All external capabilities are dynamically wrapped as `Tool` instances that plug directly into the pre-existing safety and audit engine.
+- **Ready for Manual Integrations**: Just create a provider class, bind it in `app.py`, and you're done!
+
+---
+
 ## 🧬 Memory System (Phase 3)
 
 Four-layer memory with hybrid retrieval:
@@ -240,8 +252,9 @@ The **manifest** (`config/permissions.yaml`) is the source of truth for what the
 | Phase 4 — Orchestration Runtime | ✅ Done | ReAct loop, dispatcher, state machine, planner |
 | Phase 4.5 — Self-Critique | ✅ Done | In-loop self-critique for Tier-2+ actions |
 | Phase 5A — Intelligence Platform | ✅ Done | Multi-provider gateway, routing, governance |
-| Phase 5B — Eval Harness | 🔜 Next | Offline eval, benchmark freeze, regression tracking |
-| Phase 6 — Research Agent | 🔜 Planned | Literature search, hypothesis generation, peer-review loop |
+| Phase 6.1 — Capability Core | ✅ Done | Pluggable external capability framework and provider registry |
+| Phase 6.2 — Core Capabilities | 🔜 Next | Build out Identity, Knowledge, Browser, and MCP capabilities |
+| Phase 7 — Advanced Agents | 🔜 Planned | Research agent, peer-review loops, multi-agent swarms |
 
 ---
 
