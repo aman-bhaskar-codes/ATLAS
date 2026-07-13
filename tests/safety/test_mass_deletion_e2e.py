@@ -8,7 +8,8 @@ from atlas.safety.engine import DeniedError
 
 
 @pytest.mark.asyncio
-async def test_mass_deletion_hard_block(tmp_path: Path) -> None:
+async def test_mass_deletion_hard_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ATLAS_MASTER_KEY", "dummy_e2e_key_12345678901234567890123")
     # Set up some dummy files
     d = tmp_path / "target"
     d.mkdir()

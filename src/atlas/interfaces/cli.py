@@ -216,6 +216,24 @@ def model(prompt: str, deep: bool = typer.Option(False)) -> None:
     _run(go())
 
 
+@app.command("know")
+def know(query: str, official_only: bool = typer.Option(False)) -> None:
+    """Obtain knowledge from memory + official + web, ranked with confidence."""
+    async def go() -> None:
+        atlas = await build()
+        await atlas.db.start()
+        from atlas.capabilities.domain.knowledge import KnowledgeQuery
+        ans = await atlas.knowledge_platform.obtain_knowledge(
+            KnowledgeQuery(text=query, prefer_official=True), atlas.ids.correlation_id())
+        console.print(ans.text)
+        console.print(f"[dim]confidence {ans.confidence.score:.2f} ({ans.confidence.basis}) · "
+                      f"{len(ans.sources)} sources[/]")
+        for s in ans.sources[:5]:
+            console.print(f"  [{s.provenance.source_kind.value}] {s.title} {s.url or ''}")
+        await atlas.close()
+    _run(go())
+
+
 @app.command()
 def kill() -> None:
     async def go() -> None:

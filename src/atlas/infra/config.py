@@ -9,9 +9,9 @@ The permission manifest is loaded separately and is NEVER overridable by env
 
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 import yaml

@@ -18,6 +18,7 @@ safety:
 
 rules:
   - {tool: filesystem, operation: read,      tier: 0}
+  - {tool: knowledge, operation: search,     tier: 0}
   - {tool: filesystem, operation: search,    tier: 0}
   - {tool: filesystem, operation: write,     tier: 1, constraint: within_write_paths}
   - {tool: filesystem, operation: delete,    tier: 2}
