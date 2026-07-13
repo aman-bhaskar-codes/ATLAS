@@ -10,6 +10,8 @@ The permission manifest is loaded separately and is NEVER overridable by env
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import sys
 from typing import Any
 
 import yaml
@@ -38,6 +40,7 @@ class Settings(BaseSettings):
     glm_api_key: str = ""
     kimi_api_key: str = ""
     mimo_api_key: str = ""
+    master_key: str = ""
 
     def db_path(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -156,3 +159,16 @@ def load_permissions(config_dir: Path) -> dict[str, Any]:
             "permissions.yaml missing or empty — refusing to run deny-by-default with no manifest"
         )
     return raw
+
+def resolve_master_key(settings: Settings) -> str:
+    """macOS Keychain first, env fallback. WHY: never store the key on disk."""
+    if sys.platform == "darwin":
+        r = subprocess.run(["security", "find-generic-password", "-s", "atlas-master",
+                            "-w"], capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    
+    if settings.master_key:            # ATLAS_MASTER_KEY env fallback (dev/CI)
+        return settings.master_key
+        
+    raise ConfigError("no master key: set it in Keychain (atlas-master) or ATLAS_MASTER_KEY")
