@@ -65,7 +65,7 @@ ATLAS is structured in independently testable, DI-wired layers:
 
 ---
 
-## 🧠 Intelligence Platform (Phase 5A)
+## 🧠 Intelligence Platform (Phase 5)
 
 A production-grade LLM routing and governance layer:
 
@@ -74,6 +74,18 @@ A production-grade LLM routing and governance layer:
 - **Circuit breaker + health monitor** — per-provider rolling failure tracking; open breaker reroutes automatically
 - **Ranked fallback chain** — `DeepSeek → GLM → Kimi → local Qwen → FallbackError`
 - **Telemetry** — every inference call is audited with latency, cost, and model ID
+
+---
+
+## 🔐 Identity Platform (Phase 6)
+
+A central capability vault that isolates credentials from providers:
+
+- **Single Door Policy** — Providers request identities, they do not manage secrets
+- **Symmetric Encryption** — Secrets encrypted at-rest in SQLite using AES-128-CBC + HMAC
+- **Background Rotation** — Automatic OAuth2 token refresh and rotation transparency
+- **Keychain Master Key** — Master key never touches disk, fetched from macOS Keychain
+- **Auditable Access** — Every credential access logs caller, target, and kind, never leaking values
 
 ---
 

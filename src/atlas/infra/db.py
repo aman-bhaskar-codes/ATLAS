@@ -120,6 +120,21 @@ _MIGRATIONS: tuple[str, ...] = (
         created_ts TEXT NOT NULL
     );
     """,
+    # 004 — identity platform (Phase 6.2)
+    """
+    CREATE TABLE IF NOT EXISTS secrets (
+        id TEXT PRIMARY KEY,
+        ciphertext TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS identities (
+        id TEXT PRIMARY KEY,
+        kind TEXT,
+        provider_hint TEXT,
+        expires_at TEXT,
+        scopes TEXT,
+        rotated_ts TEXT
+    );
+    """,
 )
 
 

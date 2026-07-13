@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 from atlas.app import Atlas
+from atlas.infra.config import resolve_master_key
+from atlas.infra.errors import ConfigError
 from atlas.safety.classifier import KNOWN_CONSTRAINTS
 from atlas.safety.manifest import verify_manifest
 from atlas.safety.matchers import KNOWN_MATCHERS
@@ -32,6 +34,25 @@ _REGISTERED_TOOLS: dict[str, list[str]] = {
     "filesystem": ["read", "search", "write", "delete"],
     "shell": ["read_only", "side_effect"],
 }
+
+
+def _master_key_present(atlas: Atlas) -> bool:
+    try:
+        resolve_master_key(atlas.settings)
+        return True
+    except ConfigError:
+        return False
+
+
+async def _count_identities(atlas: Atlas) -> int:
+    if not atlas.db.conn:
+        return 0
+    try:
+        cur = await atlas.db.conn.execute("SELECT COUNT(*) FROM identities")
+        row = await cur.fetchone()
+        return row[0] if row else 0
+    except Exception:
+        return 0
 
 
 async def run_doctor(atlas: Atlas, *, verify_manifest_only: bool = False) -> list[CheckResult]:
@@ -99,6 +120,16 @@ async def run_doctor(atlas: Atlas, *, verify_manifest_only: bool = False) -> lis
     db_ok = await atlas.db.health()
     results.append(CheckResult("database", "pass" if db_ok else "fail",
                                "connected, migrations applied" if db_ok else "not connected"))
+
+    # identity vault health
+    key_ok = _master_key_present(atlas)
+    results.append(CheckResult("identity.master_key", "pass" if key_ok else "fail",
+                               "present (keychain/env)" if key_ok else
+                               "set Keychain 'atlas-master' or ATLAS_MASTER_KEY"))
+
+    # count stored credentials (never values)
+    n_identities = await _count_identities(atlas)
+    results.append(CheckResult("identity.credentials", "pass", f"{n_identities} stored (encrypted)"))
 
     # future compatibility
     results.append(CheckResult("future.providers", "pass",

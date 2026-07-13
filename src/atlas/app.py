@@ -20,7 +20,13 @@ from atlas.capabilities.registry.provider_registry import ProviderRegistry as Ca
 from atlas.capabilities.router import CapabilityRouter as ExtCapabilityRouter
 from atlas.infra.bus import MessageBus
 from atlas.infra.clock import Clock, SystemClock
-from atlas.infra.config import AppConfig, Settings, load_app_config, load_permissions, load_settings
+from atlas.capabilities.identity.auth.api_key import ApiKeyStrategy
+from atlas.capabilities.identity.auth.browser_session import BrowserSessionStrategy
+from atlas.capabilities.identity.auth.jwt import JwtStrategy
+from atlas.capabilities.identity.models import CredentialKind
+from atlas.capabilities.identity.platform import IdentityPlatform
+from atlas.capabilities.identity.secret_store import SecretStore
+from atlas.infra.config import AppConfig, Settings, load_app_config, load_permissions, load_settings, resolve_master_key
 from atlas.infra.db import Database
 from atlas.infra.ids import CorrelationId, IdGenerator, UuidGenerator
 from atlas.infra.lifecycle import Lifecycle
@@ -125,6 +131,7 @@ class Atlas:
     ext_cap_router: ExtCapabilityRouter
     cap_dispatcher: CapabilityDispatcher
     cap_telemetry: CapabilityTelemetry
+    identity: IdentityPlatform
 
     async def start(self) -> None:
         await self.lifecycle.start()
@@ -246,6 +253,19 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         registry=cap_registry, providers=cap_providers, health=cap_health,
         safety=safety, telemetry=cap_telemetry)
 
+    master_key = resolve_master_key(settings)
+    secret_store = SecretStore(db, master_key)
+    identity_platform = IdentityPlatform(
+        store=secret_store, db=db,
+        strategies={
+            CredentialKind.API_KEY: ApiKeyStrategy(),
+            CredentialKind.JWT: JwtStrategy(),
+            CredentialKind.BROWSER_SESSION: BrowserSessionStrategy(),
+            # OAuth2Strategy will be added when providers are configured
+        },
+        audit=cap_audit,
+    )
+
     # Phase 2 Tools
     sandbox = DockerSandbox(SandboxSpec(
         image=config.sandbox.image, cpus=config.sandbox.cpus,
@@ -344,5 +364,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         user_model=user_model, working=working, retriever=retriever,
         consolidator=consolidator, pruner=pruner, bus=bus, orchestrator=orchestrator,
         cap_registry=cap_registry, cap_health=cap_health, cap_providers=cap_providers,
-        ext_cap_router=ext_cap_router, cap_dispatcher=cap_dispatcher, cap_telemetry=cap_telemetry,
+        ext_cap_router=ext_cap_router,
+        cap_dispatcher=cap_dispatcher,
+        cap_telemetry=cap_telemetry,
+        identity=identity_platform,
     )
