@@ -15,6 +15,7 @@ dependencies = [
     "structlog>=24.1",
     "chromadb>=0.5",
     "cryptography>=49.0.0",
+    "feedparser>=6.0.12",
 ]
 
 [project.optional-dependencies]

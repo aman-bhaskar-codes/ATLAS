@@ -10,22 +10,34 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from atlas.capabilities.dispatcher import CapabilityDispatcher
-from atlas.capabilities.observability.telemetry import CapabilityTelemetry
-from atlas.capabilities.registry.capability import CapabilityRegistry
-from atlas.capabilities.registry.health import CapabilityHealth
-from atlas.capabilities.registry.provider_registry import ProviderRegistry as CapProviderRegistry
-from atlas.capabilities.router import CapabilityRouter as ExtCapabilityRouter
-from atlas.infra.bus import MessageBus
-from atlas.infra.clock import Clock, SystemClock
 from atlas.capabilities.identity.auth.api_key import ApiKeyStrategy
 from atlas.capabilities.identity.auth.browser_session import BrowserSessionStrategy
 from atlas.capabilities.identity.auth.jwt import JwtStrategy
 from atlas.capabilities.identity.models import CredentialKind
 from atlas.capabilities.identity.platform import IdentityPlatform
 from atlas.capabilities.identity.secret_store import SecretStore
+from atlas.capabilities.observability.telemetry import CapabilityTelemetry
+from atlas.capabilities.platforms.knowledge_platform import KnowledgePlatform
+from atlas.capabilities.platforms.knowledge_router import KnowledgeRouter as KnowRouter
+from atlas.capabilities.providers.knowledge.arxiv import ArxivProvider
+from atlas.capabilities.providers.knowledge.base import KnowledgeProvider
+from atlas.capabilities.providers.knowledge.brave import BraveSearchProvider
+from atlas.capabilities.providers.knowledge.duckduckgo import DuckDuckGoProvider
+from atlas.capabilities.providers.knowledge.github_releases import GitHubReleasesProvider
+from atlas.capabilities.providers.knowledge.memory_source import MemoryKnowledgeSource
+from atlas.capabilities.providers.knowledge.parametric import ParametricKnowledgeSource
+from atlas.capabilities.providers.knowledge.rss import RSSProvider
+from atlas.capabilities.providers.knowledge.tavily import TavilySearchProvider
+from atlas.capabilities.providers.knowledge.wikipedia import WikipediaProvider
+from atlas.capabilities.registry.capability import Capability, CapabilityRegistry, CapabilitySpec
+from atlas.capabilities.registry.health import CapabilityHealth
+from atlas.capabilities.registry.provider_registry import ProviderRegistry as CapProviderRegistry
+from atlas.capabilities.router import CapabilityRouter as ExtCapabilityRouter
+from atlas.infra.bus import MessageBus
+from atlas.infra.clock import Clock, SystemClock
 from atlas.infra.config import AppConfig, Settings, load_app_config, load_permissions, load_settings, resolve_master_key
 from atlas.infra.db import Database
 from atlas.infra.ids import CorrelationId, IdGenerator, UuidGenerator
@@ -132,6 +144,7 @@ class Atlas:
     cap_dispatcher: CapabilityDispatcher
     cap_telemetry: CapabilityTelemetry
     identity: IdentityPlatform
+    knowledge_platform: KnowledgePlatform
 
     async def start(self) -> None:
         await self.lifecycle.start()
@@ -301,6 +314,54 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
                                 db=db, ids=ids, clock=clock)
     pruner = Pruner(db=db, gateway=gateway, ids=ids, clock=clock)
 
+    # Phase 6.3 Knowledge Platform
+    import yaml
+
+    from atlas.infra.types import Tier
+    
+    cap_registry.register(CapabilitySpec(
+        capability=Capability.KNOWLEDGE, safety_tool="knowledge",
+        operations=("search",), default_tier=Tier.AUTO, requires_auth=False,
+        description="Obtain knowledge from memory + official + web sources"))
+
+    try:
+        ksrc = yaml.safe_load((config_dir / "knowledge_sources.yaml").read_text())
+    except Exception:
+        ksrc = {"official_feeds": {}, "provider_preferences": {}}
+        
+    official: list[KnowledgeProvider] = [RSSProvider(name=k, feeds=v) for k, v in ksrc.get("official_feeds", {}).items()]
+    official += [WikipediaProvider(), ArxivProvider(), GitHubReleasesProvider()]
+    web: list[KnowledgeProvider] = [DuckDuckGoProvider()]
+    if config.models.allow_cloud:
+        try:
+            web.append(BraveSearchProvider(identity_platform, credential_id="brave:default"))
+        except Exception:
+            pass
+        try:
+            web.append(TavilySearchProvider(identity_platform, credential_id="tavily:default"))
+        except Exception:
+            pass
+
+    memory_source = MemoryKnowledgeSource(retriever)
+    parametric = ParametricKnowledgeSource(gateway)
+
+    prefs = ksrc.get("provider_preferences", {})
+    def _pref(p_dict: dict[str, int], name: str) -> int:
+        if name in p_dict:
+            return p_dict[name]
+        for k, v in p_dict.items():
+            if k.endswith("*") and name.startswith(k[:-1]):
+                return v
+        return 100
+
+    for p in [*official, *web]:
+        cap_providers.register(p, preference=_pref(prefs, p.name))
+
+    knowledge_router = KnowRouter(gateway)
+    knowledge_platform = KnowledgePlatform(
+        router=knowledge_router, gateway=gateway, episodic=episodic, ids=ids, clock=clock,
+        official=official, web=web, memory_source=memory_source, parametric=parametric)
+
     tool_registry = ToolRegistry()
     for t in tools.values():
         tool_registry.register(t, ("read", "write", "delete", "side_effect", "read_only"))
@@ -368,4 +429,5 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         cap_dispatcher=cap_dispatcher,
         cap_telemetry=cap_telemetry,
         identity=identity_platform,
+        knowledge_platform=knowledge_platform,
     )

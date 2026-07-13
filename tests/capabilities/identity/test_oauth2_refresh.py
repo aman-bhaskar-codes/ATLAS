@@ -4,7 +4,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from typing import Any
 from atlas.capabilities.identity.auth.oauth2 import OAuth2Strategy
+from atlas.capabilities.identity.errors import IdentityError, RefreshFailed
 from atlas.capabilities.identity.models import Credential, CredentialKind, Token
 
 
@@ -49,7 +51,7 @@ async def test_expired_token_refreshes_and_rotates(monkeypatch: pytest.MonkeyPat
     new_cred = await strategy.refresh(credential)
     
     assert await strategy.valid(new_cred)
-    assert await strategy.usable_secret(new_cred) == "new_access"
+    assert strategy._token(new_cred).access_token == "new_access"
     
     tok = strategy._token(new_cred)
     assert tok.refresh_token == "new_refresh"

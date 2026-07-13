@@ -89,6 +89,15 @@ A central capability vault that isolates credentials from providers:
 
 ---
 
+## 📚 Knowledge Platform (Phase 6.3)
+
+A centralized hub for domain knowledge acquisition and synthesis:
+
+- **Free-first Routing** — `KnowledgeRouter` fast-classifies intent, prioritizing static models, memory, and free official sources before paying for web searches.
+- **Provider Registry** — Pluggable providers including RSS, Wikipedia, Arxiv, GitHub Releases, DuckDuckGo, Brave, and Tavily.
+- **Evidence Ranking** — Sources are weighted by recency, trust tier, and cross-provider corroboration.
+- **Episodic Write-back** — All fetched knowledge is automatically recorded to episodic memory for future consolidation.
+
 ## 🔁 In-Loop Self-Critique (Phase 4.5)
 
 Before any Tier-2+ action is dispatched, ATLAS runs a **self-critique loop**:

@@ -1,0 +1,19 @@
+# Feeds are DATA. Add a vendor blog = add a line. No code change.
+official_feeds:
+  openai: ["https://openai.com/blog/rss.xml"]
+  anthropic: ["https://www.anthropic.com/news/rss.xml"]
+  deepmind: ["https://deepmind.google/blog/rss.xml"]
+  meta_ai: ["https://ai.meta.com/blog/rss/"]
+  mistral: ["https://mistral.ai/news/feed.xml"]
+  deepseek: ["https://api-docs.deepseek.com/rss.xml"]
+  qwen: ["https://qwenlm.github.io/index.xml"]
+  hf: ["https://huggingface.co/blog/feed.xml"]
+
+provider_preferences:      # lower = tried first (free-first, official-first)
+  "rss:*": 10
+  "wikipedia": 20
+  "arxiv": 20
+  "github_releases": 20
+  "brave": 50
+  "tavily": 50
+  "duckduckgo": 60
