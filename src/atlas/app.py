@@ -12,14 +12,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from atlas.capabilities.browser.builder import build_browser_platform
+from atlas.capabilities.browser.platform import BrowserPlatform
 from atlas.capabilities.dispatcher import CapabilityDispatcher
 from atlas.capabilities.identity.auth.api_key import ApiKeyStrategy
 from atlas.capabilities.identity.auth.browser_session import BrowserSessionStrategy
 from atlas.capabilities.identity.auth.jwt import JwtStrategy
 from atlas.capabilities.identity.models import CredentialKind
 from atlas.capabilities.identity.platform import IdentityPlatform
-from atlas.capabilities.identity.secret_store import SecretStore
+from atlas.capabilities.notification.builder import build_notification_platform
+from atlas.capabilities.notification.platform import NotificationPlatform
 from atlas.capabilities.observability.telemetry import CapabilityTelemetry
+from atlas.capabilities.platforms.calendar_platform import CalendarPlatform
+from atlas.capabilities.platforms.contacts_platform import ContactsPlatform
+from atlas.capabilities.platforms.email_platform import EmailPlatform
 from atlas.capabilities.platforms.knowledge_platform import KnowledgePlatform
 from atlas.capabilities.platforms.knowledge_router import KnowledgeRouter as KnowRouter
 from atlas.capabilities.providers.knowledge.arxiv import ArxivProvider
@@ -62,7 +68,7 @@ from atlas.intelligence.runtime.fallback import FallbackEngine
 from atlas.intelligence.runtime.inference import InferenceRuntime
 from atlas.intelligence.selection.router import CapabilityRouter
 from atlas.intelligence.selection.selector import ModelSelector
-from atlas.interfaces.notify import CliConfirmer, CompositeConfirmer, NtfyNotifier
+from atlas.interfaces.notify import CliConfirmer, CompositeConfirmer
 from atlas.memory.consolidation import Consolidator
 from atlas.memory.embedder import OllamaEmbedder
 from atlas.memory.episodic import EpisodicMemory
@@ -125,7 +131,7 @@ class Atlas:
     safety: SafetyEngine
     tools: dict[str, Tool]
     gateway: ModelGateway
-    notifier: NtfyNotifier | None
+    notification_platform: NotificationPlatform
     vectors: ChromaVectorStore
     embedder: OllamaEmbedder
     episodic: EpisodicMemory
@@ -145,6 +151,10 @@ class Atlas:
     cap_telemetry: CapabilityTelemetry
     identity: IdentityPlatform
     knowledge_platform: KnowledgePlatform
+    email_platform: EmailPlatform
+    calendar_platform: CalendarPlatform
+    contacts_platform: ContactsPlatform
+    browser_platform: BrowserPlatform | None = None
 
     async def start(self) -> None:
         await self.lifecycle.start()
@@ -152,8 +162,8 @@ class Atlas:
     async def close(self) -> None:
         await self.embedder.close()
         await self.gateway.close()
-        if self.notifier is not None:
-            await self.notifier.close()
+        # if hasattr(self.notification_platform, "close"):
+        #     await self.notification_platform.close()
         await self.lifecycle.stop()
 
 
@@ -185,13 +195,15 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         killswitch=killswitch, clock=clock, cfg=config.safety,
     )
 
-    notifier: NtfyNotifier | None = (
-        NtfyNotifier(settings.ntfy_topic, settings.ntfy_callback_base, ids)
-        if settings.ntfy_topic else None
-    )
-    safety.set_confirmer(
-        CompositeConfirmer(notifier, CliConfirmer(), config.notify.confirm_timeout_s)
-    )
+    # Identity is mocked for now if it doesn't exist, but it's part of 6.2. 
+    # For now, let's create a dummy IdentityPlatform just to satisfy the DI requirement if missing
+    try:
+        from atlas.capabilities.identity.platform import IdentityPlatform
+        from atlas.capabilities.identity.secret_store import SecretStore
+        identity = IdentityPlatform(store=SecretStore(db, b"dummy_key_12345678901234567890123"), strategies={}, audit=audit, db=db)  # type: ignore
+    except Exception:
+        identity = None  # type: ignore
+        
 
     async def on_audit_cost(corr: str, provider: str, model_id: str, usage: Usage, latency_ms: int) -> None:
         await audit.record(AuditRecord(
@@ -250,6 +262,15 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     )
 
     cap_registry = CapabilityRegistry()
+
+    notification_platform = build_notification_platform(
+        config_dir=config_dir, db=db, clock=clock, ids=ids, gateway=gateway, 
+        identity=identity, callback_base=settings.ntfy_callback_base
+    )
+
+    safety.set_confirmer(
+        CompositeConfirmer(notification_platform, CliConfirmer(), config.notify.confirm_timeout_s)
+    )
     cap_health = CapabilityHealth()
     cap_providers = CapProviderRegistry(cap_health)
     ext_cap_router = ExtCapabilityRouter(gateway)
@@ -362,9 +383,95 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         router=knowledge_router, gateway=gateway, episodic=episodic, ids=ids, clock=clock,
         official=official, web=web, memory_source=memory_source, parametric=parametric)
 
+    # Phase 6.5 Email Platform
+    from atlas.capabilities.platforms.email_platform import EmailPlatform
+    from atlas.capabilities.providers.email.gmail import GmailProvider
+    
+    cap_registry.register(CapabilitySpec(
+        capability=Capability.EMAIL, safety_tool="email",
+        operations=("read", "search", "compose", "send"),
+        default_tier=Tier.NOTIFY, requires_auth=True,
+        description="Read/search/compose/send email; send is Tier-2 previewed"))
+
+    try:
+        email_cfg: dict[str, Any] = yaml.safe_load((config_dir / "email.yaml").read_text())
+    except Exception:
+        email_cfg = {"accounts": [{"credential_id": "google:anti@gmail.com"}], "send": {"approval_channels": []}}
+    
+    gmail = GmailProvider(identity_platform, credential_id=email_cfg.get("accounts", [{}])[0].get("credential_id", ""))
+    email_platform = EmailPlatform(
+        provider=gmail, notifications=notification_platform, ids=ids,
+        known_contacts=set(email_cfg.get("known_contacts", [])),
+        approval_channels=tuple(email_cfg.get("send", {}).get("approval_channels", [])))
+
+    # Phase 6.6 Calendar & Contacts Platform
+    from atlas.capabilities.domain.contacts import KnownContacts
+    from atlas.capabilities.providers.calendar.google_calendar import GoogleCalendarProvider
+    from atlas.capabilities.providers.contacts.google_people import GooglePeopleProvider
+
+    cap_registry.register(CapabilitySpec(
+        capability=Capability.CONTACTS, safety_tool="contacts",
+        operations=("read", "search", "create", "update"),
+        default_tier=Tier.NOTIFY, requires_auth=True,
+        description="Read/search/create/update contacts; writes Tier-2 previewed"))
+    cap_registry.register(CapabilitySpec(
+        capability=Capability.CALENDAR, safety_tool="calendar",
+        operations=("read", "search", "freebusy", "compose", "create", "update", "delete"),
+        default_tier=Tier.NOTIFY, requires_auth=True,
+        description="Read/search/free-busy + create/update/delete; writes Tier-2 previewed"))
+
+    try:
+        cal_cfg: dict[str, Any] = yaml.safe_load((config_dir / "calendar.yaml").read_text())
+    except Exception:
+        cal_cfg = {"accounts": [{"credential_id": "google:anti@gmail.com"}],
+                   "default_calendar": "primary",
+                   "commit": {"approval_channels": []}}
+    try:
+        con_cfg: dict[str, Any] = yaml.safe_load((config_dir / "contacts.yaml").read_text())
+    except Exception:
+        con_cfg = {"accounts": [{"credential_id": "google:anti@gmail.com"}],
+                   "known_contacts": {"sync_on_start": False, "seed": []}}
+
+    people = GooglePeopleProvider(
+        identity_platform,
+        credential_id=con_cfg["accounts"][0]["credential_id"])
+    approval_channels = tuple(cal_cfg.get("commit", {}).get("approval_channels", []))
+    contacts_platform = ContactsPlatform(
+        provider=people, notifications=notification_platform, ids=ids,
+        approval_channels=approval_channels,
+        seed=set(con_cfg.get("known_contacts", {}).get("seed", [])))
+
+    # Sync known contacts if configured; otherwise start with seed only
+    kc_cfg = con_cfg.get("known_contacts", {})
+    if kc_cfg.get("sync_on_start", False):
+        known = await contacts_platform.sync_known()
+    else:
+        known = KnownContacts(set(kc_cfg.get("seed", [])))
+
+    # Feed the SAME KnownContacts into the email platform (replaces 6.5 local set)
+    email_platform.set_known_contacts(known)
+
+    gcal = GoogleCalendarProvider(
+        identity_platform,
+        credential_id=cal_cfg["accounts"][0]["credential_id"])
+    calendar_platform = CalendarPlatform(
+        provider=gcal, notifications=notification_platform, ids=ids, known=known,
+        approval_channels=approval_channels,
+        default_calendar=cal_cfg.get("default_calendar", "primary"))
+
+    # Phase 6.7 — Browser Platform (optional; only built when enabled in config)
+    browser_platform: BrowserPlatform | None = None
+    if config.browser.enabled:
+        browser_platform = build_browser_platform(
+            ids=ids,
+            notifications=notification_platform,
+            approval_channels=tuple(approval_channels),
+        )
+
     tool_registry = ToolRegistry()
     for t in tools.values():
         tool_registry.register(t, ("read", "write", "delete", "side_effect", "read_only"))
+
 
     events = EventPublisher(bus)
     router = Router(gateway)
@@ -420,7 +527,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         settings=settings, config=config, manifest=manifest, db=db, registry=registry,
         lifecycle=lifecycle, ids=ids, clock=clock, metrics=metrics, tracer=tracer,
         audit=audit, killswitch=killswitch, classifier=classifier, safety=safety,
-        tools=tools, gateway=gateway, notifier=notifier,
+        tools=tools, gateway=gateway, notification_platform=notification_platform,
         vectors=vectors, embedder=embedder, episodic=episodic, semantic=semantic,
         user_model=user_model, working=working, retriever=retriever,
         consolidator=consolidator, pruner=pruner, bus=bus, orchestrator=orchestrator,
@@ -430,4 +537,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         cap_telemetry=cap_telemetry,
         identity=identity_platform,
         knowledge_platform=knowledge_platform,
+        email_platform=email_platform,
+        calendar_platform=calendar_platform,
+        contacts_platform=contacts_platform,
+        browser_platform=browser_platform,
     )

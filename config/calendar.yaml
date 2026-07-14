@@ -1,0 +1,8 @@
+accounts:
+  - {name: primary, provider: google_calendar, credential_id: "google:anti@gmail.com"}
+default_calendar: primary
+commit:
+  approval_channels: ["telegram:primary", "ntfy:atlas"]
+  require_preview: true
+  conflict_check: true
+  daily_write_cap: 30

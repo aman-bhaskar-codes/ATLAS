@@ -25,9 +25,45 @@ rules:
   - {tool: filesystem, operation: overwrite, tier: 2}
   - {tool: shell,      operation: read_only,   tier: 1, constraint: cmd_in_read_only}
   - {tool: shell,      operation: side_effect, tier: 2, constraint: cmd_in_side_effect}
+  - {tool: email,      operation: read,        tier: 1}
+  - {tool: email,      operation: search,      tier: 1}
+  - {tool: email,      operation: compose,     tier: 0}
+  - {tool: email,      operation: send,        tier: 2, constraint: recipients_known}
+  - {tool: calendar,   operation: read,        tier: 1}
+  - {tool: calendar,   operation: search,      tier: 1}
+  - {tool: calendar,   operation: freebusy,    tier: 1}
+  - {tool: calendar,   operation: compose,     tier: 0}
+  - {tool: calendar,   operation: create,      tier: 2, constraint: attendees_known}
+  - {tool: calendar,   operation: update,      tier: 2}
+  - {tool: calendar,   operation: delete,      tier: 2}
+  - {tool: contacts,   operation: read,        tier: 1}
+  - {tool: contacts,   operation: search,      tier: 1}
+  - {tool: contacts,   operation: create,      tier: 2}
+  - {tool: contacts,   operation: update,      tier: 2}
+  - {tool: contacts,   operation: merge,       tier: 2}
+  - {tool: contacts,   operation: delete,      tier: 2}
+  - {tool: browser,    operation: navigate,    tier: 1}
+  - {tool: browser,    operation: extract,     tier: 0}
+  - {tool: browser,    operation: screenshot,  tier: 1}
+  - {tool: browser,    operation: click,       tier: 1}
+  - {tool: browser,    operation: type,        tier: 1}
+  - {tool: browser,    operation: submit,      tier: 2}
+  - {tool: browser,    operation: upload,      tier: 2}
+  - {tool: browser,    operation: download,    tier: 2}
+  - {tool: browser,    operation: dialog,      tier: 2}
 
 hard_block:
   - {tool: "*",        operation: "*",      match: credential_access}
   - {tool: "*",        operation: "*",      match: financial_transaction}
   - {tool: filesystem, operation: delete,   match: mass_deletion}
   - {tool: "*",        operation: "*",      match: edit_safety_config}
+  - {tool: email,      operation: send,     match: sends_to_person}
+  - {tool: calendar,   operation: create,   match: invites_person}
+  - {tool: calendar,   operation: update,   match: invites_person}
+  - {tool: calendar,   operation: delete,   match: destructive_pim}
+  - {tool: contacts,   operation: merge,    match: destructive_pim}
+  - {tool: contacts,   operation: delete,   match: destructive_pim}
+  - {tool: browser,    operation: click,    match: financial_ui}
+  - {tool: browser,    operation: click,    match: destructive_ui}
+  - {tool: browser,    operation: type,     match: credential_entry}
+  - {tool: browser,    operation: submit,   match: submits_form}

@@ -113,6 +113,14 @@ class CritiqueCfg(BaseModel):
     revise_max: int = 1
 
 
+class BrowserCfg(BaseModel):
+    """Optional browser automation platform config."""
+    model_config = {"frozen": True}
+    enabled: bool = False
+    headless: bool = True
+    default_provider: str = "playwright"
+
+
 class AppConfig(BaseModel):
     model_config = {"frozen": True}
     logging: LoggingCfg = Field(default_factory=LoggingCfg)
@@ -124,6 +132,7 @@ class AppConfig(BaseModel):
     sandbox: SandboxCfg = Field(default_factory=SandboxCfg)
     memory: MemoryCfg = Field(default_factory=MemoryCfg)
     critique: CritiqueCfg = Field(default_factory=CritiqueCfg)
+    browser: BrowserCfg = Field(default_factory=BrowserCfg)
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:

@@ -16,6 +16,8 @@ dependencies = [
     "chromadb>=0.5",
     "cryptography>=49.0.0",
     "feedparser>=6.0.12",
+    "email-validator>=2.3.0",
+    "playwright>=1.61.0",
 ]
 
 [project.optional-dependencies]
