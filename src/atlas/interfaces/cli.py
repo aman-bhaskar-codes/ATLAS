@@ -298,5 +298,75 @@ def run_task(request: str) -> None:
     _run(go())
 
 
+@app.command("cal")
+def cal(
+    action: str = typer.Argument(..., help="list|free|search|create"),
+    query: str = typer.Option("", help="search query"),
+    start: str = typer.Option("", help="start datetime (ISO)"),
+    end: str = typer.Option("", help="end datetime (ISO)"),
+    title: str = typer.Option("", help="event title"),
+    to: str = typer.Option("", help="comma-separated attendee emails"),
+    minutes: int = typer.Option(30, help="min free slot length in minutes"),
+) -> None:
+    """Calendar: list / free-busy / search / create events."""
+    async def go() -> None:
+        from datetime import datetime, timezone
+        atlas = await build()
+        await atlas.db.start()
+        cp = atlas.calendar_platform
+
+        def _parse(s: str) -> datetime:
+            if not s:
+                return datetime.now(timezone.utc)
+            return datetime.fromisoformat(s) if "+" in s or s.endswith("Z") \
+                else datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
+
+        s_dt = _parse(start)
+        e_dt = _parse(end) if end else _parse(start) if start else \
+            datetime.now(timezone.utc).replace(hour=23, minute=59)
+
+        if action == "list":
+            for ev in await cp.list_events(start=s_dt, end=e_dt):
+                console.print(f"  {ev.when.render()}  {ev.title}")
+        elif action == "free":
+            for slot in await cp.find_free_slots(start=s_dt, end=e_dt, min_minutes=minutes):
+                console.print(f"  free: {slot.start:%a %H:%M}–{slot.end:%H:%M}")
+        elif action == "search":
+            for ev in await cp.search(query, limit=10):
+                console.print(f"  {ev.when.render()}  {ev.title}")
+        elif action == "create":
+            from atlas.capabilities.domain.calendar import Attendee, EventDraft, EventTime
+            draft = EventDraft(
+                title=title,
+                when=EventTime(start_dt=s_dt, end_dt=e_dt),
+                attendees=tuple(Attendee(email=a.strip()) for a in to.split(",") if a.strip()),
+            )
+            try:
+                eid = await cp.commit(draft, atlas.ids.correlation_id())
+                console.print(f"[green]created[/] {eid}")
+            except Exception as exc:
+                console.print(f"[red]{type(exc).__name__}[/] {exc}")
+        else:
+            console.print(f"[red]unknown action:[/] {action}")
+        await atlas.close()
+    _run(go())
+
+
+@app.command("contacts")
+def contacts(
+    action: str = typer.Argument("search", help="search"),
+    query: str = typer.Argument("", help="search query"),
+) -> None:
+    """Contacts: search your contacts."""
+    async def go() -> None:
+        atlas = await build()
+        await atlas.db.start()
+        for c in await atlas.contacts_platform.search(query, limit=10):
+            primary = c.primary_email() or ""
+            console.print(f"  {c.name}  {primary}  {c.org or ''}")
+        await atlas.close()
+    _run(go())
+
+
 if __name__ == "__main__":
     app()

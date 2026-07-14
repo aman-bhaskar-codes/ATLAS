@@ -1,0 +1,5 @@
+accounts:
+  - {name: primary, provider: google_people, credential_id: "google:anti@gmail.com"}
+known_contacts:
+  sync_on_start: false  # set true once OAuth scopes include contacts
+  seed: []

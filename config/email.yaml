@@ -1,0 +1,7 @@
+accounts:
+  - {name: primary, provider: gmail, credential_id: "google:anti@gmail.com"}
+known_contacts: []
+send:
+  approval_channels: ["telegram:primary", "ntfy:atlas"]
+  daily_send_cap: 20
+  require_preview: true

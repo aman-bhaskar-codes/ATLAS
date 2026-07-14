@@ -135,6 +135,42 @@ _MIGRATIONS: tuple[str, ...] = (
         rotated_ts TEXT
     );
     """,
+    # 005 — notification platform (Phase 6.4)
+    """
+    CREATE TABLE IF NOT EXISTS notif_queue (
+        id TEXT PRIMARY KEY,
+        priority INTEGER NOT NULL,
+        payload TEXT NOT NULL,
+        dedup_key TEXT,
+        not_before TEXT,
+        expires_at TEXT,
+        digest INTEGER NOT NULL DEFAULT 0,
+        state TEXT NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_notif_queue_fetch 
+        ON notif_queue(state, digest, not_before, expires_at, priority DESC, created_ts);
+
+    CREATE TABLE IF NOT EXISTS notif_dead_letter (
+        id TEXT PRIMARY KEY,
+        reason TEXT NOT NULL,
+        ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS notif_history (
+        id TEXT PRIMARY KEY,
+        correlation_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        priority INTEGER NOT NULL,
+        channels TEXT NOT NULL,
+        delivered INTEGER NOT NULL,
+        final_provider TEXT,
+        receipt TEXT NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_notif_history_correlation 
+        ON notif_history(correlation_id);
+    """,
 )
 
 

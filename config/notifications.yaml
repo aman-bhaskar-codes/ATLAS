@@ -1,0 +1,10 @@
+# config/notifications.yaml
+channels:
+  - {name: "ntfy:atlas", provider: ntfy, address: "${ATLAS_NTFY_TOPIC}", priority_floor: 0}
+  - {name: "telegram:primary", provider: telegram, address: "<chat_id>", priority_floor: 1}
+  - {name: "desktop", provider: desktop, address: "local", priority_floor: 0}
+provider_preferences: {telegram: 10, ntfy: 20, desktop: 30}
+quiet_hours:
+  - {start: "22:00", end: "08:00", tz: "Asia/Kolkata"}
+digest_windows: ["08:30", "20:00"]
+retry: {max_attempts: 3, base_backoff_s: 1.0, max_backoff_s: 30.0}
