@@ -42,7 +42,7 @@ class NtfyNotifier:
 
     async def ask(self, title: str, body: str, *, timeout_s: float) -> bool | None:
         req_id = self._ids.execution_id()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future[bool] = loop.create_future()
         self._pending[req_id] = fut
         approve = f"{self._cb}/confirm/{req_id}?d=1"

@@ -14,16 +14,18 @@ from tests.capabilities.fakes import FakeProvider
 
 
 class AllowSafety:
-    async def guard(self, req, tool):
-        return await tool.execute(req.args)
+    async def guard(self, req, tool) -> None:  # type: ignore
+        return await tool.execute(req.args)  # type: ignore
 
 
 class DenySafety:
-    async def guard(self, req, tool):
+    async def guard(self, req, tool) -> None:  # type: ignore
         raise DeniedError(SafetyDecision(decision="deny", tier=Tier.BLOCK, reason="nope"))
 
 
-def _setup(safety, provider):
+from typing import Any
+
+def _setup(safety: Any, provider: Any) -> CapabilityDispatcher:
     reg = CapabilityRegistry()
     reg.register(CapabilitySpec(capability=Capability.KNOWLEDGE, safety_tool="knowledge",
                                 operations=("search",)))
@@ -35,18 +37,20 @@ def _setup(safety, provider):
                                safety=safety, telemetry=tele)
 
 
-async def _noop(): ...
+async def _noop() -> None: ...
 
 
-async def test_execute_ok_returns_domain_model():
+async def test_execute_ok_returns_domain_model() -> None:
     d = _setup(AllowSafety(), FakeProvider())
     res = await d.execute(CapabilityRequest(capability=Capability.KNOWLEDGE,
                                             operation="search", args={"q": "hi"}),
                           CorrelationId("c"))
-    assert res.ok and res.payload.value == "hi" and res.provider == "fake"
+    assert res.ok
+    assert res.payload is not None
+    assert res.payload.value == "hi" and res.provider == "fake"
 
 
-async def test_retry_then_success():
+async def test_retry_then_success() -> None:
     d = _setup(AllowSafety(), FakeProvider(fail_times=2))  # max_attempts=3
     res = await d.execute(CapabilityRequest(capability=Capability.KNOWLEDGE,
                                             operation="search", args={"q": "x"}),
@@ -54,8 +58,9 @@ async def test_retry_then_success():
     assert res.ok
 
 
-async def test_denial_raises_capability_denied():
+async def test_denial_raises_capability_denied() -> None:
     d = _setup(DenySafety(), FakeProvider())
     with pytest.raises(CapabilityDenied):
         await d.execute(CapabilityRequest(capability=Capability.KNOWLEDGE,
                                           operation="search", args={}), CorrelationId("c"))
+
