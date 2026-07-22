@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from atlas.capabilities.browser.builder import build_browser_platform
 from atlas.capabilities.browser.platform import BrowserPlatform
 from atlas.capabilities.dispatcher import CapabilityDispatcher
@@ -20,6 +22,7 @@ from atlas.capabilities.identity.auth.browser_session import BrowserSessionStrat
 from atlas.capabilities.identity.auth.jwt import JwtStrategy
 from atlas.capabilities.identity.models import CredentialKind
 from atlas.capabilities.identity.platform import IdentityPlatform
+from atlas.capabilities.identity.secret_store import SecretStore
 from atlas.capabilities.notification.builder import build_notification_platform
 from atlas.capabilities.notification.platform import NotificationPlatform
 from atlas.capabilities.observability.telemetry import CapabilityTelemetry
@@ -52,7 +55,7 @@ from atlas.infra.logging import configure_logging, get_logger
 from atlas.infra.metrics import Metrics
 from atlas.infra.registry import ServiceRegistry
 from atlas.infra.tracing import Tracer
-from atlas.infra.types import AuditRecord
+from atlas.infra.types import AuditRecord, Tier
 from atlas.intelligence.contracts import Usage
 from atlas.intelligence.gateway import ModelGateway
 from atlas.intelligence.governance.budget import Budgets
@@ -109,8 +112,22 @@ from atlas.tools.filesystem import FilesystemTool
 from atlas.tools.shell import ShellTool
 
 _CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _log = get_logger("atlas.app")
+
+
+def _validate_repo_root(root: Path) -> None:
+    """Assert repo root actually contains the expected project markers."""
+    if not (root / "pyproject.toml").exists():
+        _log.warning(
+            "repo_root.suspect",
+            event_type="lifecycle",
+            root=str(root),
+            detail="pyproject.toml not found — sandbox mount may be incorrect",
+        )
+
+
+_validate_repo_root(_REPO_ROOT)
 
 
 @dataclass
@@ -157,14 +174,21 @@ class Atlas:
     browser_platform: BrowserPlatform | None = None
 
     async def start(self) -> None:
+        await self.db.start()
         await self.lifecycle.start()
 
     async def close(self) -> None:
         await self.embedder.close()
         await self.gateway.close()
-        # if hasattr(self.notification_platform, "close"):
-        #     await self.notification_platform.close()
+        await self.db.stop()
         await self.lifecycle.stop()
+
+    async def __aenter__(self) -> Atlas:
+        await self.start()
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.close()
 
 
 async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
@@ -195,15 +219,23 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         killswitch=killswitch, clock=clock, cfg=config.safety,
     )
 
-    # Identity is mocked for now if it doesn't exist, but it's part of 6.2. 
-    # For now, let's create a dummy IdentityPlatform just to satisfy the DI requirement if missing
-    try:
-        from atlas.capabilities.identity.platform import IdentityPlatform
-        from atlas.capabilities.identity.secret_store import SecretStore
-        identity = IdentityPlatform(store=SecretStore(db, b"dummy_key_12345678901234567890123"), strategies={}, audit=audit, db=db)  # type: ignore
-    except Exception:
-        identity = None  # type: ignore
-        
+    async def cap_audit(**kw: Any) -> None:
+        await audit.record(AuditRecord(
+            correlation_id=CorrelationId(kw["correlation_id"]), ts=clock.now(), actor=kw["actor"],
+            action=kw["action"], tool=kw.get("tool"), outcome=kw.get("outcome"),
+            payload=kw.get("payload")))
+
+    master_key = resolve_master_key(settings)
+    secret_store = SecretStore(db, master_key)
+    identity_platform = IdentityPlatform(
+        store=secret_store, db=db,
+        strategies={
+            CredentialKind.API_KEY: ApiKeyStrategy(),
+            CredentialKind.JWT: JwtStrategy(),
+            CredentialKind.BROWSER_SESSION: BrowserSessionStrategy(),
+        },
+        audit=cap_audit,
+    )
 
     async def on_audit_cost(corr: str, provider: str, model_id: str, usage: Usage, latency_ms: int) -> None:
         await audit.record(AuditRecord(
@@ -244,7 +276,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
                 api_key=settings.kimi_api_key, timeout_s=config.models.cloud_timeout_s
             ))
 
-    model_registry = ModelRegistry.from_yaml(_CONFIG_DIR / "models.yaml")
+    model_registry = ModelRegistry.from_yaml(config_dir / "models.yaml")
     capability_index = CapabilityIndex(model_registry)
     
     runtime = InferenceRuntime(
@@ -264,41 +296,22 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     cap_registry = CapabilityRegistry()
 
     notification_platform = build_notification_platform(
-        config_dir=config_dir, db=db, clock=clock, ids=ids, gateway=gateway, 
-        identity=identity, callback_base=settings.ntfy_callback_base
+        config_dir=config_dir, db=db, clock=clock, ids=ids, gateway=gateway,
+        identity=identity_platform, callback_base=settings.ntfy_callback_base
     )
 
     safety.set_confirmer(
-        CompositeConfirmer(notification_platform, CliConfirmer(), config.notify.confirm_timeout_s)
+        CompositeConfirmer(notification_platform, CliConfirmer(), config.notify.confirm_timeout_s)  # type: ignore
     )
     cap_health = CapabilityHealth()
     cap_providers = CapProviderRegistry(cap_health)
     ext_cap_router = ExtCapabilityRouter(gateway)
 
-    async def cap_audit(**kw: Any) -> None:
-        await audit.record(AuditRecord(
-            correlation_id=CorrelationId(kw["correlation_id"]), ts=clock.now(), actor=kw["actor"],
-            action=kw["action"], tool=kw.get("tool"), outcome=kw.get("outcome"),
-            payload=kw.get("payload")))
-            
     cap_telemetry = CapabilityTelemetry(cap_audit)
 
     cap_dispatcher = CapabilityDispatcher(
         registry=cap_registry, providers=cap_providers, health=cap_health,
         safety=safety, telemetry=cap_telemetry)
-
-    master_key = resolve_master_key(settings)
-    secret_store = SecretStore(db, master_key)
-    identity_platform = IdentityPlatform(
-        store=secret_store, db=db,
-        strategies={
-            CredentialKind.API_KEY: ApiKeyStrategy(),
-            CredentialKind.JWT: JwtStrategy(),
-            CredentialKind.BROWSER_SESSION: BrowserSessionStrategy(),
-            # OAuth2Strategy will be added when providers are configured
-        },
-        audit=cap_audit,
-    )
 
     # Phase 2 Tools
     sandbox = DockerSandbox(SandboxSpec(
@@ -336,10 +349,6 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     pruner = Pruner(db=db, gateway=gateway, ids=ids, clock=clock)
 
     # Phase 6.3 Knowledge Platform
-    import yaml
-
-    from atlas.infra.types import Tier
-    
     cap_registry.register(CapabilitySpec(
         capability=Capability.KNOWLEDGE, safety_tool="knowledge",
         operations=("search",), default_tier=Tier.AUTO, requires_auth=False,

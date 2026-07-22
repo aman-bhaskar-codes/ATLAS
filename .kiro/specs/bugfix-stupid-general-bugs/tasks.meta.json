@@ -1,0 +1,90 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Fix mid-function imports in app.py": [
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784741567359
+      },
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784741578706
+      },
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784742026222
+      }
+    ],
+    "2. Fix dummy IdentityPlatform construction and object leak in app.py": [
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784741567494
+      },
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784742031809
+      },
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784742657714
+      }
+    ],
+    "3. Fix mypy errors in tests/capabilities/test_dispatcher.py": [
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784741567572
+      },
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784742669267
+      },
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784742717612
+      }
+    ],
+    "4. Fix wrong module import in tests/conftest.py": [
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784741567612
+      },
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784742728233
+      },
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784742773816
+      }
+    ],
+    "5. Fix deprecated asyncio.get_event_loop() in notify.py": [
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784741567651
+      },
+      {
+        "executionId": "68a19c5a-8e7d-417d-a6b2-9f7f6bae821c",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784742779000
+      },
+      {
+        "executionId": "99665e41-2706-48bb-a7b3-94b4d83e5af5",
+        "chatSessionId": "sess_ecd847fc-1ec6-4d16-ae82-295a6b3b5dc1",
+        "timestamp": 1784743758435
+      }
+    ]
+  }
+}

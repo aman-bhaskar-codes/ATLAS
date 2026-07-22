@@ -10,7 +10,8 @@ import pytest_asyncio
 import yaml
 
 from atlas.infra.db import Database
-from atlas.infra.logging import LoggingCfg, configure_logging
+from atlas.infra.config import LoggingCfg
+from atlas.infra.logging import configure_logging
 
 
 @pytest.fixture(scope="session", autouse=True)
