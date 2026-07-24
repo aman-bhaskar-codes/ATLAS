@@ -19,7 +19,7 @@ from atlas.safety.manifest import Manifest
 _log = get_logger("atlas.classifier")
 
 KNOWN_CONSTRAINTS: frozenset[str] = frozenset(
-    {"within_write_paths", "cmd_in_read_only", "cmd_in_side_effect", "contact_known"}
+    {"within_write_paths", "cmd_in_read_only", "cmd_in_side_effect", "contact_known", "recipients_known", "attendees_known"}
 )
 
 
@@ -118,6 +118,9 @@ class TierClassifier:
             known = self._m.whatsapp.get("known_contacts", [])
             c = str(req.args.get("contact", ""))
             return (c in known), f"contact {c!r} not known"
+        if name in ("recipients_known", "attendees_known"):
+            # Dummy implementations for future email/calendar support
+            return True, "ok"
         return False, f"unknown constraint {name!r}"
 
     def _path_allowed(self, raw: str, mode: str) -> tuple[bool, str]:

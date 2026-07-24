@@ -96,9 +96,9 @@ class FilesystemTool:
 
     async def _write(self, path: str, content: str) -> ToolResult:
         rp = resolve_in_allowlist(path, self._write_globs)
-        # Write via the sandbox: tee into the mounted file, no network, non-root.
+        # Safe write: use 'tee' with an explicit path argument — no shell.
         result = await self._sandbox.run(
-            ["sh", "-c", f"cat > {rp.container}"],
+            ["tee", rp.container],
             mounts={str(rp.mount_source): rp.mount_target}, network=False, timeout_s=15.0,
             stdin=content.encode("utf-8")
         )

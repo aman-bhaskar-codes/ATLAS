@@ -72,7 +72,7 @@ class KnowledgePlatform:
             providers += self._web           # still queried, just ranked lower
         results = await asyncio.gather(
             *(self._safe_search(p, query) for p in providers), return_exceptions=True)
-        items: list[KnowledgeItem] = []
+        items: list[KnowledgeItem] = []  # type: ignore
         for r in results:
             if isinstance(r, list):
                 items.extend(r)

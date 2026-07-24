@@ -6,7 +6,7 @@ import urllib.parse
 from datetime import UTC, datetime
 from typing import Any
 
-import feedparser
+import feedparser  # type: ignore
 import httpx
 
 from atlas.capabilities.domain.common import Provenance, SourceKind

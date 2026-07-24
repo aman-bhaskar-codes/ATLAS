@@ -19,7 +19,7 @@ def test_opens_after_threshold_failures() -> None:
     cb.record_failure()
     assert cb.state is BreakerState.CLOSED  # not yet
     cb.record_failure()
-    assert cb.state is BreakerState.OPEN
+    assert cb.state is BreakerState.OPEN  # type: ignore
     assert cb.allow() is False
 
 
@@ -42,7 +42,7 @@ def test_open_blocks_until_cooldown() -> None:
     cb._opened_at = time.perf_counter() - 61.0
     # Now allow() should transition to HALF_OPEN and return True
     assert cb.allow() is True
-    assert cb.state is BreakerState.HALF_OPEN
+    assert cb.state is BreakerState.HALF_OPEN  # type: ignore
 
 
 def test_half_open_closes_on_success() -> None:
@@ -52,7 +52,7 @@ def test_half_open_closes_on_success() -> None:
     cb.allow()
     assert cb.state is BreakerState.HALF_OPEN
     cb.record_success()
-    assert cb.state is BreakerState.CLOSED
+    assert cb.state is BreakerState.CLOSED  # type: ignore
     assert cb.allow() is True
 
 
@@ -66,7 +66,7 @@ def test_half_open_reopens_on_failure() -> None:
     # Manually expire the cooldown so allow() transitions to HALF_OPEN
     cb._opened_at = time.perf_counter() - 61.0
     assert cb.allow() is True          # → HALF_OPEN
-    assert cb.state is BreakerState.HALF_OPEN
+    assert cb.state is BreakerState.HALF_OPEN  # type: ignore
     # A failure in HALF_OPEN re-opens it
     cb.record_failure()
     assert cb.state is BreakerState.OPEN

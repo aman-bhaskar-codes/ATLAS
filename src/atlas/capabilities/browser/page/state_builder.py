@@ -1,12 +1,12 @@
 """StateBuilder constructs PageState snapshots."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
-import json
+from datetime import UTC, datetime
 
-from atlas.capabilities.browser.domain.page import PageHandle, PageState, AuthState
+from atlas.capabilities.browser.domain.page import AuthState, PageHandle, PageState
 from atlas.capabilities.browser.page.page_manager import PageManager
+
 
 class StateBuilder:
     def __init__(self, page_manager: PageManager) -> None:
@@ -27,6 +27,6 @@ class StateBuilder:
             url=url,
             title=title,
             auth=AuthState.ANONYMOUS,
-            captured_ts=datetime.now(timezone.utc),
+            captured_ts=datetime.now(UTC),
             dom_hash=dom_hash
         )

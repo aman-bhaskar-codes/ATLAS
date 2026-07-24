@@ -18,7 +18,19 @@ _FIN_PATH_HINTS = ("/charge", "/payment", "/payout", "/transfer", "/withdraw", "
 _FIN_CLI_HINTS = ("stripe", "paypal", "razorpay", "web3", "eth-", "coinbase")
 
 KNOWN_MATCHERS: frozenset[str] = frozenset(
-    {"credential_access", "mass_deletion", "financial_transaction", "edit_safety_config"}
+    {
+        "credential_access",
+        "mass_deletion",
+        "financial_transaction",
+        "edit_safety_config",
+        "sends_to_person",
+        "invites_person",
+        "destructive_pim",
+        "financial_ui",
+        "destructive_ui",
+        "credential_entry",
+        "submits_form",
+    }
 )
 
 

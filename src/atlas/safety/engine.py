@@ -10,7 +10,9 @@ path is audited before the exception is raised.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
+from typing import Any
 
 from atlas.infra.clock import Clock
 from atlas.infra.config import SafetyCfg
@@ -25,6 +27,39 @@ from atlas.safety.policy import PolicyEngine
 from atlas.tools.base import Tool
 
 _log = get_logger("atlas.safety.engine")
+
+
+# ---- Secret redaction policy ---------------------------------------- #
+_SECRET_FIELDS = frozenset({
+    "password", "secret", "token", "api_key", "apikey", "authorization",
+    "bearer", "cookie", "credentials", "private_key", "access_token",
+    "refresh_token", "client_secret", "passphrase", "master_key",
+})
+_SECRET_PATTERN = re.compile(
+    r"(Bearer\s+\S+|eyJ[A-Za-z0-9_-]+\.eyJ|sk-[A-Za-z0-9]+|ghp_[A-Za-z0-9]+)",
+    re.IGNORECASE,
+)
+_MAX_PAYLOAD_VALUE_LEN = 2000  # truncate oversized values
+
+
+def _redact_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Deep-scrub a payload dict, redacting secret field names and patterns."""
+    cleaned: dict[str, Any] = {}
+    for key, value in payload.items():
+        lower_key = key.lower()
+        if lower_key in _SECRET_FIELDS:
+            cleaned[key] = "[REDACTED]"
+            continue
+        if isinstance(value, str):
+            if len(value) > _MAX_PAYLOAD_VALUE_LEN:
+                value = value[:200] + f"... [{len(value)} bytes truncated]"
+            value = _SECRET_PATTERN.sub("[REDACTED]", value)
+        elif isinstance(value, dict):
+            value = _redact_payload(value)
+        elif isinstance(value, list):
+            value = [_redact_payload(v) if isinstance(v, dict) else v for v in value]
+        cleaned[key] = value
+    return cleaned
 
 
 class HaltedError(AtlasError):
@@ -118,13 +153,14 @@ class SafetyEngine:
     async def _audit_decision(
         self, req: ToolRequest, decision: SafetyDecision | None, outcome: str | None = None
     ) -> None:
+        raw_payload = {"operation": req.operation, "args": req.args,
+                     "reason": decision.reason if decision else "halted",
+                     "matched_rule": decision.matched_rule if decision else None}
         await self._audit.record(AuditRecord(
             correlation_id=req.correlation_id, ts=self._clock.now(), actor="safety",
             action="decision", tool=req.tool,
             tier=decision.tier if decision else None,
             decision=decision.decision if decision else None,
             outcome=outcome,
-            payload={"operation": req.operation, "args": req.args,
-                     "reason": decision.reason if decision else "halted",
-                     "matched_rule": decision.matched_rule if decision else None},
+            payload=_redact_payload(raw_payload),
         ))

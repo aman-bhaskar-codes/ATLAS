@@ -12,19 +12,19 @@ class FakeRunner:
         return self._result
 
 
-async def test_unknown_intent_denied():
+async def test_unknown_intent_denied() -> None:
     tool = AppControlTool(FakeRunner(ScriptResult(True, "", "", 0)))
     res = await tool.execute({"intent": "rm_everything"})
     assert not res.ok and "not allowlisted" in (res.error or "")
 
 
-async def test_missing_param_rejected():
+async def test_missing_param_rejected() -> None:
     tool = AppControlTool(FakeRunner(ScriptResult(True, "", "", 0)))
     res = await tool.execute({"intent": "open_app"})  # needs 'app'
     assert not res.ok and "missing params" in (res.error or "")
 
 
-async def test_open_app_renders_and_runs():
+async def test_open_app_renders_and_runs() -> None:
     runner = FakeRunner(ScriptResult(True, "", "", 0))
     tool = AppControlTool(runner)
     res = await tool.execute({"intent": "open_app", "app": "Spotify"})
@@ -33,7 +33,7 @@ async def test_open_app_renders_and_runs():
     assert res.side_effects and res.side_effects[0].kind == "app_control"
 
 
-async def test_escaping_blocks_quote_injection():
+async def test_escaping_blocks_quote_injection() -> None:
     runner = FakeRunner(ScriptResult(True, "", "", 0))
     tool = AppControlTool(runner)
     await tool.execute({"intent": "open_app", "app": 'Evil" to quit\ntell application "Finder'})
@@ -41,7 +41,7 @@ async def test_escaping_blocks_quote_injection():
     assert '\\"' in (runner.last_script or "")
 
 
-async def test_read_intent_has_no_side_effect():
+async def test_read_intent_has_no_side_effect() -> None:
     tool = AppControlTool(FakeRunner(ScriptResult(True, "Bohemian Rhapsody", "", 0)))
     res = await tool.execute({"intent": "music_current"})
     assert res.ok and res.side_effects == ()

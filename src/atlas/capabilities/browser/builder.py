@@ -13,12 +13,12 @@ from atlas.capabilities.browser.engines.type import TypeEngine
 from atlas.capabilities.browser.page.page_manager import PageManager
 from atlas.capabilities.browser.page.state_builder import StateBuilder
 from atlas.capabilities.browser.platform import BrowserPlatform
-from atlas.capabilities.browser.providers.playwright_provider import PlaywrightProvider
 from atlas.capabilities.browser.providers.cdp_provider import CDPProvider
+from atlas.capabilities.browser.providers.playwright_provider import PlaywrightProvider
 from atlas.capabilities.browser.registry.provider_registry import ProviderRegistry
+from atlas.capabilities.browser.research.crawler import CrawlerEngine
 from atlas.capabilities.browser.research.reader import ReaderEngine
 from atlas.capabilities.browser.research.source_ranker import SourceRanker
-from atlas.capabilities.browser.research.crawler import CrawlerEngine
 from atlas.capabilities.browser.session.manager import SessionManager
 from atlas.capabilities.browser.session.pool import BrowserPool
 from atlas.capabilities.notification.platform import NotificationPlatform

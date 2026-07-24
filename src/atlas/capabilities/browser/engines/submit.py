@@ -4,9 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from atlas.capabilities.browser.domain.action import (
-    ActionKind, ActionPreview, ActionResult, BrowserAction
-)
+from atlas.capabilities.browser.domain.action import ActionKind, ActionPreview, ActionResult, BrowserAction
 from atlas.capabilities.browser.domain.content import FormModel
 from atlas.capabilities.browser.domain.page import PageHandle
 from atlas.capabilities.browser.page.state_builder import StateBuilder

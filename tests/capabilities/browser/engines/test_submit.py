@@ -1,20 +1,22 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
-from atlas.capabilities.browser.engines.submit import SubmitEngine
+import pytest
+
+from atlas.capabilities.browser.domain.content import FormField, FormModel
 from atlas.capabilities.browser.domain.page import PageHandle
-from atlas.capabilities.browser.domain.content import FormModel, FormField
-from atlas.infra.ids import CorrelationId, UuidGenerator
+from atlas.capabilities.browser.engines.submit import SubmitEngine
 from atlas.capabilities.errors import CapabilityDenied
 from atlas.capabilities.notification.domain.models import ApprovalDecision
+from atlas.infra.ids import CorrelationId, UuidGenerator
+
 
 @pytest.mark.asyncio
-async def test_submit_engine_approval():
+async def test_submit_engine_approval() -> None:
     dispatcher = AsyncMock()
     notifications = AsyncMock()
     notifications.request_approval.return_value = ApprovalDecision(
-        request_id="req_123", approved=True, decided_ts=datetime.now(timezone.utc)
+        request_id="req_123", approved=True, decided_ts=datetime.now(UTC)
     )
     ids = UuidGenerator()
     state_builder = AsyncMock()
@@ -49,11 +51,11 @@ async def test_submit_engine_approval():
     assert "••••" in req.detail
 
 @pytest.mark.asyncio
-async def test_submit_engine_denial():
+async def test_submit_engine_denial() -> None:
     dispatcher = AsyncMock()
     notifications = AsyncMock()
     notifications.request_approval.return_value = ApprovalDecision(
-        request_id="req_456", approved=False, decided_ts=datetime.now(timezone.utc)
+        request_id="req_456", approved=False, decided_ts=datetime.now(UTC)
     )
     ids = UuidGenerator()
     state_builder = AsyncMock()
@@ -68,7 +70,7 @@ async def test_submit_engine_denial():
     
     handle = PageHandle(session_id="test", tab_id="test")
     form = FormModel(id="login", action_url="https://example.com/login", fields=())
-    values = {}
+    values = {}  # type: ignore
     
     with pytest.raises(CapabilityDenied, match="form submit not approved"):
         await engine.submit(handle, form, values, CorrelationId("cid_123"))

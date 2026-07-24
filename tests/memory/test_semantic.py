@@ -8,25 +8,25 @@ from atlas.memory.types import FactKind
 
 
 class FakeVectors:
-    async def upsert(self, ref, text, embedding): pass
-    async def query(self, embedding, k): return []
-    async def delete(self, ref): pass
+    async def upsert(self, ref, text, embedding) -> None: pass  # type: ignore
+    async def query(self, embedding, k) -> None: return []  # type: ignore
+    async def delete(self, ref) -> None: pass  # type: ignore
 
 class FakeEmbedder:
-    async def embed(self, text): return [0.1, 0.2, 0.3]
+    async def embed(self, text) -> None: return [0.1, 0.2, 0.3]  # type: ignore
 
 @pytest.fixture
-async def sem_db(tmp_path):
+async def sem_db(tmp_path) -> None:  # type: ignore
     db = Database(tmp_path / "test.db")
     await db.start()
     yield db
     await db.stop()
 
 @pytest.mark.asyncio
-async def test_semantic_versioning(sem_db):
+async def test_semantic_versioning(sem_db) -> None:  # type: ignore
     clock = SystemClock()
     ids = UuidGenerator()
-    sem = SemanticMemory(sem_db, FakeVectors(), FakeEmbedder(), ids, clock) # type: ignore
+    sem = SemanticMemory(sem_db, FakeVectors(), FakeEmbedder(), ids, clock)  # type: ignore
     
     fid = await sem.add_fact(
         "likes apple", FactKind.PREFERENCE, confidence=1.0, salience=0.5, sources=[1]

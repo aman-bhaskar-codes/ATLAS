@@ -1,21 +1,20 @@
 """Tests for the Notification Platform."""
 
-import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
+
 import pytest
 
 from atlas.capabilities.notification.builder import build_notification_platform
 from atlas.capabilities.notification.domain.models import (
-    ApprovalRequest,
-    Channel,
     Notification,
     NotificationKind,
     NotificationPriority,
 )
-from typing import Any
 from atlas.infra.clock import Clock
 from atlas.infra.db import Database
 from atlas.infra.ids import UuidGenerator
+
 
 class FakeClock(Clock):
     def __init__(self, t: datetime):
@@ -34,7 +33,7 @@ class FakeIdentity:
         return "fake-secret"
 
 @pytest.fixture
-async def db(tmp_path) -> Database:
+async def db(tmp_path) -> Database:  # type: ignore
     db_path = tmp_path / "test.db"
     database = Database(db_path)
     await database.start()
@@ -42,17 +41,17 @@ async def db(tmp_path) -> Database:
 
 @pytest.fixture
 def clock() -> FakeClock:
-    return FakeClock(datetime(2026, 7, 13, 12, 0, 0, tzinfo=timezone.utc))
+    return FakeClock(datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC))
 
 @pytest.mark.asyncio
-async def test_notification_routing(db, clock, tmp_path, monkeypatch):
+async def test_notification_routing(db, clock, tmp_path, monkeypatch) -> None:  # type: ignore
     ids = UuidGenerator()
     gw = FakeGateway()
     idx = FakeIdentity()
     
     # Mock DesktopProvider so it doesn't run AppleScript
     from atlas.capabilities.notification.providers.desktop import DesktopProvider
-    async def fake_send(*args, **kwargs) -> bool:
+    async def fake_send(*args, **kwargs) -> bool:  # type: ignore
         return True
     monkeypatch.setattr(DesktopProvider, "send", fake_send)
     
@@ -68,7 +67,7 @@ async def test_notification_routing(db, clock, tmp_path, monkeypatch):
     # Send a Tier-0 task complete notification
     n = Notification(
         id=ids.execution_id(),
-        correlation_id="test",
+        correlation_id="test",  # type: ignore
         kind=NotificationKind.TASK_COMPLETE,
         priority=NotificationPriority.LOW,
         title="Task Done",
@@ -84,7 +83,7 @@ async def test_notification_routing(db, clock, tmp_path, monkeypatch):
     # Send a Critical safety alert
     n_crit = Notification(
         id=ids.execution_id(),
-        correlation_id="test2",
+        correlation_id="test2",  # type: ignore
         kind=NotificationKind.SAFETY_ALERT,
         priority=NotificationPriority.CRITICAL,
         title="Danger",

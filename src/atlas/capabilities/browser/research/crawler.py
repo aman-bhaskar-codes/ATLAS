@@ -1,10 +1,8 @@
 """Crawler engine for autonomous research."""
 from __future__ import annotations
 
-import asyncio
 import urllib.parse
 from dataclasses import dataclass
-from typing import Any
 
 from atlas.capabilities.browser.domain.content import Article
 from atlas.capabilities.browser.engines.extraction import ExtractionEngine
@@ -109,7 +107,7 @@ class CrawlerEngine:
         # Calculate simplistic confidence based on average source rank
         avg_score = 0.5
         if articles:
-            scores = [self._ranker.score_url(a.url) for a in articles if getattr(a, 'url', None)]
+            scores = [self._ranker.score_url(a.url) for a in articles if getattr(a, 'url', None)]  # type: ignore
             scores = [s for s in scores if s is not None] # Fallback if url is stored in provenance
             if not scores:
                 scores = [self._ranker.score_url(a.provenance.uri) for a in articles if a.provenance.uri]

@@ -1,5 +1,6 @@
-import pytest
 from datetime import UTC, datetime
+
+import pytest
 
 from atlas.capabilities.browser.domain.content import Article
 from atlas.capabilities.browser.domain.page import PageHandle
@@ -9,19 +10,19 @@ from atlas.infra.ids import CorrelationId
 
 
 class FakeNavEngine:
-    async def goto(self, handle, url, cid):
+    async def goto(self, handle, url, cid) -> None:  # type: ignore
         pass
 
 
 class FakeExtractionEngine:
-    def __init__(self, articles=None):
+    def __init__(self, articles=None) -> None:  # type: ignore
         self.articles = articles or {}
 
-    async def extract_article(self, handle, cid):
+    async def extract_article(self, handle, cid) -> None:  # type: ignore
         url = getattr(handle, "_fake_url", "https://example.com")
         if url in self.articles:
-            return self.articles[url]
-        return Article(
+            return self.articles[url]  # type: ignore
+        return Article(  # type: ignore
             title="Test",
             text="Text",
             markdown="Markdown",
@@ -30,33 +31,33 @@ class FakeExtractionEngine:
 
 
 class FakePageManager:
-    async def new_page(self, session_id):
+    async def new_page(self, session_id) -> None:  # type: ignore
         handle = PageHandle(session_id=session_id, tab_id="tab-1")
-        handle._fake_url = "https://example.com"
-        return handle
+        handle._fake_url = "https://example.com"  # type: ignore
+        return handle  # type: ignore
 
-    async def close_page(self, handle):
+    async def close_page(self, handle) -> None:  # type: ignore
         pass
-        
-    def get_provider(self, handle):
-        return FakeProvider(), "sess", "tab"
+
+    def get_provider(self, handle) -> None:  # type: ignore
+        return FakeProvider(), "sess", "tab"  # type: ignore
 
 
 class FakeProvider:
-    async def content_html(self, session_id, tab_id):
-        return '<a href="https://example.com/page2">Link</a>'
+    async def content_html(self, session_id, tab_id) -> None:  # type: ignore
+        return '<a href="https://example.com/page2">Link</a>'  # type: ignore
 
 
 @pytest.mark.asyncio
-async def test_crawler_engine_basic():
+async def test_crawler_engine_basic() -> None:
     nav = FakeNavEngine()
     extract = FakeExtractionEngine()
     pages = FakePageManager()
     
     crawler = CrawlerEngine(
-        nav_engine=nav,
-        extract_engine=extract,
-        page_manager=pages,
+        nav_engine=nav,  # type: ignore
+        extract_engine=extract,  # type: ignore
+        page_manager=pages,  # type: ignore
     )
     
     cid = CorrelationId("test")

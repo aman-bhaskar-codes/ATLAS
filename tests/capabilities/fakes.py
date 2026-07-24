@@ -17,14 +17,14 @@ class FakeProvider:
     is_local = True
     requires_auth = False
 
-    def __init__(self, name="fake", fail_times=0):
+    def __init__(self, name="fake", fail_times=0) -> None:  # type: ignore
         self.name = name
         self._fail_times = fail_times
         self.calls = 0
 
-    async def initialize(self): ...
-    async def authenticate(self): ...
-    async def health(self): return True
+    async def initialize(self) -> None: ...
+    async def authenticate(self) -> None: ...
+    async def health(self): return True  # type: ignore
     async def execute(self, request: CapabilityRequest) -> Any:
         self.calls += 1
         if self.calls <= self._fail_times:
@@ -34,4 +34,4 @@ class FakeProvider:
         return FakePayload(value=str(raw["raw"]))
     def retry_policy(self) -> RetryPolicy:
         return RetryPolicy(max_attempts=3, base_backoff_s=0)
-    async def shutdown(self): ...
+    async def shutdown(self) -> None: ...

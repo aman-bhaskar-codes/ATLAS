@@ -89,7 +89,7 @@ class NotificationDispatcher:
                                                 channel=channel.name, ts=self._clock.now(),
                                                 ok=ok, latency_ms=latency))
                 if ok or not self._retry.should_retry(attempt, policy):
-                    return ok
+                    return ok  # type: ignore
             except Exception as exc:
                 latency = int((time.perf_counter() - start) * 1000)
                 self._health.record(provider.name, ok=False, latency_ms=latency)

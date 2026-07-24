@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
-from typing import Any
 from atlas.capabilities.identity.auth.oauth2 import OAuth2Strategy
-from atlas.capabilities.identity.errors import IdentityError, RefreshFailed
 from atlas.capabilities.identity.models import Credential, CredentialKind, Token
 
 

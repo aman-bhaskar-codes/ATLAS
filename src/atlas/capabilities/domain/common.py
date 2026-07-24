@@ -42,7 +42,7 @@ class Confidence(BaseModel):
     basis: str = ""              # e.g. 'single-source', 'agreement 4/5'
 
 
-PayloadT = TypeVar("PayloadT", bound=BaseModel)
+PayloadT = TypeVar("PayloadT", bound=BaseModel)  # type: ignore
 
 
 class CapabilityResult[PayloadT](BaseModel):

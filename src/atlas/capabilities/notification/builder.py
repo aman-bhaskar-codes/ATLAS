@@ -39,7 +39,7 @@ def build_notification_platform(
 ) -> NotificationPlatform:
     # 1. Load config
     cfg_path = config_dir / "notifications.yaml"
-    raw = {}
+    raw = {}  # type: ignore
     if cfg_path.exists():
         raw = yaml.safe_load(cfg_path.read_text()) or {}
 

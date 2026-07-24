@@ -1,8 +1,9 @@
 """Tests for CalendarPlatform Tier-2 commit gate — mirrors test_send_preview.py from 6.5."""
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 
 from atlas.capabilities.domain.calendar import Attendee, CalendarEvent, EventDraft, EventTime
 from atlas.capabilities.domain.contacts import KnownContacts
@@ -11,8 +12,8 @@ from atlas.capabilities.notification.domain.models import ApprovalDecision, Appr
 from atlas.capabilities.platforms.calendar_platform import CalendarPlatform
 from atlas.infra.ids import CorrelationId
 
-_NOW = datetime(2026, 7, 15, 9, 0, tzinfo=timezone.utc)
-_END = datetime(2026, 7, 15, 10, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 7, 15, 9, 0, tzinfo=UTC)
+_END = datetime(2026, 7, 15, 10, 0, tzinfo=UTC)
 
 
 class FakeCalProvider:
@@ -32,7 +33,7 @@ class FakeCalProvider:
     async def search(self, query: str, *, limit: int) -> list[CalendarEvent]: return []
     async def get_event(self, calendar_id: str, event_id: str) -> CalendarEvent:
         raise NotImplementedError
-    async def free_busy(self, cal_id: str, *, start: datetime, end: datetime):  # type: ignore[override]
+    async def free_busy(self, cal_id: str, *, start: datetime, end: datetime):  # type: ignore
         from atlas.capabilities.domain.calendar import Availability
         return Availability(calendar_id=cal_id, window_start=start, window_end=end)
     async def create_event(self, draft: EventDraft) -> str:
@@ -58,7 +59,7 @@ class FakeNotify:
         self.prompt = req.prompt
         return ApprovalDecision(
             request_id=req.id, approved=self._a,
-            decided_ts=datetime.now(timezone.utc))
+            decided_ts=datetime.now(UTC))
 
 
 class FakeIds:
@@ -71,7 +72,7 @@ def _platform(approved: bool,
               known: tuple[str, ...] = ()) -> tuple[CalendarPlatform, FakeCalProvider, FakeNotify]:
     prov = FakeCalProvider()
     notify = FakeNotify(approved)
-    platform = CalendarPlatform(  # type: ignore[arg-type]
+    platform = CalendarPlatform(
         provider=prov, notifications=notify, ids=FakeIds(),  # type: ignore[arg-type]
         known=KnownContacts(set(known)), approval_channels=("ntfy:atlas",))
     return platform, prov, notify

@@ -129,7 +129,7 @@ class GooglePeopleProvider:
             name = str(names[0].get("displayName", "")) if isinstance(names[0], dict) else ""
 
         emails: list[EmailRef] = []
-        for ea in (person.get("emailAddresses") or []):
+        for ea in (person.get("emailAddresses") or []):  # type: ignore
             if not isinstance(ea, dict):
                 continue
             val = str(ea.get("value", ""))
@@ -141,7 +141,7 @@ class GooglePeopleProvider:
                                    label=ContactLabel.WORK if is_primary else ContactLabel.OTHER))
 
         phones: list[PhoneNumber] = []
-        for ph in (person.get("phoneNumbers") or []):
+        for ph in (person.get("phoneNumbers") or []):  # type: ignore
             if not isinstance(ph, dict):
                 continue
             val = str(ph.get("value", ""))

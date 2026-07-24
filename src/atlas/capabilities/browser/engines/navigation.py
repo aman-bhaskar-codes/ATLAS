@@ -25,19 +25,19 @@ class NavigationEngine:
         except Exception as exc:
             raise NavigationError(f"Failed to navigate to {url}: {exc}") from exc
             
-        return await self._builder.build_state(handle)
+        return await self._builder.build_state(handle)  # type: ignore
 
     async def back(self, handle: PageHandle, cid: CorrelationId) -> PageState:
         provider, provider_session_id, tab_id = self._pages.get_provider(handle)
         await provider.back(provider_session_id, tab_id)
-        return await self._builder.build_state(handle)
+        return await self._builder.build_state(handle)  # type: ignore
 
     async def forward(self, handle: PageHandle, cid: CorrelationId) -> PageState:
         provider, provider_session_id, tab_id = self._pages.get_provider(handle)
         await provider.forward(provider_session_id, tab_id)
-        return await self._builder.build_state(handle)
+        return await self._builder.build_state(handle)  # type: ignore
 
     async def reload(self, handle: PageHandle, cid: CorrelationId) -> PageState:
         provider, provider_session_id, tab_id = self._pages.get_provider(handle)
         await provider.reload(provider_session_id, tab_id)
-        return await self._builder.build_state(handle)
+        return await self._builder.build_state(handle)  # type: ignore

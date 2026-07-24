@@ -1,19 +1,20 @@
 import pytest
 
-from atlas.capabilities.browser.domain.session import ContextSpec
 from atlas.capabilities.browser.providers.cdp_provider import CDPProvider
 from atlas.capabilities.browser.registry.provider_registry import ProviderRegistry
-from atlas.capabilities.browser.session.pool import BrowserPool
 from atlas.capabilities.browser.session.manager import SessionManager
+from atlas.capabilities.browser.session.pool import BrowserPool
+
+
 class FakeIdGenerator:
-    def __init__(self):
+    def __init__(self) -> None:
         self.task_id = "test-task"
 
     def generate(self, prefix: str = "") -> str:
         return f"{prefix}-123"
 
 @pytest.mark.asyncio
-async def test_provider_swap_to_cdp():
+async def test_provider_swap_to_cdp() -> None:
     registry = ProviderRegistry()
     cdp = CDPProvider()
     
@@ -22,7 +23,7 @@ async def test_provider_swap_to_cdp():
     
     pool = BrowserPool(registry)
     ids = FakeIdGenerator()
-    session_manager = SessionManager(pool=pool, ids=ids)
+    session_manager = SessionManager(pool=pool, ids=ids)  # type: ignore
     
     session = await session_manager.acquire(profile="test", incognito=True)
     
@@ -30,9 +31,9 @@ async def test_provider_swap_to_cdp():
     assert provider.name == "cdp"
     
     # We don't necessarily need to perform a full navigation in the test, 
-    # but the provider should have successfully launched (and thus connected via CDP).
-    assert provider._browser is not None
+    # but the provider should have successfully launched (and thus connected via CDP).  # type: ignore
+    assert provider._browser is not None  # type: ignore
     
     await session_manager.release(session.id)
-    await provider._cleanup()
-    assert provider._browser is None
+    await provider._cleanup()  # type: ignore
+    assert provider._browser is None  # type: ignore

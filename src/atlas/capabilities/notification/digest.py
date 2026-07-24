@@ -47,14 +47,14 @@ class DigestEngine:
         
         # optional: summarize prose-heavy categories via P5
         resp = await self._gw.complete(ModelRequest(
-            correlation_id=correlation_id, system="Summarize this digest crisply, keep all headers.",
+            correlation_id=correlation_id, system="Summarize this digest crisply, keep all headers.",  # type: ignore
             prompt=raw, max_tokens=600))
             
         for n in batched:
             await self._queue.complete(n.id)
             
         return Notification(
-            id=self._ids.execution_id(), correlation_id=correlation_id,
+            id=self._ids.execution_id(), correlation_id=correlation_id,  # type: ignore
             kind=NotificationKind.SYSTEM_HEALTH, priority=NotificationPriority.LOW,
             title=f"ATLAS digest ({len(batched)} items)", body=resp.text,
             created_ts=self._clock.now())

@@ -1,10 +1,11 @@
 """Tests for ContactsPlatform and KnownContacts — the single source of truth."""
 from __future__ import annotations
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from atlas.capabilities.domain.contacts import Contact, ContactDraft, EmailRef, KnownContacts
+import pytest
+
+from atlas.capabilities.domain.contacts import Contact, ContactDraft, EmailRef
 from atlas.capabilities.errors import CapabilityDenied
 from atlas.capabilities.notification.domain.models import ApprovalDecision, ApprovalRequest
 from atlas.capabilities.platforms.contacts_platform import ContactsPlatform
@@ -45,7 +46,7 @@ class ApproveNotify:
         self.previewed = req.detail
         return ApprovalDecision(
             request_id=req.id, approved=self._a,
-            decided_ts=datetime.now(timezone.utc))
+            decided_ts=datetime.now(UTC))
 
 
 class FakeIds:
@@ -65,7 +66,7 @@ def _platform(approved: bool = True,
               seed: set[str] | None = None) -> tuple[ContactsPlatform, FakePeopleProvider, ApproveNotify]:
     people = FakePeopleProvider(contacts or [_ALICE, _BOB])
     notify = ApproveNotify(approved)
-    platform = ContactsPlatform(  # type: ignore[arg-type]
+    platform = ContactsPlatform(
         provider=people, notifications=notify, ids=FakeIds(),  # type: ignore[arg-type]
         approval_channels=("ntfy:atlas",), seed=seed)
     return platform, people, notify

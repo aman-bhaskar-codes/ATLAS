@@ -8,8 +8,6 @@ so traffic auto-reroutes — no cascading failure.
 
 from __future__ import annotations
 
-from typing import ClassVar
-
 from atlas.capabilities.errors import NoProviderAvailable
 from atlas.capabilities.providers.base import Provider
 from atlas.capabilities.registry.capability import Capability
@@ -20,17 +18,16 @@ class ProviderRegistry:
     def __init__(self, health: CapabilityHealth) -> None:
         self._by_capability: dict[Capability, list[Provider]] = {}
         self._health = health
-
-    _prefs: ClassVar[dict[tuple[Capability, str], int]] = {}
+        self._prefs: dict[tuple[Capability, str], int] = {}
 
     def register(self, provider: Provider, *, preference: int = 100) -> None:
         """preference: lower = tried first among equally-healthy providers
         (use it to prefer free/official/local adapters)."""
+        if provider.name in {p.name for p in self._by_capability.get(provider.capability, [])}:
+            raise ValueError(f"duplicate provider name {provider.name!r} for {provider.capability.value}")
         self._by_capability.setdefault(provider.capability, [])
         self._by_capability[provider.capability].append(provider)
         self._prefs[(provider.capability, provider.name)] = preference
-
-    _prefs: ClassVar[dict[tuple[Capability, str], int]] = {}
 
     def candidates(self, capability: Capability) -> list[Provider]:
         providers = self._by_capability.get(capability, [])
@@ -46,3 +43,4 @@ class ProviderRegistry:
 
     def all_providers(self) -> list[Provider]:
         return [p for ps in self._by_capability.values() for p in ps]
+
