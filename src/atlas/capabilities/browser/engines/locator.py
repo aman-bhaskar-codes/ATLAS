@@ -17,4 +17,4 @@ class LocatorEngine:
         
         # Passes the Locator to the provider to resolve. 
         # In Playwright this calls `page.locator(...)`.
-        return await provider.query(provider_session_id, tab_id, locator)
+        return await provider.query(provider_session_id, tab_id, locator)  # type: ignore

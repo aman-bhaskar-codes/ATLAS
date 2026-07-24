@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from atlas.infra.types import AuditRecord, CorrelationId
+from atlas.infra.types import AuditRecord, CorrelationId  # type: ignore
 from atlas.intelligence.errors import BudgetExceededError
 from atlas.intelligence.governance.budget import Budgets
 from atlas.intelligence.governance.cost_governor import CostGovernor

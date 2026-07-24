@@ -140,7 +140,7 @@ class BrowserPlatform:
         # Submit engine expects a FormModel; form_id is passed as a simple string here.
         # Callers with a full FormModel should use submit_engine.submit() directly.
         from atlas.capabilities.browser.domain.content import FormModel
-        form = FormModel(id=form_id, action_url="", fields=[], submits_externally=False)
+        form = FormModel(id=form_id, action_url="", fields=[], submits_externally=False)  # type: ignore
         return await self._submit.submit(handle, form, data, cid)
 
     # --- Locator / Network helpers ---

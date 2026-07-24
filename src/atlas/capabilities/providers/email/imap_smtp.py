@@ -8,6 +8,7 @@ from __future__ import annotations
 from atlas.capabilities.domain.email import EmailDraft, EmailMessage, Thread
 from atlas.capabilities.identity.platform import IdentityPlatform
 
+
 class ImapSmtpProvider:
     name = "imap_smtp"
     requires_auth = True

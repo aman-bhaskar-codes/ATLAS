@@ -9,13 +9,16 @@ apply.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from datetime import UTC
 from typing import Any
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from atlas.app import build
+from atlas.app import Atlas, build
 from atlas.diagnostics.doctor import exit_code, run_doctor
 from atlas.infra.types import InboundEvent, ModelRequest, SideEffect, ToolRequest, ToolResult
 from atlas.safety.engine import DeniedError, HaltedError
@@ -41,20 +44,25 @@ def _run(coro: Any) -> Any:
     return asyncio.run(coro)
 
 
+@asynccontextmanager
+async def build_atlas() -> AsyncGenerator[Atlas]:
+    atlas = await build()
+    async with atlas:
+        yield atlas
+
+
 @app.command()
 def doctor(verify_manifest: bool = typer.Option(False, "--verify-manifest")) -> None:
     async def go() -> int:
-        atlas = await build()
-        await atlas.db.start()
-        results = await run_doctor(atlas, verify_manifest_only=verify_manifest)
-        table = Table("check", "status", "detail")
-        for r in results:
-            color = {"pass": "green", "warn": "yellow", "fail": "red"}[r.status]
-            table.add_row(r.name, f"[{color}]{r.status}[/]", r.detail)
-        console.print(table)
-        code = exit_code(results)
-        await atlas.close()
-        return code
+        async with build_atlas() as atlas:
+            results = await run_doctor(atlas, verify_manifest_only=verify_manifest)
+            table = Table("check", "status", "detail")
+            for r in results:
+                color = {"pass": "green", "warn": "yellow", "fail": "red"}[r.status]
+                table.add_row(r.name, f"[{color}]{r.status}[/]", r.detail)
+            console.print(table)
+            code = exit_code(results)
+            return code
     raise typer.Exit(_run(go()))
 
 
@@ -67,28 +75,26 @@ def filesystem(
 ) -> None:
     """Phase 2: drive filesystem_tool through the Safety Engine."""
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        tool = atlas.tools["filesystem"]
-        args: dict[str, Any] = {"operation": operation, "path": path,
-                                "query": query, "content": content}
-        if operation == "delete":
-            # bridge dry_run count -> classifier for mass_deletion decisions
-            count = tool._count_delete_targets(path)  # type: ignore[attr-defined]
-            args["target_count"] = count
-        op_tier = "read" if operation in ("read", "search") else \
-                  ("delete" if operation == "delete" else "write")
-        req = ToolRequest(correlation_id=atlas.ids.correlation_id(),
-                          tool="filesystem", operation=op_tier, args=args)
-        try:
-            result = await atlas.safety.guard(req, tool)
-            if result.ok:
-                console.print(f"[green]OK[/] {result.output}")
-            else:
-                console.print(f"[red]{result.error}[/]")
-        except Exception as exc:
-            console.print(f"[red]{type(exc).__name__}[/] {exc}")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            tool = atlas.tools["filesystem"]
+            args: dict[str, Any] = {"operation": operation, "path": path,
+                                    "query": query, "content": content}
+            if operation == "delete":
+                # bridge dry_run count -> classifier for mass_deletion decisions
+                count = tool._count_delete_targets(path)  # type: ignore[attr-defined]
+                args["target_count"] = count
+            op_tier = "read" if operation in ("read", "search") else \
+                      ("delete" if operation == "delete" else "write")
+            req = ToolRequest(correlation_id=atlas.ids.correlation_id(),
+                              tool="filesystem", operation=op_tier, args=args)
+            try:
+                result = await atlas.safety.guard(req, tool)
+                if result.ok:
+                    console.print(f"[green]OK[/] {result.output}")
+                else:
+                    console.print(f"[red]{result.error}[/]")
+            except Exception as exc:
+                console.print(f"[red]{type(exc).__name__}[/] {exc}")
     _run(go())
 
 
@@ -96,20 +102,18 @@ def filesystem(
 def shell(command: str) -> None:
     """Phase 2: run an allowlisted command in the sandbox via the Safety Engine."""
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        tool = atlas.tools["shell"]
-        first = command.strip().split()[0] if command.strip() else ""
-        read_only = first in {"ls", "cat", "grep", "find", "git"}
-        req = ToolRequest(correlation_id=atlas.ids.correlation_id(), tool="shell",
-                          operation="read_only" if read_only else "side_effect",
-                          args={"command": command})
-        try:
-            result = await atlas.safety.guard(req, tool)
-            console.print(result.output if result.ok else f"[red]{result.error}[/]")
-        except Exception as exc:
-            console.print(f"[red]{type(exc).__name__}[/] {exc}")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            tool = atlas.tools["shell"]
+            first = command.strip().split()[0] if command.strip() else ""
+            read_only = first in {"ls", "cat", "grep", "find", "git"}
+            req = ToolRequest(correlation_id=atlas.ids.correlation_id(), tool="shell",
+                              operation="read_only" if read_only else "side_effect",
+                              args={"command": command})
+            try:
+                result = await atlas.safety.guard(req, tool)
+                console.print(result.output if result.ok else f"[red]{result.error}[/]")
+            except Exception as exc:
+                console.print(f"[red]{type(exc).__name__}[/] {exc}")
     _run(go())
 
 
@@ -117,13 +121,11 @@ def shell(command: str) -> None:
 def remember(text: str, kind: str = "fact") -> None:
     """Directly add a semantic fact (Tier-1 explicit user edit)."""
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        from atlas.memory.types import FactKind
-        fid = await atlas.semantic.add_fact(text, FactKind(kind), confidence=1.0,
-                                            salience=0.7, sources=())
-        console.print(f"[green]remembered[/] {fid}")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            from atlas.memory.types import FactKind
+            fid = await atlas.semantic.add_fact(text, FactKind(kind), confidence=1.0,
+                                                salience=0.7, sources=())
+            console.print(f"[green]remembered[/] {fid}")
     _run(go())
 
 
@@ -131,12 +133,10 @@ def remember(text: str, kind: str = "fact") -> None:
 def recall(query: str) -> None:
     """Show what memory would surface for a query (inspect retrieval)."""
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        ctx = await atlas.retriever.retrieve(query)
-        console.print(ctx.render())
-        console.print(f"[dim]~{ctx.token_estimate} tokens[/]")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            ctx = await atlas.retriever.retrieve(query)
+            console.print(ctx.render())
+            console.print(f"[dim]~{ctx.token_estimate} tokens[/]")
     _run(go())
 
 
@@ -144,11 +144,9 @@ def recall(query: str) -> None:
 def consolidate() -> None:
     """Run the distillation loop manually (nightly job in Phase 8)."""
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        stats = await atlas.consolidator.run()
-        console.print(f"[green]consolidated[/] {stats}")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            stats = await atlas.consolidator.run()
+            console.print(f"[green]consolidated[/] {stats}")
     _run(go())
 
 
@@ -156,11 +154,9 @@ def consolidate() -> None:
 def prune() -> None:
     """Run auto-cleaning manually (scheduled in Phase 8)."""
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        stats = await atlas.pruner.run()
-        console.print(f"[green]pruned[/] {stats}")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            stats = await atlas.pruner.run()
+            console.print(f"[green]pruned[/] {stats}")
     _run(go())
 
 
@@ -168,11 +164,9 @@ def prune() -> None:
 def user_model_set(section: str, content: str) -> None:
     """Edit an always-loaded user-model section."""
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        await atlas.user_model.set_section(section, content)
-        console.print(f"[green]updated[/] {section}")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            await atlas.user_model.set_section(section, content)
+            console.print(f"[green]updated[/] {section}")
     _run(go())
 
 
@@ -187,32 +181,28 @@ def run_tool(
         args[k] = v
 
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        req = ToolRequest(correlation_id=atlas.ids.correlation_id(),
-                          tool=tool, operation=operation, args=args)
-        try:
-            result = await atlas.safety.guard(req, EchoTool())
-            console.print(f"[green]OK[/] {result.output}")
-        except HaltedError as exc:
-            console.print(f"[red]HALTED[/] {exc}")
-        except DeniedError as exc:
-            console.print(f"[red]DENIED[/] tier={exc.decision.tier.name} :: {exc.decision.reason}")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            req = ToolRequest(correlation_id=atlas.ids.correlation_id(),
+                              tool=tool, operation=operation, args=args)
+            try:
+                result = await atlas.safety.guard(req, EchoTool())
+                console.print(f"[green]OK[/] {result.output}")
+            except HaltedError as exc:
+                console.print(f"[red]HALTED[/] {exc}")
+            except DeniedError as exc:
+                console.print(f"[red]DENIED[/] tier={exc.decision.tier.name} :: {exc.decision.reason}")
     _run(go())
 
 
 @app.command()
 def model(prompt: str, deep: bool = typer.Option(False)) -> None:
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        req = ModelRequest(correlation_id=atlas.ids.correlation_id(),
-                           prompt=prompt, needs_deep_reasoning=deep)
-        resp = await atlas.gateway.complete(req)
-        console.print(f"[dim]{resp.model} · {resp.target.name} · {resp.latency_ms}ms[/]")
-        console.print(resp.text)
-        await atlas.close()
+        async with build_atlas() as atlas:
+            req = ModelRequest(correlation_id=atlas.ids.correlation_id(),
+                               prompt=prompt, needs_deep_reasoning=deep)
+            resp = await atlas.gateway.complete(req)
+            console.print(f"[dim]{resp.model} · {resp.target.name} · {resp.latency_ms}ms[/]")
+            console.print(resp.text)
     _run(go())
 
 
@@ -220,56 +210,50 @@ def model(prompt: str, deep: bool = typer.Option(False)) -> None:
 def know(query: str, official_only: bool = typer.Option(False)) -> None:
     """Obtain knowledge from memory + official + web, ranked with confidence."""
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        from atlas.capabilities.domain.knowledge import KnowledgeQuery
-        ans = await atlas.knowledge_platform.obtain_knowledge(
-            KnowledgeQuery(text=query, prefer_official=True), atlas.ids.correlation_id())
-        console.print(ans.text)
-        console.print(f"[dim]confidence {ans.confidence.score:.2f} ({ans.confidence.basis}) · "
-                      f"{len(ans.sources)} sources[/]")
-        for s in ans.sources[:5]:
-            console.print(f"  [{s.provenance.source_kind.value}] {s.title} {s.url or ''}")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            from atlas.capabilities.domain.knowledge import KnowledgeQuery
+            ans = await atlas.knowledge_platform.obtain_knowledge(
+                KnowledgeQuery(text=query, prefer_official=True), atlas.ids.correlation_id())
+            console.print(ans.text)
+            console.print(f"[dim]confidence {ans.confidence.score:.2f} ({ans.confidence.basis}) · "
+                          f"{len(ans.sources)} sources[/]")
+            for s in ans.sources[:5]:
+                console.print(f"  [{s.provenance.source_kind.value}] {s.title} {s.url or ''}")
     _run(go())
 
 
 @app.command()
 def kill() -> None:
     async def go() -> None:
-        atlas = await build()
-        atlas.killswitch.trip()
-        console.print("[red bold]KILL SWITCH TRIPPED[/] — STOP.flag created")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            atlas.killswitch.trip()
+            console.print("[red bold]KILL SWITCH TRIPPED[/] — STOP.flag created")
     _run(go())
 
 
 @app.command()
 def revive() -> None:
     async def go() -> None:
-        atlas = await build()
-        atlas.killswitch.reset()
-        console.print("[green]kill switch cleared[/]")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            atlas.killswitch.reset()
+            console.print("[green]kill switch cleared[/]")
     _run(go())
 
 
 @app.command("audit")
 def audit_tail(limit: int = 30) -> None:
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        rows = await atlas.audit.tail(limit)
-        table = Table("ts", "actor", "action", "tool", "tier", "decision", "outcome")
-        for r in rows:
-            table.add_row(
-                str(r.get("ts", ""))[11:19], str(r.get("actor", "")), str(r.get("action", "")),
-                str(r.get("tool") or ""), str(r.get("tier") if r.get("tier") is not None else ""),
-                str(r.get("decision") or ""), str(r.get("outcome") or ""),
-            )
-        console.print(table)
-        console.print(f"[dim]cost today: ${await atlas.audit.cost_today():.4f}[/]")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            rows = await atlas.audit.tail(limit)
+            table = Table("ts", "actor", "action", "tool", "tier", "decision", "outcome")
+            for r in rows:
+                table.add_row(
+                    str(r.get("ts", ""))[11:19], str(r.get("actor", "")), str(r.get("action", "")),
+                    str(r.get("tool") or ""), str(r.get("tier") if r.get("tier") is not None else ""),
+                    str(r.get("decision") or ""), str(r.get("outcome") or ""),
+                )
+            console.print(table)
+            console.print(f"[dim]cost today: ${await atlas.audit.cost_today():.4f}[/]")
     _run(go())
 
 
@@ -277,24 +261,21 @@ def audit_tail(limit: int = 30) -> None:
 def run_task(request: str) -> None:
     """Execute a task through the orchestration runtime."""
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        event = InboundEvent(
-            correlation_id=atlas.ids.correlation_id(),
-            source="cli",
-            content=request,
-        )
-        try:
-            result = await atlas.orchestrator.run(event)
-            if result.ok:
-                console.print(f"[green]Completed in {result.steps_taken} steps[/]")
-                console.print(result.answer)
-            else:
-                console.print(f"[red]Failed in {result.steps_taken} steps: {result.error}[/]")
-        except Exception as exc:
-            console.print(f"[red]Error:[/] {exc}")
-        finally:
-            await atlas.close()
+        async with build_atlas() as atlas:
+            event = InboundEvent(
+                correlation_id=atlas.ids.correlation_id(),
+                source="cli",
+                content=request,
+            )
+            try:
+                result = await atlas.orchestrator.run(event)
+                if result.ok:
+                    console.print(f"[green]Completed in {result.steps_taken} steps[/]")
+                    console.print(result.answer)
+                else:
+                    console.print(f"[red]Failed in {result.steps_taken} steps: {result.error}[/]")
+            except Exception as exc:
+                console.print(f"[red]Error:[/] {exc}")
     _run(go())
 
 
@@ -310,45 +291,43 @@ def cal(
 ) -> None:
     """Calendar: list / free-busy / search / create events."""
     async def go() -> None:
-        from datetime import datetime, timezone
-        atlas = await build()
-        await atlas.db.start()
-        cp = atlas.calendar_platform
+        from datetime import datetime
+        async with build_atlas() as atlas:
+            cp = atlas.calendar_platform
 
-        def _parse(s: str) -> datetime:
-            if not s:
-                return datetime.now(timezone.utc)
-            return datetime.fromisoformat(s) if "+" in s or s.endswith("Z") \
-                else datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
+            def _parse(s: str) -> datetime:
+                if not s:
+                    return datetime.now(UTC)
+                return datetime.fromisoformat(s) if "+" in s or s.endswith("Z") \
+                    else datetime.fromisoformat(s).replace(tzinfo=UTC)
 
-        s_dt = _parse(start)
-        e_dt = _parse(end) if end else _parse(start) if start else \
-            datetime.now(timezone.utc).replace(hour=23, minute=59)
+            s_dt = _parse(start)
+            e_dt = _parse(end) if end else _parse(start) if start else \
+                datetime.now(UTC).replace(hour=23, minute=59)
 
-        if action == "list":
-            for ev in await cp.list_events(start=s_dt, end=e_dt):
-                console.print(f"  {ev.when.render()}  {ev.title}")
-        elif action == "free":
-            for slot in await cp.find_free_slots(start=s_dt, end=e_dt, min_minutes=minutes):
-                console.print(f"  free: {slot.start:%a %H:%M}–{slot.end:%H:%M}")
-        elif action == "search":
-            for ev in await cp.search(query, limit=10):
-                console.print(f"  {ev.when.render()}  {ev.title}")
-        elif action == "create":
-            from atlas.capabilities.domain.calendar import Attendee, EventDraft, EventTime
-            draft = EventDraft(
-                title=title,
-                when=EventTime(start_dt=s_dt, end_dt=e_dt),
-                attendees=tuple(Attendee(email=a.strip()) for a in to.split(",") if a.strip()),
-            )
-            try:
-                eid = await cp.commit(draft, atlas.ids.correlation_id())
-                console.print(f"[green]created[/] {eid}")
-            except Exception as exc:
-                console.print(f"[red]{type(exc).__name__}[/] {exc}")
-        else:
-            console.print(f"[red]unknown action:[/] {action}")
-        await atlas.close()
+            if action == "list":
+                for ev in await cp.list_events(start=s_dt, end=e_dt):
+                    console.print(f"  {ev.when.render()}  {ev.title}")
+            elif action == "free":
+                for slot in await cp.find_free_slots(start=s_dt, end=e_dt, min_minutes=minutes):
+                    console.print(f"  free: {slot.start:%a %H:%M}–{slot.end:%H:%M}")
+            elif action == "search":
+                for ev in await cp.search(query, limit=10):
+                    console.print(f"  {ev.when.render()}  {ev.title}")
+            elif action == "create":
+                from atlas.capabilities.domain.calendar import Attendee, EventDraft, EventTime
+                draft = EventDraft(
+                    title=title,
+                    when=EventTime(start_dt=s_dt, end_dt=e_dt),
+                    attendees=tuple(Attendee(email=a.strip()) for a in to.split(",") if a.strip()),
+                )
+                try:
+                    eid = await cp.commit(draft, atlas.ids.correlation_id())
+                    console.print(f"[green]created[/] {eid}")
+                except Exception as exc:
+                    console.print(f"[red]{type(exc).__name__}[/] {exc}")
+            else:
+                console.print(f"[red]unknown action:[/] {action}")
     _run(go())
 
 
@@ -359,12 +338,10 @@ def contacts(
 ) -> None:
     """Contacts: search your contacts."""
     async def go() -> None:
-        atlas = await build()
-        await atlas.db.start()
-        for c in await atlas.contacts_platform.search(query, limit=10):
-            primary = c.primary_email() or ""
-            console.print(f"  {c.name}  {primary}  {c.org or ''}")
-        await atlas.close()
+        async with build_atlas() as atlas:
+            for c in await atlas.contacts_platform.search(query, limit=10):
+                primary = c.primary_email() or ""
+                console.print(f"  {c.name}  {primary}  {c.org or ''}")
     _run(go())
 
 

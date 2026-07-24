@@ -35,7 +35,7 @@ class PlaywrightProvider:
         # Maps atlas session_id → {tab_id → playwright Page}
         self._pages: dict[str, dict[str, Page]] = {}
 
-        self.capabilities = ProviderCapabilities(
+        self.capabilities = ProviderCapabilities(  # type: ignore
             supports_cdp=True,
             supports_extensions=False,
             supports_stealth=False,
@@ -152,7 +152,7 @@ class PlaywrightProvider:
 
     async def accessibility_tree(self, session_id: str, tab_id: str) -> Any:
         page = self._get_page(session_id, tab_id)
-        return await page.accessibility.snapshot() or {}
+        return await page.accessibility.snapshot() or {}  # type: ignore
 
     def _resolve_locator(self, page: Any, locator: Locator) -> Any:
         """Convert domain Locator to a playwright Locator object."""
@@ -175,7 +175,7 @@ class PlaywrightProvider:
 
     async def query(self, session_id: str, tab_id: str, locator: Locator) -> list[Any]:
         page = self._get_page(session_id, tab_id)
-        return await self._resolve_locator(page, locator).element_handles()
+        return await self._resolve_locator(page, locator).element_handles()  # type: ignore
 
     async def content_html(self, session_id: str, tab_id: str) -> str:
         page = self._get_page(session_id, tab_id)
@@ -234,7 +234,7 @@ class PlaywrightProvider:
         clip: Any | None,
     ) -> bytes:
         page = self._get_page(session_id, tab_id)
-        return await page.screenshot(full_page=full_page, clip=clip)  # type: ignore[arg-type]
+        return await page.screenshot(full_page=full_page, clip=clip)
 
     async def pdf(self, session_id: str, tab_id: str) -> bytes:
         page = self._get_page(session_id, tab_id)

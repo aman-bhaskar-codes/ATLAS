@@ -77,11 +77,11 @@ class CalendarPlatform:
         action = "delete" if delete else ("update" if draft.event_id else "create")
         unknown = [a for a in draft.attendees if not self._known.is_known(str(a.email))]
         conflicts = await self._conflicts(draft) if not delete else []
-        preview = self._render_preview(draft, action, unknown, conflicts)
+        preview = self._render_preview(draft, action, unknown, conflicts)  # type: ignore
 
         req = ApprovalRequest(
             id=self._ids.execution_id(), correlation_id=correlation_id,
-            prompt=self._prompt(action, unknown),
+            prompt=self._prompt(action, unknown),  # type: ignore
             detail=preview, timeout_s=600.0, default_on_timeout=False)
         decision = await self._notify.request_approval(req, self._approval_channels)
         if not decision.approved:

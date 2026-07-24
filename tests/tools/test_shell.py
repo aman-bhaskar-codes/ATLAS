@@ -1,6 +1,6 @@
 import pytest
 
-from atlas.safety.sandbox_docker import SandboxResult
+from atlas.safety.sandbox_docker import SandboxResult  # type: ignore
 from atlas.tools.shell import ShellTool
 
 

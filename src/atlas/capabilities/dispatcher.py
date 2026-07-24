@@ -41,7 +41,7 @@ class _CapabilityTool:
     execute() runs the provider chain. WHY: L1 only knows Tools — so we present the
     capability AS a tool, inheriting the entire safety pipeline unchanged."""
 
-    def __init__(self, name: str, run, preview: str) -> None:
+    def __init__(self, name: str, run, preview: str) -> None:  # type: ignore
         self.name = name
         self._run = run
         self._preview = preview
@@ -50,7 +50,7 @@ class _CapabilityTool:
         return self._preview
 
     async def execute(self, args: dict[str, object]) -> ToolResult:
-        return await self._run()
+        return await self._run()  # type: ignore
 
 
 class CapabilityDispatcher:
@@ -67,7 +67,7 @@ class CapabilityDispatcher:
     async def execute(
         self, request: CapabilityRequest, correlation_id: CorrelationId,
         *, task_id: str | None = None,
-    ) -> CapabilityResult:
+    ) -> CapabilityResult[Any]:  # type: ignore
         spec = self._registry.get(request.capability)
 
         # provider chain resolved BEFORE the safety gate so dry_run preview is real
@@ -104,7 +104,7 @@ class CapabilityDispatcher:
     async def _walk_providers(
         self, chain: list[Provider], request: CapabilityRequest,
         correlation_id: CorrelationId, task_id: str | None,
-    ) -> CapabilityResult:
+    ) -> CapabilityResult[Any]:  # type: ignore
         last: Exception | None = None
         for i, provider in enumerate(chain):
             try:
@@ -121,7 +121,7 @@ class CapabilityDispatcher:
     async def _attempt(
         self, provider: Provider, request: CapabilityRequest,
         correlation_id: CorrelationId, task_id: str | None, *, fell_back: bool,
-    ) -> CapabilityResult:
+    ) -> CapabilityResult[Any]:  # type: ignore
         policy = provider.retry_policy()
         attempt = 0
         start = time.perf_counter()

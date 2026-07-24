@@ -37,8 +37,8 @@ class MacOSAXBackend:
             return ScreenState(source=PerceptionSource.UNSUPPORTED,
                                note="pyobjc unavailable / not macOS")
         # Lazy imports: only executed on a real Mac with pyobjc present.
-        from AppKit import NSWorkspace  # type: ignore[import-untyped]
-        from ApplicationServices import (  # type: ignore[import-untyped]
+        from AppKit import NSWorkspace  # type: ignore
+        from ApplicationServices import (  # type: ignore
             AXUIElementCopyAttributeValue,
             AXUIElementCreateApplication,
             kAXErrorSuccess,

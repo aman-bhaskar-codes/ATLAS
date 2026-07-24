@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from atlas.capabilities.domain.common import Confidence, Provenance
 

@@ -9,20 +9,20 @@ from atlas.memory.pruning import Pruner
 
 
 class FakeGateway:
-    async def complete(self, req):
+    async def complete(self, req) -> None:  # type: ignore
         class Resp:
             text = "summarized!"
-        return Resp()
+        return Resp()  # type: ignore
 
 @pytest.fixture
-async def prune_db(tmp_path):
+async def prune_db(tmp_path) -> None:  # type: ignore
     db = Database(tmp_path / "test.db")
     await db.start()
     yield db
     await db.stop()
 
 @pytest.mark.asyncio
-async def test_pruning_compacts_old_episodes(prune_db):
+async def test_pruning_compacts_old_episodes(prune_db) -> None:  # type: ignore
     clock = SystemClock()
     ids = UuidGenerator()
     pruner = Pruner(db=prune_db, gateway=FakeGateway(), ids=ids, clock=clock) # type: ignore

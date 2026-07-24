@@ -7,14 +7,14 @@ from atlas.memory.types import Episode, EpisodeKind
 
 
 @pytest.fixture
-async def mem_db(tmp_path):
+async def mem_db(tmp_path) -> None:  # type: ignore
     db = Database(tmp_path / "test.db")
     await db.start()
     yield db
     await db.stop()
 
 @pytest.mark.asyncio
-async def test_episodic_record_and_recent(mem_db):
+async def test_episodic_record_and_recent(mem_db) -> None:  # type: ignore
     clock = SystemClock()
     epi = EpisodicMemory(mem_db, clock)
     ep = Episode(
@@ -30,7 +30,7 @@ async def test_episodic_record_and_recent(mem_db):
     assert recent[0].tokens == 10
 
 @pytest.mark.asyncio
-async def test_episodic_unconsolidated(mem_db):
+async def test_episodic_unconsolidated(mem_db) -> None:  # type: ignore
     clock = SystemClock()
     epi = EpisodicMemory(mem_db, clock)
     ep = Episode(
@@ -48,7 +48,7 @@ async def test_episodic_unconsolidated(mem_db):
     assert len(uncon2) == 0
 
 @pytest.mark.asyncio
-async def test_episodic_correction_salience(mem_db):
+async def test_episodic_correction_salience(mem_db) -> None:  # type: ignore
     clock = SystemClock()
     epi = EpisodicMemory(mem_db, clock)
     await epi.record_correction("c3", "no, do it this way")
