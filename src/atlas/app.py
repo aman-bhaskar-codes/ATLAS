@@ -107,6 +107,7 @@ from atlas.safety.killswitch import KillSwitch
 from atlas.safety.manifest import Manifest, load_manifest
 from atlas.safety.policy import KillSwitchPolicy, PolicyEngine
 from atlas.safety.sandbox_docker import DockerSandbox, SandboxSpec
+from atlas.safety.sandbox_native import NativeSandbox
 from atlas.tools.base import Tool
 from atlas.tools.filesystem import FilesystemTool
 from atlas.tools.shell import ShellTool
@@ -295,13 +296,54 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     cap_registry = CapabilityRegistry()
 
+    class NotificationPlatformAdapter:
+        def __init__(self, platform: Any, clock: Clock, ids: IdGenerator) -> None:
+            self._platform = platform
+            self._clock = clock
+            self._ids = ids
+
+        async def notify(self, title: str, body: str, *, priority: int = 3) -> None:
+            from atlas.capabilities.notification.domain.models import Notification, NotificationKind, NotificationPriority
+            from atlas.infra.ids import CorrelationId
+            p = NotificationPriority(priority) if priority in (0, 1, 2, 3) else NotificationPriority.NORMAL
+            n = Notification(
+                id=self._ids.execution_id(),
+                correlation_id=self._ids.correlation_id(),
+                kind=NotificationKind.WARNING,
+                priority=p,
+                title=title,
+                body=body,
+                urgent=True,
+                created_ts=self._clock.now()
+            )
+            await self._platform.notify(n)
+
+        async def ask(self, title: str, body: str, *, timeout_s: float) -> bool | None:
+            from atlas.capabilities.notification.domain.models import ApprovalRequest
+            from atlas.infra.ids import CorrelationId
+            req = ApprovalRequest(
+                id=self._ids.execution_id(),
+                correlation_id=self._ids.correlation_id(),
+                prompt=title,
+                detail=body,
+                timeout_s=timeout_s,
+                default_on_timeout=False
+            )
+            decision = await self._platform.request_approval(req, channels=())
+            if decision.timed_out:
+                return None
+            return bool(decision.approved)
+
     notification_platform = build_notification_platform(
         config_dir=config_dir, db=db, clock=clock, ids=ids, gateway=gateway,
         identity=identity_platform, callback_base=settings.ntfy_callback_base
     )
+    notifier_adapter = NotificationPlatformAdapter(notification_platform, clock, ids)
+    
+    active_notifier = notifier_adapter if settings.ntfy_topic else None
 
     safety.set_confirmer(
-        CompositeConfirmer(notification_platform, CliConfirmer(), config.notify.confirm_timeout_s)  # type: ignore
+        CompositeConfirmer(active_notifier, CliConfirmer(), config.notify.confirm_timeout_s)
     )
     cap_health = CapabilityHealth()
     cap_providers = CapProviderRegistry(cap_health)
@@ -313,12 +355,24 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         registry=cap_registry, providers=cap_providers, health=cap_health,
         safety=safety, telemetry=cap_telemetry)
 
-    # Phase 2 Tools
-    sandbox = DockerSandbox(SandboxSpec(
+    # Phase 2 Tools — use Docker when available, native sandbox in dev as fallback
+    docker_sandbox = DockerSandbox(SandboxSpec(
         image=config.sandbox.image, cpus=config.sandbox.cpus,
         memory=config.sandbox.memory, pids_limit=config.sandbox.pids_limit,
         workdir=config.sandbox.workdir
     ))
+    _docker_ok = await docker_sandbox.health()
+    if _docker_ok:
+        sandbox = docker_sandbox
+        _log.info("sandbox.docker", event_type="lifecycle", detail="Docker available")
+    elif settings.env == "dev":
+        sandbox = NativeSandbox(env=settings.env)  # type: ignore[assignment]
+        _log.warning("sandbox.native", event_type="lifecycle",
+                     detail="Docker unavailable — using native sandbox (dev only)")
+    else:
+        sandbox = docker_sandbox  # will fail loudly at first tool call
+        _log.error("sandbox.docker_required", event_type="lifecycle",
+                   detail="Docker is required in non-dev environments")
     
     # We mount the workspace explicitly for the shell tool in Phase 2
     ws = str(_REPO_ROOT)
