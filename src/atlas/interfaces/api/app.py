@@ -124,6 +124,7 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.routes_approvals import router as approvals_router
     from atlas.interfaces.api.routes_capabilities import router as capabilities_router
     from atlas.interfaces.api.routes_audit import router as audit_router
+    from atlas.interfaces.api.routes_trust import router as trust_router
     from atlas.interfaces.api.events import router as events_router
 
     app.include_router(runtime_router, prefix="/api/v1")
@@ -131,6 +132,7 @@ def create_app() -> FastAPI:
     app.include_router(approvals_router, prefix="/api/v1")
     app.include_router(capabilities_router, prefix="/api/v1")
     app.include_router(audit_router, prefix="/api/v1")
+    app.include_router(trust_router, prefix="")
     app.include_router(events_router, prefix="/api/v1")
 
     return app

@@ -1,0 +1,48 @@
+/* Trust Center specific styles based on atlas-phase-one-command-center.html */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+@theme {
+  --font-serif: "Cormorant Garamond", serif;
+  --font-mono: "IBM Plex Mono", monospace;
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+  letter-spacing: 0.012em;
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.glass-panel {
+  background: linear-gradient(140deg, oklch(25% 0.045 292), var(--ink-850));
+  border: 1px solid oklch(76% 0.13 82 / 0.34);
+  box-shadow: 0 0 0 5px oklch(76% 0.13 82 / 0.045), 0 20px 60px oklch(5% 0.02 278 / 0.28);
+}
+
+.text-gold {
+  color: var(--gold-400);
+}
+
+.text-jade {
+  color: var(--jade-400);
+}
+
+.text-ember {
+  color: var(--ember-400);
+}
+
+.text-danger {
+  color: var(--danger-400);
+}
+
+.text-muted {
+  color: var(--paper-500);
+}

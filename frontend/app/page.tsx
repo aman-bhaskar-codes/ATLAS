@@ -98,11 +98,33 @@ export default function Dashboard() {
             <div className="space-y-4">
               {isLoadingApprovals ? (
                 <div className="animate-pulse h-32 bg-[var(--color-ink-900)] border border-[var(--color-line)] rounded-[var(--radius-md)]"></div>
+              ) : approvals && approvals.length > 0 ? (
+                <div className="text-sm">
+                  {approvals.length} approvals waiting. <a href="/approvals" className="text-[var(--gold-400)]">Go to inbox &rarr;</a>
+                </div>
               ) : (
                 <div className="text-sm text-[var(--color-paper-300)] italic p-4 text-center border border-dashed border-[var(--color-line)] rounded-[var(--radius-md)]">
                   No pending approvals.
                 </div>
               )}
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-medium text-[var(--color-paper-100)] mb-4">Trust Center</h2>
+            <div className="flex flex-col gap-2">
+              <a href="/tasks" className="p-3 bg-[var(--ink-850)] border border-[var(--line)] rounded-md text-sm text-[var(--paper-100)] hover:border-[var(--gold-400)] transition-colors">
+                Tasks & History
+              </a>
+              <a href="/approvals" className="p-3 bg-[var(--ink-850)] border border-[var(--line)] rounded-md text-sm text-[var(--paper-100)] hover:border-[var(--gold-400)] transition-colors">
+                Approval Inbox
+              </a>
+              <a href="/memory" className="p-3 bg-[var(--ink-850)] border border-[var(--line)] rounded-md text-sm text-[var(--paper-100)] hover:border-[var(--gold-400)] transition-colors">
+                Semantic Memory
+              </a>
+              <a href="/audit" className="p-3 bg-[var(--ink-850)] border border-[var(--line)] rounded-md text-sm text-[var(--paper-100)] hover:border-[var(--gold-400)] transition-colors">
+                Audit Trail
+              </a>
             </div>
           </section>
 

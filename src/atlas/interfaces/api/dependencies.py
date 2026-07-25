@@ -9,6 +9,7 @@ from fastapi import Request
 from atlas.app import Atlas
 
 if TYPE_CHECKING:
+    from atlas.interfaces.api.control_plane import AtlasTrustPlane
     from atlas.interfaces.api.facade import AtlasControlPlane
 
 
@@ -23,3 +24,8 @@ def get_control_plane(request: Request) -> "AtlasControlPlane":
         atlas=request.app.state.atlas,
         event_store=request.app.state.event_store,
     )
+
+
+def get_trust_plane(request: Request) -> "AtlasTrustPlane":
+    from atlas.interfaces.api.trust_facade import DefaultAtlasTrustPlane
+    return DefaultAtlasTrustPlane(atlas=request.app.state.atlas)

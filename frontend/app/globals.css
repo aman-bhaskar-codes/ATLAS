@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
+@import "../styles/trust.css";
 
 @theme {
   --color-ink-950: var(--ink-950);
