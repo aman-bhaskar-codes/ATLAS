@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from atlas.safety.sandbox_docker import SandboxResult
+from atlas.safety.sandbox_docker import SandboxResult  # type: ignore
 from atlas.tools.filesystem import FilesystemTool
 
 

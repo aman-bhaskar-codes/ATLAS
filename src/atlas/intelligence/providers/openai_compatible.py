@@ -24,15 +24,31 @@ class OpenAICompatibleProvider:
 
     def __init__(self, *, name: str, base_url: str, api_key: str, timeout_s: float) -> None:
         self.name = name
-        self._base = base_url.rstrip("/")
         self._key = api_key
+        self._is_openrouter = api_key.startswith("sk-or-v1-")
+        if self._is_openrouter:
+            self._base = "https://openrouter.ai/api/v1"
+        else:
+            self._base = base_url.rstrip("/")
         self._client = httpx.AsyncClient(timeout=timeout_s)
+
+    def _map_model(self, model: str) -> str:
+        if not self._is_openrouter:
+            return model
+        if model == "deepseek-chat":
+            return "deepseek/deepseek-chat"
+        if model == "glm-5.2":
+            return "z-ai/glm-5.2"
+        if model == "moonshot-v1-8k":
+            return "moonshotai/kimi-k2.7-code"
+        return model
 
     def _payload(
         self, model: str, messages: Sequence[Message], max_tokens: int, temperature: float, stream: bool
     ) -> dict[str, Any]:
+        mapped = self._map_model(model)
         return {
-            "model": model, "max_tokens": max_tokens, "temperature": temperature,
+            "model": mapped, "max_tokens": max_tokens, "temperature": temperature,
             "stream": stream,
             "messages": [{"role": m.role.value, "content": m.content} for m in messages],
         }

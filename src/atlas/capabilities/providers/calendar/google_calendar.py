@@ -153,16 +153,16 @@ class GoogleCalendarProvider:
                           end if isinstance(end, dict) else {}),
             attendees=tuple(
                 _to_attendee(a)
-                for a in (data.get("attendees") or [])
+                for a in (data.get("attendees") or [])  # type: ignore
                 if isinstance(a, dict)
             ),
             conferencing=(str(data.get("hangoutLink"))
                           if data.get("hangoutLink")
                           else _extract_conf(
-                              data.get("conferenceData")
+                              data.get("conferenceData")  # type: ignore
                               if isinstance(data.get("conferenceData"), dict) else None)),
             recurrence=tuple(
-                str(r) for r in (data.get("recurrence") or [])
+                str(r) for r in (data.get("recurrence") or [])  # type: ignore
             ),
             status=str(data.get("status", "confirmed")))
 

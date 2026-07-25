@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from atlas.capabilities.registry.tier import Tier
+from atlas.capabilities.registry.tier import Tier  # type: ignore
 
 from atlas.capabilities.registry.capability import Capability, CapabilitySpec
 

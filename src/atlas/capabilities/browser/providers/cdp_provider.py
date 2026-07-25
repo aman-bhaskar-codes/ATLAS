@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
-import os
 from typing import Any
 
 from playwright.async_api import (
@@ -38,7 +37,7 @@ class CDPProvider:
         self._pages: dict[str, dict[str, Page]] = {}
 
         self.capabilities = ProviderCapabilities(
-            supports_cdp=True,
+            supports_cdp=True,  # type: ignore
             supports_extensions=False,
             supports_stealth=False,
             supports_headful=True,
@@ -84,7 +83,11 @@ class CDPProvider:
             self._browser = None
         if hasattr(self, "_subproc") and self._subproc:
             self._subproc.terminate()
-            self._subproc.wait(timeout=1)
+            try:
+                self._subproc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                self._subproc.kill()
+                self._subproc.wait(timeout=1)
         if self._pw:
             await self._pw.stop()
             self._pw = None
@@ -188,7 +191,7 @@ class CDPProvider:
 
     async def accessibility_tree(self, session_id: str, tab_id: str) -> Any:
         page = self._get_page(session_id, tab_id)
-        return await page.accessibility.snapshot() or {}
+        return await page.accessibility.snapshot() or {}  # type: ignore
 
     def _resolve_locator(self, page: Any, locator: Locator) -> Any:
         """Convert domain Locator to a playwright Locator object."""
@@ -211,7 +214,7 @@ class CDPProvider:
 
     async def query(self, session_id: str, tab_id: str, locator: Locator) -> list[Any]:
         page = self._get_page(session_id, tab_id)
-        return await self._resolve_locator(page, locator).element_handles()
+        return await self._resolve_locator(page, locator).element_handles()  # type: ignore
 
     async def content_html(self, session_id: str, tab_id: str) -> str:
         page = self._get_page(session_id, tab_id)
@@ -270,7 +273,7 @@ class CDPProvider:
         clip: Any | None,
     ) -> bytes:
         page = self._get_page(session_id, tab_id)
-        return await page.screenshot(full_page=full_page, clip=clip)  # type: ignore[arg-type]
+        return await page.screenshot(full_page=full_page, clip=clip)
 
     async def pdf(self, session_id: str, tab_id: str) -> bytes:
         page = self._get_page(session_id, tab_id)

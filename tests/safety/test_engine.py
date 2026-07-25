@@ -19,18 +19,18 @@ from tests.fakes import FakeClock, FakeConfirmer, FakeKillSwitch, FakeTool
 async def test_engine_allow(memory_db: Any) -> None:
     m = Manifest(
         version=1, allowed_paths={}, allowed_commands={}, whatsapp={}, safety={},
-        rules=[{"tool": "fs", "operation": "read", "tier": 0}], hard_block=[]
+        rules=[{"tool": "fs", "operation": "read", "tier": 0}], hard_block=[]  # type: ignore
     )
     audit = AuditLog(memory_db)
     ks = FakeKillSwitch(active=False)
     clf = TierClassifier(m, 2)
     engine = SafetyEngine(
-        classifier=clf, policy=PolicyEngine((KillSwitchPolicy(ks),)),
-        audit=audit, killswitch=ks, clock=FakeClock(datetime.datetime.now()),
+        classifier=clf, policy=PolicyEngine((KillSwitchPolicy(ks),)),  # type: ignore
+        audit=audit, killswitch=ks, clock=FakeClock(datetime.datetime.now()),  # type: ignore
         cfg=SafetyCfg()
     )
 
-    req = ToolRequest(correlation_id="cid-1", tool="fs", operation="read")
+    req = ToolRequest(correlation_id="cid-1", tool="fs", operation="read")  # type: ignore
     tool = FakeTool()
 
     res = await engine.guard(req, tool)
@@ -47,18 +47,18 @@ async def test_engine_allow(memory_db: Any) -> None:
 async def test_engine_killswitch(memory_db: Any) -> None:
     m = Manifest(
         version=1, allowed_paths={}, allowed_commands={}, whatsapp={}, safety={},
-        rules=[{"tool": "fs", "operation": "read", "tier": 0}], hard_block=[]
+        rules=[{"tool": "fs", "operation": "read", "tier": 0}], hard_block=[]  # type: ignore
     )
     audit = AuditLog(memory_db)
     ks = FakeKillSwitch(active=True)
     clf = TierClassifier(m, 2)
     engine = SafetyEngine(
-        classifier=clf, policy=PolicyEngine((KillSwitchPolicy(ks),)),
-        audit=audit, killswitch=ks, clock=FakeClock(datetime.datetime.now()),
+        classifier=clf, policy=PolicyEngine((KillSwitchPolicy(ks),)),  # type: ignore
+        audit=audit, killswitch=ks, clock=FakeClock(datetime.datetime.now()),  # type: ignore
         cfg=SafetyCfg()
     )
 
-    req = ToolRequest(correlation_id="cid-1", tool="fs", operation="read")
+    req = ToolRequest(correlation_id="cid-1", tool="fs", operation="read")  # type: ignore
     tool = FakeTool()
 
     with pytest.raises(HaltedError):
@@ -69,19 +69,19 @@ async def test_engine_killswitch(memory_db: Any) -> None:
 async def test_engine_confirm_deny(memory_db: Any) -> None:
     m = Manifest(
         version=1, allowed_paths={}, allowed_commands={}, whatsapp={}, safety={},
-        rules=[{"tool": "fs", "operation": "write", "tier": 2}], hard_block=[]
+        rules=[{"tool": "fs", "operation": "write", "tier": 2}], hard_block=[]  # type: ignore
     )
     audit = AuditLog(memory_db)
     ks = FakeKillSwitch(active=False)
     clf = TierClassifier(m, 2)
     engine = SafetyEngine(
-        classifier=clf, policy=PolicyEngine((KillSwitchPolicy(ks),)),
-        audit=audit, killswitch=ks, clock=FakeClock(datetime.datetime.now()),
+        classifier=clf, policy=PolicyEngine((KillSwitchPolicy(ks),)),  # type: ignore
+        audit=audit, killswitch=ks, clock=FakeClock(datetime.datetime.now()),  # type: ignore
         cfg=SafetyCfg(),
         confirmer=FakeConfirmer(response=False)  # User denies
     )
 
-    req = ToolRequest(correlation_id="cid-1", tool="fs", operation="write")
+    req = ToolRequest(correlation_id="cid-1", tool="fs", operation="write")  # type: ignore
     tool = FakeTool()
 
     with pytest.raises(DeniedError):

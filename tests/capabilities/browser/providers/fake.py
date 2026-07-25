@@ -55,7 +55,7 @@ class FakeBrowserProvider(BrowserProvider):
         return tid
 
     async def list_tabs(self, session_id: str) -> list[str]:
-        return self.sessions.get(session_id, {}).get("tabs", [])
+        return self.sessions.get(session_id, {}).get("tabs", [])  # type: ignore
 
     async def close_tab(self, session_id: str, tab_id: str) -> None:
         if session_id in self.sessions and tab_id in self.sessions[session_id]["tabs"]:
@@ -87,7 +87,7 @@ class FakeBrowserProvider(BrowserProvider):
         return [{"id": "fake_element"}]
 
     async def content_html(self, session_id: str, tab_id: str) -> str:
-        return self.pages.get(tab_id, {}).get("html", "")
+        return self.pages.get(tab_id, {}).get("html", "")  # type: ignore
 
     async def eval_readonly(self, session_id: str, tab_id: str, expr: str) -> Any:
         return None

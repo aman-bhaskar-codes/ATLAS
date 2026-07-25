@@ -180,6 +180,11 @@ class Database:
         self._conn: aiosqlite.Connection | None = None
 
     async def start(self) -> None:
+        if self._conn is not None:
+            _log.warning("db.start_duplicate", event_type="db",
+                         detail="closing existing connection before re-start")
+            await self._conn.close()
+            self._conn = None
         self._conn = await aiosqlite.connect(self._path)
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA journal_mode=WAL")

@@ -13,7 +13,10 @@ from typing import Any
 import httpx
 
 from atlas.capabilities.domain.email import (
-    EmailAddress, EmailDraft, EmailMessage, Thread,
+    EmailAddress,
+    EmailDraft,
+    EmailMessage,
+    Thread,
 )
 from atlas.capabilities.errors import ProviderAuthError, ProviderExecutionError
 from atlas.capabilities.identity.platform import IdentityPlatform
@@ -120,8 +123,8 @@ def _parse_addr(raw: str) -> EmailAddress:
     if "<" in raw and ">" in raw:
         name = raw.split("<")[0].strip().strip('"')
         email = raw.split("<")[1].split(">")[0].strip()
-        return EmailAddress(email=email, name=name or None) # type: ignore
-    return EmailAddress(email=raw) # type: ignore
+        return EmailAddress(email=email, name=name or None)
+    return EmailAddress(email=raw)
 
 
 def _extract_body(payload: dict[str, Any]) -> str:

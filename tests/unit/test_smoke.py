@@ -1,2 +1,2 @@
-def test_harness_runs():
+def test_harness_runs() -> None:
     assert True

@@ -1,11 +1,10 @@
 import pytest
 
-from atlas.capabilities.browser.domain.session import ContextSpec
 from atlas.capabilities.browser.providers.playwright_provider import PlaywrightProvider
 
 
 @pytest.mark.asyncio
-async def test_playwright_provider_lifecycle():
+async def test_playwright_provider_lifecycle() -> None:
     provider = PlaywrightProvider()
 
     # Create a session (this starts the browser lazily via launch)

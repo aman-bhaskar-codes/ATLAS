@@ -9,6 +9,8 @@ from atlas.capabilities.browser.page.page_manager import PageManager
 from atlas.capabilities.browser.research.reader import ReaderEngine
 from atlas.capabilities.domain.common import Provenance, SourceKind
 from atlas.infra.ids import CorrelationId
+
+
 class ExtractionEngine:
     def __init__(self, page_manager: PageManager, reader: ReaderEngine | None = None) -> None:
         self._pages = page_manager

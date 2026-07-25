@@ -5,19 +5,19 @@ from atlas.capabilities.registry.capability import Capability, CapabilityRegistr
 from atlas.infra.types import Tier
 
 
-def test_register_and_get():
+def test_register_and_get() -> None:
     reg = CapabilityRegistry()
     reg.register(CapabilitySpec(capability=Capability.KNOWLEDGE, safety_tool="knowledge",
                                 operations=("search",), default_tier=Tier.NOTIFY))
     assert reg.get(Capability.KNOWLEDGE).safety_tool == "knowledge"
 
 
-def test_unknown_raises():
+def test_unknown_raises() -> None:
     with pytest.raises(CapabilityNotFound):
         CapabilityRegistry().get(Capability.EMAIL)
 
 
-def test_registered_tools_shape():
+def test_registered_tools_shape() -> None:
     reg = CapabilityRegistry()
     reg.register(CapabilitySpec(capability=Capability.EMAIL, safety_tool="email",
                                 operations=("read", "send")))

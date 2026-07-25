@@ -1,0 +1,8 @@
+tests/capabilities/test_dispatcher.py:34: error: Unused "type: ignore" comment  [unused-ignore]
+tests/capabilities/test_dispatcher.py:42: error: Unused "type: ignore" comment  [unused-ignore]
+tests/capabilities/test_dispatcher.py:43: error: Unused "type: ignore" comment  [unused-ignore]
+tests/capabilities/test_dispatcher.py:46: error: Item "None" of "Any | None" has no attribute "value"  [union-attr]
+tests/capabilities/test_dispatcher.py:51: error: Unused "type: ignore" comment  [unused-ignore]
+tests/capabilities/test_dispatcher.py:58: error: Unused "type: ignore" comment  [unused-ignore]
+tests/capabilities/test_dispatcher.py:60: error: Unused "type: ignore" comment  [unused-ignore]
+Found 7 errors in 1 file (checked 315 source files)
