@@ -1,0 +1,28 @@
+/* frontend/styles/tokens.css */
+:root {
+  --ink-950: oklch(10% .018 278);
+  --ink-900: oklch(14% .024 278);
+  --ink-850: oklch(18% .030 278);
+  --ink-800: oklch(22% .036 278);
+  --ink-700: oklch(29% .042 278);
+  --line: oklch(34% .035 278);
+  --paper-100: oklch(94% .012 82);
+  --paper-300: oklch(80% .020 82);
+  --paper-500: oklch(62% .025 82);
+  --royal-500: oklch(58% .16 292);
+  --royal-400: oklch(68% .14 292);
+  --gold-500: oklch(76% .13 82);
+  --gold-400: oklch(84% .12 82);
+  --jade-400: oklch(73% .13 162);
+  --ember-400: oklch(70% .16 35);
+  --danger-400: oklch(68% .18 22);
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+}

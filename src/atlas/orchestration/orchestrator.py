@@ -8,9 +8,11 @@ nothing of the internals.
 
 from __future__ import annotations
 
+import json
 import time
 
 from atlas.infra.clock import Clock
+from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
 from atlas.infra.types import InboundEvent
@@ -34,12 +36,13 @@ _SAFETY_CONSTRAINTS = (
 
 class Orchestrator:
     def __init__(
-        self, *, ids: IdGenerator, clock: Clock, router: Router, planner: Planner,
+        self, *, ids: IdGenerator, clock: Clock, db: Database, router: Router, planner: Planner,
         context_builder: ContextBuilder, reasoning: ReasoningLoop,
         registry: ToolRegistry, events: EventPublisher,
     ) -> None:
         self._ids = ids
         self._clock = clock
+        self._db = db
         self._router = router
         self._planner = planner
         self._context = context_builder
@@ -61,6 +64,15 @@ class Orchestrator:
         token = CancellationToken()
         self._cancels[task.id] = token
         started = time.perf_counter()
+        await self._db.conn.execute(
+            "INSERT OR IGNORE INTO tasks(id, source, state, payload, "
+            "idempotency_key, created_ts, updated_ts) VALUES (?,?,?,?,?,?,?)",
+            (task.id, task.source, "created",
+             json.dumps({"request": task.request, "correlation_id": task.correlation_id}),
+             None,
+             task.created_ts.isoformat(), task.created_ts.isoformat()),
+        )
+        await self._db.conn.commit()
         await self._events.emit(task_id=task.id, correlation_id=task.correlation_id,
                                 state=machine.state.value, kind="task.created")
         try:
@@ -94,3 +106,8 @@ class Orchestrator:
             return result
         finally:
             self._cancels.pop(task.id, None)
+            await self._db.conn.execute(
+                "UPDATE tasks SET state=?, updated_ts=? WHERE id=?",
+                (machine.state.value, self._clock.now().isoformat(), task.id),
+            )
+            await self._db.conn.commit()

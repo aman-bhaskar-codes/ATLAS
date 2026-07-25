@@ -580,7 +580,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     )
     
     orchestrator = Orchestrator(
-        ids=ids, clock=clock, router=router, planner=planner,
+        ids=ids, clock=clock, db=db, router=router, planner=planner,
         context_builder=context_builder, reasoning=reasoning,
         registry=tool_registry, events=events,
     )

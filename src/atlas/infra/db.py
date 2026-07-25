@@ -171,6 +171,29 @@ _MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_notif_history_correlation 
         ON notif_history(correlation_id);
     """,
+    # 006 — task event log (Phase 2 Live Run Console)
+    # Distinct from episodes/memory. event_id deduplicates; sequence detects gaps on the client.
+    """
+    CREATE TABLE IF NOT EXISTS task_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT NOT NULL UNIQUE,
+        task_id TEXT NOT NULL,
+        correlation_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL,
+        event_type TEXT NOT NULL,
+        state TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        capability TEXT,
+        operation TEXT,
+        provider TEXT,
+        tier INTEGER,
+        requires_approval INTEGER NOT NULL DEFAULT 0,
+        safe_metadata TEXT NOT NULL DEFAULT '{}',
+        ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id, sequence);
+    CREATE INDEX IF NOT EXISTS idx_task_events_event_id ON task_events(event_id);
+    """,
 )
 
 

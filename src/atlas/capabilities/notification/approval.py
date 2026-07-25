@@ -31,10 +31,12 @@ class ApprovalRequestManager:
         self._clock = clock
         self._cb = callback_base.rstrip("/")
         self._pending: dict[str, asyncio.Future[bool]] = {}
+        self._requests: dict[str, ApprovalRequest] = {}
 
     async def request(self, req: ApprovalRequest, channels: tuple[str, ...]) -> ApprovalDecision:
-        fut: asyncio.Future[bool] = asyncio.get_event_loop().create_future()
+        fut: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
         self._pending[req.id] = fut
+        self._requests[req.id] = req
         
         actions = (("Approve", f"{self._cb}/approve/{req.id}?d=1"),
                    ("Deny", f"{self._cb}/approve/{req.id}?d=0"))
@@ -54,6 +56,7 @@ class ApprovalRequestManager:
                                     decided_ts=self._clock.now(), timed_out=True)
         finally:
             self._pending.pop(req.id, None)
+            self._requests.pop(req.id, None)
 
     def resolve(self, request_id: str, approved: bool) -> None:   # called by comms callback (6.9)
         fut = self._pending.get(request_id)

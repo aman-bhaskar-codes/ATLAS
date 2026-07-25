@@ -29,7 +29,7 @@ class ModelGateway:
         self._runtime = runtime
 
     async def close(self) -> None:
-        await self._runtime._providers.close()
+        await self._runtime.close()
 
     async def health(self) -> dict[str, bool]:
         """Backward compatibility for diagnostics/doctor.py"""

@@ -73,6 +73,9 @@ class InferenceRuntime:
         await self._telemetry.record_success(req, spec, resp.usage, resp.latency_ms)
         return resp
 
+    async def close(self) -> None:
+        await self._providers.close()
+
     @staticmethod
     def _estimate(req: InferenceRequest, spec: ModelSpec) -> float:
         approx_in = sum(len(m.content) for m in req.messages) // 4

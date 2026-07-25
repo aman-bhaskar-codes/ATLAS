@@ -34,3 +34,6 @@ see:
 fmt:
     uv run ruff format .
     uv run ruff check --fix .
+
+serve:
+    uv run uvicorn atlas.interfaces.api.app:create_app --factory --host 127.0.0.1 --port 8730 --reload
