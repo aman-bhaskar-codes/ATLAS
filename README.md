@@ -4,7 +4,7 @@
   <img src="https://img.shields.io/badge/Python-3.13-blue?logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/mypy-strict-green?logo=python" />
   <img src="https://img.shields.io/badge/ruff-clean-orange?logo=ruff" />
-  <img src="https://img.shields.io/badge/tests-78%20passing-brightgreen?logo=pytest" />
+  <img src="https://img.shields.io/badge/tests-132%20passing-brightgreen?logo=pytest" />
   <img src="https://img.shields.io/badge/uv-managed-purple" />
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" />
 </p>
