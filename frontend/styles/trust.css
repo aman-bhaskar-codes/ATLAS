@@ -1,6 +1,4 @@
 /* Trust Center specific styles based on atlas-phase-one-command-center.html */
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
-
 @theme {
   --font-serif: "Cormorant Garamond", serif;
   --font-mono: "IBM Plex Mono", monospace;
