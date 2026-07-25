@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from atlas.interfaces.api.schemas_trust import (
-    ApprovalDecisionCommand, ApprovalView, AuditPage, MemoryCorrectionCommand,
+    ApprovalDecisionCommand, ApprovalView, AuditEventView, AuditPage, MemoryCorrectionCommand,
     MemoryFactView, MemoryMutationReceipt, ProvenanceView, TaskPage, TaskView,
 )
 

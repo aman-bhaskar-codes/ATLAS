@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from atlas.interfaces.api.control_plane import AtlasTrustPlane
 from atlas.interfaces.api.dependencies import get_trust_plane
 from atlas.interfaces.api.schemas_trust import (
-    ApprovalDecisionCommand, ApprovalView, AuditPage, MemoryCorrectionCommand,
+    ApprovalView, AuditPage, MemoryCorrectionCommand,
     MemoryFactView, MemoryMutationReceipt, TaskPage, TaskView,
 )
 
@@ -27,23 +27,23 @@ async def task(task_id: str, plane: AtlasTrustPlane = Depends(get_trust_plane)) 
     return await plane.get_task(task_id)
 
 
-@router.get("/approvals/pending", response_model=tuple[ApprovalView, ...])
-async def pending_approvals(plane: AtlasTrustPlane = Depends(get_trust_plane)) -> tuple[ApprovalView, ...]:
-    return tuple(await plane.pending_approvals())
-
-
+# NOTE: /approvals/pending and /approvals/{id}/decide used to be duplicated
+# here as well as in routes_approvals.py, on identical paths, with a
+# different response schema (ApprovalView vs ApprovalResponse). Both
+# implementations are functionally stubs today — AtlasControlPlane's is a
+# documented placeholder pending approval storage (see facade.py), and
+# AtlasTrustPlane's raised NotImplementedError unconditionally. Keeping two
+# non-working implementations of the same feature added confusion without
+# adding capability, so this router keeps only the single-approval lookup,
+# which routes_approvals.py does not implement at all.
+#
+# STATUS: GET /approvals/{approval_id} below always raises KeyError today —
+# AtlasTrustPlane.get_approval() is unimplemented pending the same approval
+# storage work as pending_approvals()/decide_approval(). This is a known,
+# tracked gap, not something this fix silently papers over.
 @router.get("/approvals/{approval_id}", response_model=ApprovalView)
 async def approval(approval_id: str, plane: AtlasTrustPlane = Depends(get_trust_plane)) -> ApprovalView:
     return await plane.get_approval(approval_id)
-
-
-@router.post("/approvals/{approval_id}/decide", response_model=ApprovalView)
-async def decide_approval(
-    approval_id: str,
-    command: ApprovalDecisionCommand,
-    plane: AtlasTrustPlane = Depends(get_trust_plane),
-) -> ApprovalView:
-    return await plane.decide_approval(command.model_copy(update={"approval_id": approval_id}))
 
 
 @router.get("/memory/search", response_model=tuple[MemoryFactView, ...])

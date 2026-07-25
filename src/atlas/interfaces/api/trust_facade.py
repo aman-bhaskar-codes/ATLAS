@@ -1,14 +1,16 @@
 """Implementation of the Trust Center plane."""
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
+from typing import Any
 
 from atlas.app import Atlas
 from atlas.interfaces.api.control_plane import AtlasTrustPlane
 from atlas.interfaces.api.idempotency import IdempotencyConflict, IdempotencyStore
 from atlas.interfaces.api.projections import project_audit, project_task
 from atlas.interfaces.api.schemas_trust import (
-    ApprovalDecisionCommand, ApprovalView, AuditPage, MemoryCorrectionCommand,
+    ApprovalDecisionCommand, ApprovalView, AuditEventView, AuditPage, MemoryCorrectionCommand,
     MemoryFactView, MemoryMutationReceipt, ProvenanceView, TaskPage, TaskView,
 )
 
@@ -29,7 +31,7 @@ class DefaultAtlasTrustPlane(AtlasTrustPlane):
         params.append(str(limit + 1))
 
         cur = await self._atlas.db.conn.execute(query, tuple(params))
-        rows = await cur.fetchall()
+        rows: list[Any] = list(await cur.fetchall())
 
         items = [project_task(dict(row)) for row in rows[:limit]]
         next_cursor = items[-1].updated_at.isoformat() if len(rows) > limit else None
@@ -74,7 +76,53 @@ class DefaultAtlasTrustPlane(AtlasTrustPlane):
         self, *, task_id: str | None, correlation_id: str | None,
         execution_id: str | None, cursor: str | None, limit: int,
     ) -> AuditPage:
-        return AuditPage(items=tuple(), next_cursor=None)
+        """Query the real audit_events table (safety.audit.AuditLog.record()
+        is the single writer — see infra/db.py migration 001).
+
+        BUG FIX: this previously returned a hardcoded empty page. The
+        `project_audit` projection already existed and was imported but
+        never called.
+
+        `task_id` is resolved to a correlation_id via a tasks lookup because
+        audit_events only stores correlation_id, not task_id, at write time
+        (see AuditLog.record()'s INSERT columns). `execution_id` has no
+        backing column anywhere in the schema today — it is accepted for
+        API-contract stability but intentionally not filtered on; adding
+        real support requires a schema change, which is out of scope here.
+        """
+        effective_correlation_id = correlation_id
+        if task_id and not effective_correlation_id:
+            cur = await self._atlas.db.conn.execute(
+                "SELECT payload FROM tasks WHERE id = ?", (task_id,)
+            )
+            row = await cur.fetchone()
+            if row and row["payload"]:
+                try:
+                    effective_correlation_id = json.loads(row["payload"]).get("correlation_id")
+                except json.JSONDecodeError:
+                    effective_correlation_id = None
+            if not effective_correlation_id:
+                # Task exists but has no resolvable correlation_id, or the
+                # task itself doesn't exist — either way, no events to show.
+                return AuditPage(items=tuple(), next_cursor=None)
+
+        query = "SELECT * FROM audit_events WHERE 1=1"
+        params: list[str] = []
+        if effective_correlation_id:
+            query += " AND correlation_id = ?"
+            params.append(effective_correlation_id)
+        if cursor:
+            query += " AND id < ?"
+            params.append(cursor)
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(str(limit + 1))
+
+        cur = await self._atlas.db.conn.execute(query, tuple(params))
+        rows: list[Any] = list(await cur.fetchall())
+
+        items = [project_audit(dict(row)) for row in rows[:limit]]
+        next_cursor = str(rows[limit - 1]["id"]) if len(rows) > limit else None
+        return AuditPage(items=tuple(items), next_cursor=next_cursor)
 
     async def audit_event(self, event_id: str) -> AuditEventView:
         raise KeyError(f"Event not found: {event_id}")

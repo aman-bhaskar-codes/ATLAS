@@ -18,20 +18,19 @@ from atlas.interfaces.api.schemas import (
     CancelTaskResponse,
     CreateTaskRequest,
     TaskEventResponse,
-    TaskResponse,
 )
 
 router = APIRouter(tags=["tasks"])
 
-
-@router.get("/tasks", response_model=list[TaskResponse])
-async def list_tasks(
-    limit: int = Query(default=20, le=100),
-    control_plane: AtlasControlPlane = Depends(get_control_plane),
-) -> list[TaskResponse]:
-    """List recent tasks, newest first."""
-    return await control_plane.get_tasks()
-
+# NOTE: GET /tasks and GET /tasks/{task_id} used to live here too, returning
+# the thinner TaskResponse schema. They were silently shadowed at runtime by
+# routes_trust.py's TaskPage/TaskView versions of the same paths (registered
+# after this router in app.py, but that router additionally declares its own
+# "/api/v1" prefix, which collided with this router's mount prefix). Rather
+# than leave dead, never-executed handlers in the codebase, they were removed
+# here. routes_trust.py is now the single owner of task reads; this router
+# owns only the write/action endpoints below, which routes_trust.py does not
+# implement.
 
 @router.post("/tasks", status_code=202)
 async def create_task(
@@ -45,15 +44,6 @@ async def create_task(
     """
     task = await control_plane.create_task(command)
     return JSONResponse(content=task.model_dump(mode="json"), status_code=202)
-
-
-@router.get("/tasks/{task_id}", response_model=TaskResponse)
-async def get_task(
-    task_id: str,
-    control_plane: AtlasControlPlane = Depends(get_control_plane),
-) -> TaskResponse:
-    """Get the current snapshot of a specific task."""
-    return await control_plane.get_task(task_id)
 
 
 @router.post("/tasks/{task_id}/cancel", response_model=CancelTaskResponse)
