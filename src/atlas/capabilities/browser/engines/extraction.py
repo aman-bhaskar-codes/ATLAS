@@ -21,7 +21,7 @@ class ExtractionEngine:
         
         url = await provider.eval_readonly(provider_session_id, tab_id, "window.location.href") or "about:blank"
         title = await provider.eval_readonly(provider_session_id, tab_id, "document.title") or ""
-        html = await provider.content_html(provider_session_id, tab_id)
+        await provider.content_html(provider_session_id, tab_id)
         
         prov = Provenance(
             provider=provider.name,

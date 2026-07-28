@@ -74,5 +74,5 @@ class SubmitEngine:
         lines = ["─── FORM SUBMIT PREVIEW ───", f"URL: {p.url}", ""]
         lines += [f"{label}: {value}" for label, value in p.field_values]
         if p.warnings:
-            lines += [""] + list(p.warnings)
+            lines += ["", *list(p.warnings)]
         return "\n".join(lines)

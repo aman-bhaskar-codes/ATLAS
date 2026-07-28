@@ -118,8 +118,11 @@ class DockerSandbox:
         )
 
     async def health(self) -> bool:
-        code, _, _ = await self._runner.run(
-            ["docker", "version", "--format", "{{.Server.Version}}"],
-            timeout_s=5.0
-        )
+        try:
+            code, _, _ = await self._runner.run(
+                ["docker", "version", "--format", "{{.Server.Version}}"],
+                timeout_s=5.0
+            )
+        except (FileNotFoundError, OSError):
+            return False  # docker not installed or not on PATH
         return code == 0

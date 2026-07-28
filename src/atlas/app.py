@@ -303,8 +303,11 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
             self._ids = ids
 
         async def notify(self, title: str, body: str, *, priority: int = 3) -> None:
-            from atlas.capabilities.notification.domain.models import Notification, NotificationKind, NotificationPriority
-            from atlas.infra.ids import CorrelationId
+            from atlas.capabilities.notification.domain.models import (
+                Notification,
+                NotificationKind,
+                NotificationPriority,
+            )
             p = NotificationPriority(priority) if priority in (0, 1, 2, 3) else NotificationPriority.NORMAL
             n = Notification(
                 id=self._ids.execution_id(),
@@ -320,7 +323,6 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
         async def ask(self, title: str, body: str, *, timeout_s: float) -> bool | None:
             from atlas.capabilities.notification.domain.models import ApprovalRequest
-            from atlas.infra.ids import CorrelationId
             req = ApprovalRequest(
                 id=self._ids.execution_id(),
                 correlation_id=self._ids.correlation_id(),
@@ -413,7 +415,9 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     except Exception:
         ksrc = {"official_feeds": {}, "provider_preferences": {}}
         
-    official: list[KnowledgeProvider] = [RSSProvider(name=k, feeds=v) for k, v in ksrc.get("official_feeds", {}).items()]
+    official: list[KnowledgeProvider] = [
+        RSSProvider(name=k, feeds=v) for k, v in ksrc.get("official_feeds", {}).items()
+    ]
     official += [WikipediaProvider(), ArxivProvider(), GitHubReleasesProvider()]
     web: list[KnowledgeProvider] = [DuckDuckGoProvider()]
     if config.models.allow_cloud:

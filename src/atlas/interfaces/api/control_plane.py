@@ -5,8 +5,16 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from atlas.interfaces.api.schemas_trust import (
-    ApprovalDecisionCommand, ApprovalView, AuditEventView, AuditPage, MemoryCorrectionCommand,
-    MemoryFactView, MemoryMutationReceipt, ProvenanceView, TaskPage, TaskView,
+    ApprovalDecisionCommand,
+    ApprovalView,
+    AuditEventView,
+    AuditPage,
+    MemoryCorrectionCommand,
+    MemoryFactView,
+    MemoryMutationReceipt,
+    ProvenanceView,
+    TaskPage,
+    TaskView,
 )
 
 
@@ -20,7 +28,9 @@ class AtlasTrustPlane(Protocol):
     async def get_memory_fact(self, fact_id: str) -> MemoryFactView: ...
     async def memory_provenance(self, fact_id: str) -> Sequence[ProvenanceView]: ...
     async def correct_memory(self, command: MemoryCorrectionCommand) -> MemoryMutationReceipt: ...
-    async def supersede_memory(self, fact_id: str, *, idempotency_key: str, request_id: str) -> MemoryMutationReceipt: ...
+    async def supersede_memory(
+        self, fact_id: str, *, idempotency_key: str, request_id: str,
+    ) -> MemoryMutationReceipt: ...
     async def delete_memory(self, fact_id: str, *, idempotency_key: str, request_id: str) -> MemoryMutationReceipt: ...
     async def audit(self, *, task_id: str | None, correlation_id: str | None,
                     execution_id: str | None, cursor: str | None, limit: int) -> AuditPage: ...

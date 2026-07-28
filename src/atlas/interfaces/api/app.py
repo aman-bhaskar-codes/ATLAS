@@ -17,9 +17,10 @@ exactly once, before the first request, and torn down on shutdown.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import version
-from typing import TYPE_CHECKING, AsyncIterator
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,7 +30,7 @@ from atlas.infra.bus import Event
 from atlas.interfaces.api.errors import atlas_exception_handler
 
 if TYPE_CHECKING:
-    from atlas.interfaces.api.event_store import TaskEventStore
+    pass
 
 
 @asynccontextmanager
@@ -119,12 +120,12 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Exception, atlas_exception_handler)
 
     # Register routers (imported here to keep the factory free of circular deps)
-    from atlas.interfaces.api.routes_runtime import router as runtime_router
-    from atlas.interfaces.api.routes_tasks import router as tasks_router
+    from atlas.interfaces.api.events import router as events_router
     from atlas.interfaces.api.routes_approvals import router as approvals_router
     from atlas.interfaces.api.routes_capabilities import router as capabilities_router
+    from atlas.interfaces.api.routes_runtime import router as runtime_router
+    from atlas.interfaces.api.routes_tasks import router as tasks_router
     from atlas.interfaces.api.routes_trust import router as trust_router
-    from atlas.interfaces.api.events import router as events_router
 
     # Each API path now has exactly one owning router — see routes_tasks.py
     # and routes_trust.py module docstrings/comments for the split:

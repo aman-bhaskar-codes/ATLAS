@@ -57,7 +57,11 @@ async def test_notification_routing(db, clock, tmp_path, monkeypatch) -> None:  
     
     # We will build it from empty config so we only use defaults, plus mock
     with open(tmp_path / "notifications.yaml", "w") as f:
-        f.write("quiet_hours: []\nchannels: [{name: 'test:default', provider: 'desktop', address: 'local', priority_floor: 0}]\n")
+        f.write(
+            "quiet_hours: []\n"
+            "channels: [{name: 'test:default', provider: 'desktop',"
+            " address: 'local', priority_floor: 0}]\n"
+        )
         
     platform = build_notification_platform(
         config_dir=tmp_path, db=db, clock=clock, ids=ids, gateway=gw,  # type: ignore

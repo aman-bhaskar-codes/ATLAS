@@ -6,8 +6,13 @@ from fastapi import APIRouter, Depends, Query
 from atlas.interfaces.api.control_plane import AtlasTrustPlane
 from atlas.interfaces.api.dependencies import get_trust_plane
 from atlas.interfaces.api.schemas_trust import (
-    ApprovalView, AuditPage, MemoryCorrectionCommand,
-    MemoryFactView, MemoryMutationReceipt, TaskPage, TaskView,
+    ApprovalView,
+    AuditPage,
+    MemoryCorrectionCommand,
+    MemoryFactView,
+    MemoryMutationReceipt,
+    TaskPage,
+    TaskView,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["trust"])

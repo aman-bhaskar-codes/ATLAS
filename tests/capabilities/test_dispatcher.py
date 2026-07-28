@@ -25,6 +25,7 @@ class DenySafety:
 
 from typing import Any
 
+
 def _setup(safety: Any, provider: Any) -> CapabilityDispatcher:
     reg = CapabilityRegistry()
     reg.register(CapabilitySpec(capability=Capability.KNOWLEDGE, safety_tool="knowledge",

@@ -1,6 +1,6 @@
-import sqlite3
 import json
-from http.server import HTTPServer, BaseHTTPRequestHandler
+import sqlite3
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -121,7 +121,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .role-user { color: var(--user); }
         
         .ep-content { font-family: monospace; white-space: pre-wrap; font-size: 0.9rem; }
-        .ep-tool { margin-top: 0.5rem; display: inline-block; padding: 0.2rem 0.5rem; background: #333; border-radius: 4px; font-size: 0.8rem; color: var(--accent); }
+        .ep-tool { margin-top: 0.5rem; display: inline-block; padding: 0.2rem 0.5rem; 
+            background: #333; border-radius: 4px; font-size: 0.8rem; color: var(--accent); }
         
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg-color); }
@@ -248,14 +249,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 cur = conn.cursor()
                 
                 # Fetch recent tasks
-                cur.execute("SELECT id, correlation_id, source, request, created_ts FROM tasks ORDER BY created_ts DESC LIMIT 10")
+                cur.execute(
+                    "SELECT id, correlation_id, source, request, created_ts "
+                    "FROM tasks ORDER BY created_ts DESC LIMIT 10"
+                )
                 tasks = [dict(r) for r in cur.fetchall()]
                 
                 # Fetch episodes for these tasks via correlation_id
                 episodes = {}
                 for t in tasks:
                     cur.execute(
-                        "SELECT step, role, content, tool, outcome, ts FROM episodes WHERE correlation_id = ? ORDER BY step ASC, ts ASC", 
+                        "SELECT step, role, content, tool, outcome, ts "
+                        "FROM episodes WHERE correlation_id = ? ORDER BY step ASC, ts ASC", 
                         (t['correlation_id'],)
                     )
                     episodes[t['id']] = [dict(r) for r in cur.fetchall()]

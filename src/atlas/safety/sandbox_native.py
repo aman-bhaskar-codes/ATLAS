@@ -74,7 +74,7 @@ class NativeSandbox:
                 stderr_tail=f"timed out after {timeout_s}s",
                 duration_ms=int((time.perf_counter() - start) * 1000),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return SandboxResult(
                 exit_code=1, stdout_tail="",
                 stderr_tail=str(exc),

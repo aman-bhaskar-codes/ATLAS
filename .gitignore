@@ -22,3 +22,6 @@ STOP.flag
 
 # OS
 .DS_Store
+
+# IDE / spec scratchpads
+.kiro/

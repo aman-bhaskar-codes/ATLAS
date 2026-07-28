@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -44,7 +44,7 @@ async def _event_generator(
     request: Request,
     control_plane: AtlasControlPlane,
     start_after_sequence: int | None,
-) -> AsyncGenerator[str, None]:
+) -> AsyncGenerator[str]:
     """Stream SSE events for task_id, resuming from start_after_sequence if provided."""
 
     sse_queues: dict[str, list[asyncio.Queue[str | None]]] = request.app.state.sse_queues
@@ -84,7 +84,7 @@ async def _event_generator(
                 # Wait for a signal that new events are available for this task
                 # Use a timeout to also periodically check for disconnect
                 await asyncio.wait_for(queue.get(), timeout=15.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Heartbeat to keep the connection alive
                 yield f"event: heartbeat\ndata: {json.dumps({'last_sequence': last_sent_seq})}\n\n"
                 continue

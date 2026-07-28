@@ -22,7 +22,10 @@ class GitHubReleasesProvider:
     source_kind = "official"
 
     def __init__(self, timeout_s: float = 15.0) -> None:
-        self._client = httpx.AsyncClient(timeout=timeout_s, follow_redirects=True, headers={"Accept": "application/vnd.github.v3+json"})
+        self._client = httpx.AsyncClient(
+            timeout=timeout_s, follow_redirects=True,
+            headers={"Accept": "application/vnd.github.v3+json"},
+        )
 
     async def initialize(self) -> None: ...
     async def authenticate(self) -> None: ...

@@ -9,8 +9,8 @@ import pytest
 import pytest_asyncio
 import yaml
 
-from atlas.infra.db import Database
 from atlas.infra.config import LoggingCfg
+from atlas.infra.db import Database
 from atlas.infra.logging import configure_logging
 
 

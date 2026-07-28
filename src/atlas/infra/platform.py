@@ -22,8 +22,8 @@ def has_pyobjc() -> bool:
     if not is_macos():
         return False
     try:
-        import AppKit  # type: ignore
-        import ApplicationServices  # type: ignore
+        import AppKit  # type: ignore[import-not-found, unused-ignore]  # noqa: F401
+        import ApplicationServices  # type: ignore[import-not-found, unused-ignore]  # noqa: F401
     except ImportError:
         return False
     return True

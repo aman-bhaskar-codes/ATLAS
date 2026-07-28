@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import uuid
 from typing import TYPE_CHECKING, Protocol
 
 from fastapi import Request
@@ -59,7 +58,7 @@ class AtlasControlPlane(Protocol):
 class DefaultAtlasControlPlane:
     """Concrete implementation wrapping Atlas and TaskEventStore."""
 
-    def __init__(self, atlas: Atlas, event_store: "TaskEventStore") -> None:
+    def __init__(self, atlas: Atlas, event_store: TaskEventStore) -> None:
         self.atlas = atlas
         self.event_store = event_store
 

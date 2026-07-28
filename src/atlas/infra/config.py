@@ -180,4 +180,10 @@ def resolve_master_key(settings: Settings) -> str:
     if settings.master_key:            # ATLAS_MASTER_KEY env fallback (dev/CI)
         return settings.master_key
         
+    if settings.env == "dev":
+        import hashlib
+        import platform
+        print("WARNING: No master key found; generating stable dev key. DO NOT USE IN PRODUCTION.", file=sys.stderr)
+        return hashlib.sha256(f"dev-atlas-{platform.node()}".encode()).hexdigest()
+        
     raise ConfigError("no master key: set it in Keychain (atlas-master) or ATLAS_MASTER_KEY")

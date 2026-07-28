@@ -18,9 +18,10 @@ from atlas.safety.manifest import Manifest
 
 _log = get_logger("atlas.classifier")
 
-KNOWN_CONSTRAINTS: frozenset[str] = frozenset(
-    {"within_write_paths", "cmd_in_read_only", "cmd_in_side_effect", "contact_known", "recipients_known", "attendees_known"}
-)
+KNOWN_CONSTRAINTS: frozenset[str] = frozenset({
+    "within_write_paths", "cmd_in_read_only", "cmd_in_side_effect",
+    "contact_known", "recipients_known", "attendees_known",
+})
 
 
 class TierClassifier:

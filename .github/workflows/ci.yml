@@ -17,7 +17,7 @@ jobs:
       - name: Types
         run: uv run mypy
       - name: Import boundaries
-        run: uv run lint-imports
+        run: uv run lint-imports --config importlinter.ini
       - name: Tests
         run: uv run pytest
       - name: Verify manifest
