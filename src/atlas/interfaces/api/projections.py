@@ -45,8 +45,10 @@ def project_task(record: dict[str, Any]) -> TaskView:
     return TaskView(
         id=str(record["id"]),
         correlation_id=str(payload.get("correlation_id", "")),
+        source=cast(Literal["cli", "file", "whatsapp", "api", "scheduler", "system"], record.get("source", "api")),
         request=str(payload.get("request", "")),
         state=str(record.get("state", "failed")),
+        ok=payload.get("ok"),
         answer=str(payload["answer"]) if payload.get("answer") else None,
         error=SafeError(code="task_failed", message=str(error), retryable=False) if error else None,
         created_at=_as_datetime(record["created_ts"]),

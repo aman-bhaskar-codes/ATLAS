@@ -24,7 +24,7 @@ models:
 
   - id: glm-5.2
     provider: glm
-    provider_model: glm-5.2
+    provider_model: z-ai/glm-5.2
     context_length: 128000
     usd_per_1m_input: 0.15
     usd_per_1m_output: 0.60
@@ -46,7 +46,7 @@ models:
 
   - id: deepseek-v4-pro
     provider: deepseek
-    provider_model: deepseek-chat
+    provider_model: deepseek/deepseek-v4-pro
     context_length: 64000
     usd_per_1m_input: 0.14
     usd_per_1m_output: 0.28
@@ -69,11 +69,32 @@ models:
 
   - id: kimi-k2.7-code
     provider: kimi
-    provider_model: moonshot-v1-8k
+    provider_model: moonshotai/kimi-k2.7-code
     context_length: 8192
     usd_per_1m_input: 0.08
     usd_per_1m_output: 0.16
     latency_estimate_ms: 900
+    capabilities:
+      - coding
+      - tool_calling
+      - structured_output
+    max_concurrency: 3
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: false
+    supports_vision: false
+    supports_tool_calling: true
+    quality_score: 0.88
+    reliability_score: 0.97
+    enabled: true
+
+  - id: mimo-v2.5-pro
+    provider: mimo
+    provider_model: xiaomi/mimo-v2.5-pro
+    context_length: 128000
+    usd_per_1m_input: 0.10
+    usd_per_1m_output: 0.20
+    latency_estimate_ms: 800
     capabilities:
       - coding
       - tool_calling

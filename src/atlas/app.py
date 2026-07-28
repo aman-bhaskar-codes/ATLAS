@@ -263,18 +263,23 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     if config.models.allow_cloud:
         if settings.deepseek_api_key:
             provider_registry.register(OpenAICompatibleProvider(
-                name="deepseek", base_url="https://api.deepseek.com",
+                name="deepseek", base_url="https://openrouter.ai/api/v1",
                 api_key=settings.deepseek_api_key, timeout_s=config.models.cloud_timeout_s
             ))
         if settings.glm_api_key:
             provider_registry.register(OpenAICompatibleProvider(
-                name="glm", base_url="https://open.bigmodel.cn/api/paas/v4",
+                name="glm", base_url="https://openrouter.ai/api/v1",
                 api_key=settings.glm_api_key, timeout_s=config.models.cloud_timeout_s
             ))
         if settings.kimi_api_key:
             provider_registry.register(OpenAICompatibleProvider(
-                name="kimi", base_url="https://api.moonshot.cn/v1",
+                name="kimi", base_url="https://openrouter.ai/api/v1",
                 api_key=settings.kimi_api_key, timeout_s=config.models.cloud_timeout_s
+            ))
+        if settings.mimo_api_key:
+            provider_registry.register(OpenAICompatibleProvider(
+                name="mimo", base_url="https://openrouter.ai/api/v1",
+                api_key=settings.mimo_api_key, timeout_s=config.models.cloud_timeout_s
             ))
 
     model_registry = ModelRegistry.from_yaml(config_dir / "models.yaml")

@@ -22,8 +22,10 @@ class TaskView(BaseModel):
     model_config = ConfigDict(frozen=True)
     id: str
     correlation_id: str
+    source: Literal["cli", "file", "whatsapp", "api", "scheduler", "system"]
     request: str
     state: str
+    ok: bool | None = None
     answer: str | None = None
     error: SafeError | None = None
     created_at: datetime
