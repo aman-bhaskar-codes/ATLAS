@@ -1,4 +1,4 @@
-# Python
+# Python caches
 __pycache__/
 *.py[cod]
 .venv/
@@ -6,9 +6,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+.import_linter_cache/
 
-# uv
-# (uv.lock IS committed; the venv is not)
+# uv lockfile (uv.lock IS committed; the venv is not)
+# (do not ignore uv.lock)
 
 # ATLAS runtime state
 .atlas/
@@ -17,11 +18,11 @@ STOP.flag
 *.db-wal
 *.db-shm
 
-# secrets
+# Secrets & Environment
 .env
 
-# OS
+# OS metadata
 .DS_Store
+*.swp
+*~
 
-# IDE / spec scratchpads
-.kiro/
