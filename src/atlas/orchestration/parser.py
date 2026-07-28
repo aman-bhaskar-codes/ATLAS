@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import json
 
+from atlas.infra.logging import get_logger
 from atlas.orchestration.types import Action, ActionKind, Thought
+
+_log = get_logger("atlas.orch.parser")
 
 
 class ResponseParser:
@@ -24,10 +27,11 @@ class ResponseParser:
             action = Action(
                 step=step, kind=self._kind(a.get("kind")),
                 tool=a.get("tool"), operation=a.get("operation"),
-                args=dict(a.get("args", {})), final_text=a.get("final_text"),
+                args=dict(a.get("args") or {}), final_text=a.get("final_text"),
             )
             return thought, action
-        except (json.JSONDecodeError, ValueError, TypeError):
+        except (json.JSONDecodeError, ValueError, TypeError) as exc:
+            _log.error("parser.failed", error=str(exc), raw_text=text)
             return (
                 Thought(step=step, content="unparseable model output", confidence=0.0),
                 Action(step=step, kind="ask_user",

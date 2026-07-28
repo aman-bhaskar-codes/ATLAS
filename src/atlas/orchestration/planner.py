@@ -42,13 +42,13 @@ class Planner:
             prompt=f"CONTEXT:\n{context}\n\nREQUEST:\n{request}",
             needs_deep_reasoning=caps.needs_reasoning,
             stakes_tier=Tier.CONFIRM if caps.needs_confirmation else Tier.AUTO,
-            max_tokens=1200,
+            max_tokens=2048,
         ))
         try:
             data = json.loads(self._json(resp.text))
             return self._to_plan(data)
         except (json.JSONDecodeError, ValueError, KeyError) as exc:
-            raise PlanningError(f"could not parse plan: {exc}") from exc
+            raise PlanningError(f"could not parse plan: {exc}. Raw text: {resp.text}") from exc
 
     def _to_plan(self, data: dict[str, object]) -> Plan:
         raw_steps = data.get("steps")

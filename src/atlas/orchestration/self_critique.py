@@ -95,7 +95,7 @@ class SelfCritique:
         try:
             resp = await self._gw.complete(ModelRequest(
                 correlation_id=corr, system=_CRITIQUE_SYSTEM, prompt=prompt,
-                max_tokens=250, temperature=0.0,  # thinking off: fast + cheap
+                max_tokens=512, temperature=0.0,  # thinking off: fast + cheap
             ))
             data = json.loads(self._json(resp.text))
             return Critique(
@@ -123,7 +123,7 @@ class SelfCritique:
         try:
             resp = await self._gw.complete(ModelRequest(
                 correlation_id=corr, system=_REVISE_SYSTEM, prompt=prompt,
-                max_tokens=512, temperature=0.1,
+                max_tokens=1024, temperature=0.1,
             ))
             _thought, revised = self._parser.parse(resp.text, action.step)
             self._validator.validate(revised)
