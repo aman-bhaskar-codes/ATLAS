@@ -56,6 +56,8 @@ from atlas.infra.metrics import Metrics
 from atlas.infra.registry import ServiceRegistry
 from atlas.infra.tracing import Tracer
 from atlas.infra.types import AuditRecord, Tier
+from atlas.infra.feedback import FeedbackStore
+from atlas.infra.scheduler import CronScheduler
 from atlas.intelligence.contracts import Usage
 from atlas.intelligence.gateway import ModelGateway
 from atlas.intelligence.governance.budget import Budgets
@@ -173,6 +175,8 @@ class Atlas:
     calendar_platform: CalendarPlatform
     contacts_platform: ContactsPlatform
     browser_platform: BrowserPlatform | None = None
+    feedback: FeedbackStore | None = None
+    scheduler: CronScheduler | None = None
 
     async def start(self) -> None:
         await self.db.start()
@@ -594,6 +598,10 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         registry=tool_registry, events=events,
     )
 
+    # ── Vamos: Feedback & Scheduler ───────────────────────────────── #
+    feedback_store = FeedbackStore(db=db, ids=ids, clock=clock)
+    cron_scheduler = CronScheduler(db=db, ids=ids, clock=clock)
+
     _log.info("core.ready", event_type="lifecycle", providers=provider_registry.names())
     return Atlas(
         settings=settings, config=config, manifest=manifest, db=db, registry=registry,
@@ -613,4 +621,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         calendar_platform=calendar_platform,
         contacts_platform=contacts_platform,
         browser_platform=browser_platform,
+        feedback=feedback_store,
+        scheduler=cron_scheduler,
     )
+

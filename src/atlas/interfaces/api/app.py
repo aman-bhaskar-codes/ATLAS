@@ -123,6 +123,7 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.events import router as events_router
     from atlas.interfaces.api.routes_approvals import router as approvals_router
     from atlas.interfaces.api.routes_capabilities import router as capabilities_router
+    from atlas.interfaces.api.routes_feedback import router as feedback_router
     from atlas.interfaces.api.routes_runtime import router as runtime_router
     from atlas.interfaces.api.routes_tasks import router as tasks_router
     from atlas.interfaces.api.routes_trust import router as trust_router
@@ -133,12 +134,15 @@ def create_app() -> FastAPI:
     #   - approvals_router:  GET /approvals/pending, POST /approvals/{id}/decide
     #   - trust_router:      GET /tasks, GET /tasks/{id}, GET /approvals/{id},
     #                        GET/POST /memory/*, GET /audit
+    #   - feedback_router:   POST /feedback, GET /feedback/stats,
+    #                        GET /audit/verify, GET/POST /schedules
     # trust_router still declares prefix="/api/v1" internally (see routes_trust.py),
     # so it is mounted with an empty prefix here to avoid doubling it.
     app.include_router(runtime_router, prefix="/api/v1")
     app.include_router(tasks_router, prefix="/api/v1")
     app.include_router(approvals_router, prefix="/api/v1")
     app.include_router(capabilities_router, prefix="/api/v1")
+    app.include_router(feedback_router, prefix="/api/v1")
     app.include_router(trust_router, prefix="")
     app.include_router(events_router, prefix="/api/v1")
 
