@@ -57,7 +57,9 @@ from atlas.infra.registry import ServiceRegistry
 from atlas.infra.tracing import Tracer
 from atlas.infra.types import AuditRecord, Tier
 from atlas.infra.feedback import FeedbackStore
+from atlas.infra.llm_tracker import LLMCallTracker
 from atlas.infra.scheduler import CronScheduler
+from atlas.infra.workflows import WorkflowStore
 from atlas.intelligence.contracts import Usage
 from atlas.intelligence.gateway import ModelGateway
 from atlas.intelligence.governance.budget import Budgets
@@ -177,6 +179,8 @@ class Atlas:
     browser_platform: BrowserPlatform | None = None
     feedback: FeedbackStore | None = None
     scheduler: CronScheduler | None = None
+    llm_tracker: LLMCallTracker | None = None
+    workflows: WorkflowStore | None = None
 
     async def start(self) -> None:
         await self.db.start()
@@ -601,6 +605,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     # ── Vamos: Feedback & Scheduler ───────────────────────────────── #
     feedback_store = FeedbackStore(db=db, ids=ids, clock=clock)
     cron_scheduler = CronScheduler(db=db, ids=ids, clock=clock)
+    llm_tracker = LLMCallTracker(db=db, ids=ids, clock=clock)
+    workflow_store = WorkflowStore(db=db, ids=ids, clock=clock)
 
     _log.info("core.ready", event_type="lifecycle", providers=provider_registry.names())
     return Atlas(
@@ -623,5 +629,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         browser_platform=browser_platform,
         feedback=feedback_store,
         scheduler=cron_scheduler,
+        llm_tracker=llm_tracker,
+        workflows=workflow_store,
     )
 
