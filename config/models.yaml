@@ -20,7 +20,7 @@ models:
     supports_tool_calling: true
     quality_score: 0.6
     reliability_score: 0.95
-    enabled: true
+    enabled: false
 
   - id: glm-5.2
     provider: glm
@@ -30,6 +30,7 @@ models:
     usd_per_1m_output: 0.60
     latency_estimate_ms: 800
     capabilities:
+      - reasoning
       - planning
       - coding
       - tool_calling
@@ -37,7 +38,7 @@ models:
     max_concurrency: 2
     supports_streaming: true
     supports_structured_output: true
-    supports_reasoning: false
+    supports_reasoning: true
     supports_vision: false
     supports_tool_calling: true
     quality_score: 0.85
@@ -65,7 +66,7 @@ models:
     supports_tool_calling: true
     quality_score: 0.95
     reliability_score: 0.99
-    enabled: true
+    enabled: false
 
   - id: kimi-k2.7-code
     provider: kimi
@@ -86,7 +87,7 @@ models:
     supports_tool_calling: true
     quality_score: 0.88
     reliability_score: 0.97
-    enabled: true
+    enabled: false
 
   - id: mimo-v2.5-pro
     provider: mimo
@@ -107,4 +108,4 @@ models:
     supports_tool_calling: true
     quality_score: 0.88
     reliability_score: 0.97
-    enabled: true
+    enabled: false

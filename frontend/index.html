@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- skill:chrome -->
+<style>
+/* Credit line — bottom-right */
+.design-ui-credit {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  font: 11px/1 system-ui, sans-serif;
+  color: rgba(128,128,128,0.5);
+  pointer-events: none;
+  z-index: 2147483647;
+  transition: opacity 0.4s ease;
+  user-select: none;
+  letter-spacing: 0.02em;
+}
+
+/* Hide chrome on touch devices */
+@media (hover: none) {
+  .design-ui-credit { display: none; }
+}
+
+/* Print fixes */
+@media print {
+  * {
+    transition: none !important;
+    animation: none !important;
+    box-shadow: none !important;
+  }
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .design-ui-credit { display: none !important; }
+}
+
+</style>
+<script>
+(function () {
+    // Design-ui pages are single compositions, so the whole body is editable.
+    function markEditable() {
+        document.body.classList.add('artifact-editable');
+    }
+
+    // Credit badge with idle-fade. Hover devices only.
+    function initChromeUI() {
+        if (!matchMedia('(hover: hover)').matches) return;
+
+        var credit = document.createElement('div');
+        credit.className = 'design-ui-credit';
+        credit.setAttribute('aria-hidden', 'true');
+        credit.innerHTML = '\u{1F49C} by ClickUp Brain';
+        document.body.appendChild(credit);
+
+        var timer = null;
+        var fade = function (out) { credit.style.opacity = out ? '0' : ''; };
+        fade(true);
+        var show = function () {
+            fade(false);
+            clearTimeout(timer);
+            timer = setTimeout(function () { fade(true); }, 3000);
+        };
+        document.addEventListener('mousemove', show);
+        show();
+    }
+
+    function init() {
+        markEditable();
+        initChromeUI();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+
+</script>
+<!-- /skill:chrome -->
+<!-- skill:libraries -->
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.383.0/dist/umd/lucide.min.js" integrity="sha384-wHFvAtjmgnkA2PJcMsDaCgdipf7X7YV44X/igbLHpvGiq6T5/PvFKl93grpvtbQT" crossorigin="anonymous"></script>
+<script>document.addEventListener("DOMContentLoaded",()=>lucide.createIcons())</script>
+<!-- /skill:libraries -->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ATLAS · Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--ink-950:oklch(10% .018 278);--ink-900:oklch(14% .024 278);--ink-850:oklch(18% .03 278);--ink-800:oklch(22% .036 278);--ink-700:oklch(29% .042 278);--line:oklch(34% .035 278);--paper-100:oklch(94% .012 82);--paper-300:oklch(80% .02 82);--paper-500:oklch(62% .025 82);--royal-500:oklch(58% .16 292);--royal-400:oklch(68% .14 292);--gold-500:oklch(76% .13 82);--gold-400:oklch(84% .12 82);--jade-400:oklch(73% .13 162);--ember-400:oklch(70% .16 35);--danger-400:oklch(68% .18 22);--shadow:0 20px 60px oklch(5% .02 278 / .28);--ease:cubic-bezier(.16,1,.3,1)}
+*{box-sizing:border-box}html{background:var(--ink-950)}body{margin:0;color:var(--paper-100);font:400 16px/1.5 'IBM Plex Sans',system-ui,sans-serif;letter-spacing:.012em;background:radial-gradient(circle at 76% 0%,oklch(26% .08 292 / .25),transparent 34rem),var(--ink-950);min-height:100vh}button,input,textarea{font:inherit}button{cursor:pointer}.mono{font-family:'IBM Plex Mono',monospace;font-size:.78rem;letter-spacing:.02em}.display{font-family:'Cormorant Garamond',serif;font-weight:600;letter-spacing:.01em}.muted{color:var(--paper-500)}.gold{color:var(--gold-400)}.jade{color:var(--jade-400)}.ember{color:var(--ember-400)}.danger{color:var(--danger-400)}
+.app{display:grid;grid-template-columns:240px 1fr;min-height:100vh}.rail{border-right:1px solid var(--line);padding:28px 18px 20px;display:flex;flex-direction:column;background:oklch(13% .024 278 / .86)}.brand{display:flex;align-items:center;gap:12px;padding:0 10px 34px}.sigil{width:34px;height:34px;border:1px solid var(--gold-500);border-radius:50%;display:grid;place-items:center;color:var(--gold-400);font-family:'Cormorant Garamond';font-size:22px}.brand-name{font-size:1.08rem;letter-spacing:.22em}.brand-sub{font-size:.62rem;color:var(--paper-500);letter-spacing:.12em;text-transform:uppercase}.nav{display:grid;gap:7px}.nav button{border:0;background:transparent;color:var(--paper-500);padding:12px 13px;border-radius:8px;text-align:left;display:flex;gap:12px;align-items:center;transition:all .18s var(--ease)}.nav button:hover,.nav button.active{background:var(--ink-800);color:var(--paper-100)}.nav button.active{box-shadow:inset 0 0 0 1px oklch(76% .13 82 / .22)}.nav i{width:17px}.rail-bottom{margin-top:auto;border-top:1px solid var(--line);padding:18px 10px 0}.owner{display:flex;gap:10px;align-items:center}.avatar{width:30px;height:30px;border-radius:50%;background:var(--royal-500);display:grid;place-items:center;font-weight:600}.owner b{font-size:.85rem}.owner small{display:block;color:var(--paper-500);font-size:.72rem}.main{min-width:0;padding:24px 34px 50px}.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:36px}.crumb{color:var(--paper-500);font-size:.84rem}.crumb strong{color:var(--paper-100);font-weight:500}.top-actions{display:flex;align-items:center;gap:10px}.icon-btn,.ghost-btn{border:1px solid var(--line);background:var(--ink-850);color:var(--paper-300);height:40px;border-radius:8px;padding:0 12px;display:flex;gap:8px;align-items:center;transition:all .18s var(--ease)}.icon-btn{width:40px;justify-content:center;padding:0}.icon-btn:hover,.ghost-btn:hover{border-color:var(--gold-500);color:var(--gold-400);transform:translateY(-1px)}.kill{border-color:oklch(68% .18 22 / .38);color:var(--danger-400)}.kill:hover{background:oklch(30% .1 22 / .28)}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:28px;align-items:end;margin-bottom:32px}.eyebrow{color:var(--gold-400);font-size:.72rem;text-transform:uppercase;letter-spacing:.14em;margin-bottom:10px}.hero h1{font-size:clamp(2.7rem,5vw,5rem);line-height:.92;margin:0 0 16px;color:var(--paper-100)}.hero p{color:var(--paper-300);max-width:56ch;margin:0}.health{border:1px solid var(--line);background:var(--ink-850);padding:18px;border-radius:10px;box-shadow:var(--shadow)}.health-head{display:flex;justify-content:space-between;align-items:center;font-size:.85rem;margin-bottom:16px}.health-dot{width:8px;height:8px;border-radius:50%;background:var(--jade-400);box-shadow:0 0 0 5px oklch(73% .13 162 / .12)}.health-row{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding:10px 0;color:var(--paper-500);font-size:.82rem}.health-row b{color:var(--paper-300);font-weight:500}
+.command{border:1px solid oklch(76% .13 82 / .34);background:linear-gradient(140deg,oklch(25% .045 292),var(--ink-850));padding:18px;border-radius:12px;box-shadow:0 0 0 5px oklch(76% .13 82 / .045),var(--shadow);margin-bottom:34px}.command-label{display:flex;justify-content:space-between;color:var(--gold-400);font-size:.78rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}.command textarea{width:100%;resize:none;min-height:76px;border:0;outline:0;background:transparent;color:var(--paper-100);font-size:1.08rem;line-height:1.45}.command textarea::placeholder{color:var(--paper-500)}.command-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid oklch(76% .13 82 / .15);padding-top:13px}.chips{display:flex;gap:7px;flex-wrap:wrap}.chip{border:1px solid var(--line);background:var(--ink-800);color:var(--paper-500);padding:5px 9px;border-radius:999px;font-size:.72rem}.primary{border:0;background:var(--gold-500);color:var(--ink-950);font-weight:600;padding:11px 16px;border-radius:7px;display:flex;align-items:center;gap:8px;transition:transform .18s var(--ease),filter .18s}.primary:hover{filter:brightness(1.08);transform:translateY(-1px)}.primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.section-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}.section-head h2{font-size:1.22rem;margin:0;font-weight:500}.section-head a{color:var(--gold-400);font-size:.78rem;text-decoration:none}.grid{display:grid;grid-template-columns:1.15fr .85fr;gap:28px;margin-bottom:34px}.panel{border-top:1px solid var(--line);padding-top:15px}.timeline{display:grid;gap:0}.event{display:grid;grid-template-columns:20px 1fr auto;gap:12px;padding:14px 0;border-bottom:1px solid oklch(34% .035 278 / .65);align-items:start}.event:last-child{border-bottom:0}.event-icon{width:20px;height:20px;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;color:var(--gold-400)}.event-title{font-size:.89rem;color:var(--paper-100)}.event-meta{font-size:.73rem;color:var(--paper-500);margin-top:3px}.event-time{font-size:.72rem;color:var(--paper-500)}.approval{padding:15px 0;border-bottom:1px solid oklch(34% .035 278 / .65)}.approval:last-child{border-bottom:0}.approval-top{display:flex;justify-content:space-between;gap:10px}.approval-title{font-size:.9rem}.badge{font-size:.67rem;letter-spacing:.08em;text-transform:uppercase;padding:4px 7px;border-radius:999px;background:oklch(70% .16 35 / .14);color:var(--ember-400);white-space:nowrap}.approval-desc{font-size:.78rem;color:var(--paper-500);margin:6px 0 11px}.approval-actions{display:flex;gap:8px}.small-btn{border:1px solid var(--line);background:var(--ink-850);color:var(--paper-300);border-radius:6px;padding:7px 10px;font-size:.75rem}.small-btn.approve{border-color:oklch(73% .13 162 / .38);color:var(--jade-400)}.small-btn.deny{color:var(--danger-400)}
+.cap-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.cap{border:1px solid var(--line);background:var(--ink-850);padding:15px;border-radius:8px;transition:border-color .18s var(--ease),transform .18s var(--ease)}.cap:hover{border-color:var(--gold-500);transform:translateY(-2px)}.cap-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.cap i{color:var(--gold-400)}.status{width:7px;height:7px;border-radius:50%;background:var(--jade-400)}.status.warn{background:var(--ember-400)}.status.off{background:var(--paper-500)}.cap b{font-size:.88rem;font-weight:500}.cap small{display:block;color:var(--paper-500);font-size:.72rem;margin-top:4px}.cap .mono{display:block;color:var(--paper-500);margin-top:14px;font-size:.66rem}
+.drawer{position:fixed;inset:0 0 0 auto;width:min(460px,100vw);background:var(--ink-900);border-left:1px solid var(--line);box-shadow:-24px 0 70px oklch(5% .02 278 / .45);transform:translateX(102%);transition:transform .3s var(--ease);z-index:20;padding:24px;overflow:auto}.drawer.open{transform:translateX(0)}.drawer-header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:22px}.drawer h2{font-size:1.25rem;margin:0;font-weight:500}.preview{background:var(--ink-850);border:1px solid var(--line);padding:16px;border-radius:8px}.preview h3{font-size:1rem;margin:0 0 14px}.preview-row{display:flex;justify-content:space-between;gap:14px;border-top:1px solid var(--line);padding:10px 0;font-size:.8rem}.preview-row span{color:var(--paper-500)}.preview-row b{font-weight:500;text-align:right}.drawer-actions{display:flex;gap:10px;margin-top:22px}.full{width:100%;justify-content:center}.toast{position:fixed;right:24px;bottom:24px;background:var(--ink-800);border:1px solid var(--jade-400);color:var(--paper-100);padding:13px 16px;border-radius:8px;box-shadow:var(--shadow);transform:translateY(130%);transition:transform .3s var(--ease);z-index:30;font-size:.85rem}.toast.show{transform:translateY(0)}.mobile-nav{display:none}
+@media(max-width:1050px){.app{grid-template-columns:76px 1fr}.rail{padding:22px 12px}.brand{padding:0 8px 30px}.brand-copy,.nav span,.owner-copy{display:none}.brand{justify-content:center}.nav button{justify-content:center;padding:12px}.rail-bottom{padding-left:0;padding-right:0}.owner{justify-content:center}.hero{grid-template-columns:1fr}.health{max-width:430px}.cap-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:720px){.app{display:block}.rail{display:none}.main{padding:18px 18px 88px}.topbar{margin-bottom:28px}.top-actions .ghost-btn{display:none}.hero{margin-bottom:24px}.hero h1{font-size:3.3rem}.grid{grid-template-columns:1fr;gap:28px}.cap-grid{grid-template-columns:1fr 1fr}.command-foot{align-items:flex-start;flex-direction:column}.primary{width:100%;justify-content:center}.mobile-nav{position:fixed;display:flex;bottom:0;left:0;right:0;background:var(--ink-900);border-top:1px solid var(--line);z-index:10;justify-content:space-around;padding:8px 6px}.mobile-nav button{background:transparent;color:var(--paper-500);border:0;font-size:.62rem;display:grid;gap:3px;justify-items:center;padding:5px}.mobile-nav button.active{color:var(--gold-400)}.mobile-nav i{width:18px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="rail" aria-label="Primary navigation">
+  <div class="brand"><div class="sigil">A</div><div class="brand-copy"><div class="brand-name">ATLAS</div><div class="brand-sub">Private command layer</div></div></div>
+  <nav class="nav">
+    <button class="active" data-view="command"><i data-lucide="orbit"></i><span>Command Center</span></button>
+    <button data-view="run"><i data-lucide="activity"></i><span>Live Run</span></button>
+    <button data-view="tasks"><i data-lucide="list-checks"></i><span>Tasks</span></button>
+    <button data-view="approvals"><i data-lucide="shield-check"></i><span>Approvals</span></button>
+    <button data-view="memory"><i data-lucide="brain"></i><span>Memory</span></button>
+    <button data-view="capabilities"><i data-lucide="waypoints"></i><span>Capabilities</span></button>
+    <button data-view="audit"><i data-lucide="scroll-text"></i><span>Audit</span></button>
+  </nav>
+  <div class="rail-bottom"><div class="owner"><div class="avatar">A</div><div class="owner-copy"><b>Aman</b><small>owner identity</small></div></div></div>
+</aside>
+<main class="main">
+  <header class="topbar"><div class="crumb">ATLAS / <strong>Command Center</strong></div><div class="top-actions"><button class="ghost-btn" id="telegramBtn"><i data-lucide="send"></i> Telegram bridge <span class="jade">connected</span></button><button class="icon-btn" aria-label="Open system health" id="healthBtn"><i data-lucide="heart-pulse"></i></button><button class="icon-btn kill" aria-label="Kill switch" id="killBtn"><i data-lucide="power"></i></button></div></header>
+  <section class="hero"><div><div class="eyebrow">Saturday, 25 July 2026 · local-first</div><h1 class="display">Good morning, Aman.</h1><p>ATLAS is online, quiet, and ready. Ask for something. It will show its plan before it acts.</p></div><aside class="health"><div class="health-head"><span>System posture</span><span class="jade"><span class="health-dot" style="display:inline-block;margin-right:8px"></span>healthy</span></div><div class="health-row"><span>Runtime</span><b>ready</b></div><div class="health-row"><span>Local model</span><b>Ollama · Qwen3</b></div><div class="health-row"><span>Approvals</span><b class="ember">2 waiting</b></div><div class="health-row"><span>Spend today</span><b>$0.18 / $1.00</b></div></aside></section>
+  <section class="command" aria-label="Command composer"><div class="command-label"><span>New command</span><span class="mono">⌘ K</span></div><textarea id="commandInput" placeholder="Research, organize, remember, or ask ATLAS to do something..."></textarea><div class="command-foot"><div class="chips"><button class="chip" data-fill="Research the latest papers on autonomous agents">research</button><button class="chip" data-fill="Recall what I decided about ATLAS last week">recall memory</button><button class="chip" data-fill="Check my system health">system health</button></div><button class="primary" id="runBtn"><i data-lucide="arrow-up-right"></i> Start task</button></div></section>
+  <div class="grid">
+    <section class="panel"><div class="section-head"><h2>Recent activity</h2><a href="#" data-view="run">Open live run</a></div><div class="timeline" id="timeline"><div class="event"><div class="event-icon"><i data-lucide="check" width="13"></i></div><div><div class="event-title">Memory consolidation completed</div><div class="event-meta">18 episodes distilled · no conflicts found</div></div><div class="event-time mono">12m ago</div></div><div class="event"><div class="event-icon"><i data-lucide="search" width="13"></i></div><div><div class="event-title">Knowledge query resolved</div><div class="event-meta">4 sources ranked · confidence 0.86</div></div><div class="event-time mono">34m ago</div></div><div class="event"><div class="event-icon"><i data-lucide="shield-alert" width="13"></i></div><div><div class="event-title">Approval requested</div><div class="event-meta">email.send · exact preview waiting</div></div><div class="event-time mono">1h ago</div></div><div class="event"><div class="event-icon"><i data-lucide="rotate-cw" width="13"></i></div><div><div class="event-title">Provider fallback used</div><div class="event-meta">DeepSeek → local Qwen3 · task completed</div></div><div class="event-time mono">2h ago</div></div></div></section>
+    <section class="panel"><div class="section-head"><h2>Approval inbox</h2><a href="#" data-view="approvals">View all</a></div><div class="approval"><div class="approval-top"><div class="approval-title">Send prepared email</div><span class="badge">Tier 2</span></div><div class="approval-desc">2 recipients · external destination · preview ready</div><div class="approval-actions"><button class="small-btn approve" data-approval="email">Review preview</button><button class="small-btn deny" data-deny="email">Deny</button></div></div><div class="approval"><div class="approval-top"><div class="approval-title">Write to atlas/outbox</div><span class="badge">Tier 1</span></div><div class="approval-desc">Save research summary · reversible local write</div><div class="approval-actions"><button class="small-btn approve" data-approval="file">Review preview</button><button class="small-btn deny" data-deny="file">Deny</button></div></div></section>
+  </div>
+  <section class="panel"><div class="section-head"><h2>Capability posture</h2><a href="#" data-view="capabilities">Manage providers</a></div><div class="cap-grid"><div class="cap"><div class="cap-head"><i data-lucide="brain"></i><span class="status"></span></div><b>Intelligence</b><small>3 providers healthy</small><span class="mono">local-first</span></div><div class="cap"><div class="cap-head"><i data-lucide="book-open"></i><span class="status"></span></div><b>Knowledge</b><small>official sources ready</small><span class="mono">free-first</span></div><div class="cap"><div class="cap-head"><i data-lucide="mail"></i><span class="status warn"></span></div><b>Email</b><small>approval path active</small><span class="mono">gated writes</span></div><div class="cap"><div class="cap-head"><i data-lucide="globe-2"></i><span class="status off"></span></div><b>Browser</b><small>planned, not enabled</small><span class="mono">phase 6.7</span></div></div></section>
+</main>
+</div>
+<nav class="mobile-nav" aria-label="Mobile navigation"><button class="active"><i data-lucide="orbit"></i>Home</button><button><i data-lucide="activity"></i>Run</button><button><i data-lucide="shield-check"></i>Approve</button><button><i data-lucide="brain"></i>Memory</button><button><i data-lucide="menu"></i>More</button></nav>
+<aside class="drawer" id="drawer" aria-label="Approval preview"><div class="drawer-header"><h2 id="drawerTitle">Exact action preview</h2><button class="icon-btn" id="closeDrawer" aria-label="Close"><i data-lucide="x"></i></button></div><div class="eyebrow">Safety Engine · Tier 2 · waiting for you</div><div class="preview"><h3 id="previewHeading">Send this email?</h3><div class="preview-row"><span>Capability</span><b id="previewCap">email.send</b></div><div class="preview-row"><span>Destination</span><b id="previewDest">External recipients</b></div><div class="preview-row"><span>Policy</span><b>manifest rule · approval required</b></div><div class="preview-row"><span>Expires</span><b class="ember">in 04:32</b></div><div style="border-top:1px solid var(--line);padding-top:14px;margin-top:4px;color:var(--paper-300);font-size:.83rem" id="previewBody">To: research-partner@example.com<br><br>Subject: ATLAS research notes<br><br>Here is the exact prepared message. Nothing will be sent until you approve it.</div></div><div class="drawer-actions"><button class="primary full" id="approveBtn"><i data-lucide="check"></i> Approve once</button><button class="small-btn deny full" id="denyBtn">Deny action</button></div><p class="muted mono" style="margin-top:18px">Approval is correlated, audited, expires automatically, and cannot grant future authority.</p></aside>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
+function openDrawer(kind='email'){const d=$('#drawer');d.classList.add('open');if(kind==='file'){$('#previewHeading').textContent='Write this file?';$('#previewCap').textContent='filesystem.write';$('#previewDest').textContent='~/atlas/outbox/summary.md';$('#previewBody').innerHTML='Path: ~/atlas/outbox/summary.md<br><br>Content: research summary generated from approved sources.<br><br><span class="jade">Reversible local write</span>'}else{$('#previewHeading').textContent='Send this email?';$('#previewCap').textContent='email.send';$('#previewDest').textContent='External recipients';$('#previewBody').innerHTML='To: research-partner@example.com<br><br>Subject: ATLAS research notes<br><br>Here is the exact prepared message. Nothing will be sent until you approve it.'}}
+function closeDrawer(){ $('#drawer').classList.remove('open') }
+$('#closeDrawer').onclick=closeDrawer;$('#approveBtn').onclick=()=>{closeDrawer();toast('Approved once. ATLAS is executing the exact preview.');};$('#denyBtn').onclick=()=>{closeDrawer();toast('Denied. No external action was taken.');};
+$$('[data-approval]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.approval));$$('[data-deny]').forEach(b=>b.onclick=()=>toast('Denied. No action was taken.'));
+$$('.chip').forEach(b=>b.onclick=()=>{$('#commandInput').value=b.dataset.fill;$('#commandInput').focus()});
+$('#runBtn').onclick=()=>{const v=$('#commandInput').value.trim();if(!v){$('#commandInput').focus();toast('Tell ATLAS what you want done first.');return}$('#runBtn').disabled=true;$('#runBtn').innerHTML='<i data-lucide="loader-circle"></i> Starting';lucide.createIcons();setTimeout(()=>{const row=document.createElement('div');row.className='event';row.innerHTML='<div class="event-icon"><i data-lucide="play" width="13"></i></div><div><div class="event-title">Task started</div><div class="event-meta">'+v.replace(/[<>]/g,'')+'</div></div><div class="event-time mono">now</div>';$('#timeline').prepend(row);lucide.createIcons();$('#runBtn').disabled=false;$('#runBtn').innerHTML='<i data-lucide="arrow-up-right"></i> Start task';lucide.createIcons();toast('Task created. Open Live Run to watch it unfold.');},700)};
+$('#telegramBtn').onclick=()=>toast('Telegram bridge is connected. Approvals can reach you there.');$('#healthBtn').onclick=()=>toast('Runtime healthy. Last audit write: 12 seconds ago.');$('#killBtn').onclick=()=>{if(confirm('Trip the ATLAS kill switch? New actions will halt.'))toast('Kill switch request sent. Backend confirmation required.');};
+$$('[data-view]').forEach(b=>b.onclick=e=>{e.preventDefault();toast('Navigation target: '+b.dataset.view+' · route wiring comes in Phase One backend contract.');});
+window.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('#commandInput').focus()}if(e.key==='Escape')closeDrawer()});
+</script>
+<script src="https://unpkg.com/lucide@latest"></script><script>lucide.createIcons()</script>
+</body></html>
