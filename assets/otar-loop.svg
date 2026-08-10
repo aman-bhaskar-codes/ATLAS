@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
+  <defs>
+    <linearGradient id="nodeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#58a6ff"/>
+      <stop offset="100%" style="stop-color:#bc8cff"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background pulse rings -->
+  <circle cx="400" cy="100" r="30" fill="none" stroke="#58a6ff" stroke-width="0.5" opacity="0">
+    <animate attributeName="r" values="30;90" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.4;0" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="400" cy="100" r="30" fill="none" stroke="#bc8cff" stroke-width="0.5" opacity="0">
+    <animate attributeName="r" values="30;90" dur="3s" begin="1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.4;0" dur="3s" begin="1s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="400" cy="100" r="30" fill="none" stroke="#58a6ff" stroke-width="0.5" opacity="0">
+    <animate attributeName="r" values="30;90" dur="3s" begin="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.4;0" dur="3s" begin="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- OTAR Flow Connections -->
+  <!-- O to T -->
+  <line x1="190" y1="100" x2="310" y2="100" stroke="#58a6ff" stroke-width="1.5" opacity="0.4" filter="url(#glow)">
+    <animate attributeName="opacity" values="0.2;0.8;0.2" dur="2s" repeatCount="indefinite"/>
+  </line>
+  <!-- T to A -->
+  <line x1="370" y1="60" x2="490" y2="100" stroke="#bc8cff" stroke-width="1.5" opacity="0.4" filter="url(#glow)">
+    <animate attributeName="opacity" values="0.2;0.8;0.2" dur="2s" begin="0.5s" repeatCount="indefinite"/>
+  </line>
+  <!-- A to R -->
+  <line x1="550" y1="100" x2="610" y2="100" stroke="#f778ba" stroke-width="1.5" opacity="0.4" filter="url(#glow)">
+    <animate attributeName="opacity" values="0.2;0.8;0.2" dur="2s" begin="1s" repeatCount="indefinite"/>
+  </line>
+  <!-- R back to O (arc) -->
+  <path d="M 650 120 Q 400 200 150 120" fill="none" stroke="#3fb950" stroke-width="1" stroke-dasharray="5,5" opacity="0.3">
+    <animate attributeName="stroke-dashoffset" values="0;-20" dur="1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" begin="1.5s" repeatCount="indefinite"/>
+  </path>
+
+  <!-- Traveling particles on connections -->
+  <circle r="2" fill="#58a6ff" filter="url(#glow)">
+    <animateMotion path="M190,100 L310,100" dur="1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;0" dur="1s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="2" fill="#bc8cff" filter="url(#glow)">
+    <animateMotion path="M370,60 L490,100" dur="1s" begin="0.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;0" dur="1s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="2" fill="#f778ba" filter="url(#glow)">
+    <animateMotion path="M550,100 L610,100" dur="0.8s" begin="1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;0" dur="0.8s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="2" fill="#3fb950" filter="url(#glow)">
+    <animateMotion path="M650,120 Q400,200 150,120" dur="2s" begin="1.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0.8;0" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- OBSERVE node -->
+  <g filter="url(#softGlow)">
+    <circle cx="150" cy="100" r="28" fill="#0d1117" stroke="#58a6ff" stroke-width="2">
+      <animate attributeName="stroke-width" values="1.5;3;1.5" dur="3s" repeatCount="indefinite"/>
+    </circle>
+    <text x="150" y="96" text-anchor="middle" fill="#58a6ff" font-family="monospace" font-size="10" font-weight="bold">👁️</text>
+    <text x="150" y="112" text-anchor="middle" fill="#c9d1d9" font-family="monospace" font-size="9">OBSERVE</text>
+  </g>
+
+  <!-- THINK node -->
+  <g filter="url(#softGlow)">
+    <circle cx="350" cy="55" r="28" fill="#0d1117" stroke="#bc8cff" stroke-width="2">
+      <animate attributeName="stroke-width" values="1.5;3;1.5" dur="3s" begin="0.5s" repeatCount="indefinite"/>
+    </circle>
+    <text x="350" y="51" text-anchor="middle" fill="#bc8cff" font-family="monospace" font-size="10" font-weight="bold">🧠</text>
+    <text x="350" y="67" text-anchor="middle" fill="#c9d1d9" font-family="monospace" font-size="9">THINK</text>
+  </g>
+
+  <!-- ACT node -->
+  <g filter="url(#softGlow)">
+    <circle cx="530" cy="100" r="28" fill="#0d1117" stroke="#f778ba" stroke-width="2">
+      <animate attributeName="stroke-width" values="1.5;3;1.5" dur="3s" begin="1s" repeatCount="indefinite"/>
+    </circle>
+    <text x="530" y="96" text-anchor="middle" fill="#f778ba" font-family="monospace" font-size="10" font-weight="bold">⚡</text>
+    <text x="530" y="112" text-anchor="middle" fill="#c9d1d9" font-family="monospace" font-size="9">ACT</text>
+  </g>
+
+  <!-- REFLECT node -->
+  <g filter="url(#softGlow)">
+    <circle cx="660" cy="100" r="28" fill="#0d1117" stroke="#3fb950" stroke-width="2">
+      <animate attributeName="stroke-width" values="1.5;3;1.5" dur="3s" begin="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <text x="660" y="96" text-anchor="middle" fill="#3fb950" font-family="monospace" font-size="10" font-weight="bold">🪞</text>
+    <text x="660" y="112" text-anchor="middle" fill="#c9d1d9" font-family="monospace" font-size="9">REFLECT</text>
+  </g>
+
+  <!-- Safety gate between ACT nodes -->
+  <rect x="475" y="130" width="50" height="20" rx="4" fill="#0d1117" stroke="#f0883e" stroke-width="1">
+    <animate attributeName="stroke-opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite"/>
+  </rect>
+  <text x="500" y="144" text-anchor="middle" fill="#f0883e" font-family="monospace" font-size="7">🛡️ SAFE</text>
+  <line x1="530" y1="128" x2="500" y2="130" stroke="#f0883e" stroke-width="0.8" opacity="0.5"/>
+</svg>

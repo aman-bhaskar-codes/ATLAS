@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" preserveAspectRatio="none" width="100%" height="60">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#0d1117;stop-opacity:1">
+        <animate attributeName="stop-color" values="#0d1117;#1a1b27;#0d1117" dur="4s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="25%" style="stop-color:#58a6ff;stop-opacity:1">
+        <animate attributeName="stop-color" values="#58a6ff;#bc8cff;#58a6ff" dur="4s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="50%" style="stop-color:#bc8cff;stop-opacity:1">
+        <animate attributeName="stop-color" values="#bc8cff;#f778ba;#bc8cff" dur="4s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="75%" style="stop-color:#58a6ff;stop-opacity:1">
+        <animate attributeName="stop-color" values="#58a6ff;#3fb950;#58a6ff" dur="4s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#0d1117;stop-opacity:1">
+        <animate attributeName="stop-color" values="#0d1117;#1a1b27;#0d1117" dur="4s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+    <linearGradient id="shimmer" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:rgba(255,255,255,0);stop-opacity:0"/>
+      <stop offset="50%" style="stop-color:rgba(255,255,255,0.3);stop-opacity:0.3"/>
+      <stop offset="100%" style="stop-color:rgba(255,255,255,0);stop-opacity:0"/>
+      <animate attributeName="x1" values="-100%;100%" dur="3s" repeatCount="indefinite"/>
+      <animate attributeName="x2" values="0%;200%" dur="3s" repeatCount="indefinite"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="2" y="59" fill="url(#grad1)" rx="1">
+    <animate attributeName="opacity" values="0.6;1;0.6" dur="2s" repeatCount="indefinite"/>
+  </rect>
+  <rect width="1200" height="2" y="59" fill="url(#shimmer)" rx="1"/>
+  <circle cx="600" cy="60" r="4" fill="#58a6ff">
+    <animate attributeName="r" values="3;5;3" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="300" cy="60" r="2" fill="#bc8cff">
+    <animate attributeName="r" values="1.5;3;1.5" dur="2.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="900" cy="60" r="2" fill="#f778ba">
+    <animate attributeName="r" values="1.5;3;1.5" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.3;0.8;0.3" dur="3s" repeatCount="indefinite"/>
+  </circle>
+</svg>

@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 180" width="800" height="180">
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <linearGradient id="cardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#161b22"/>
+      <stop offset="100%" style="stop-color:#0d1117"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Working Memory -->
+  <g>
+    <rect x="10" y="10" width="180" height="160" rx="12" fill="url(#cardBg)" stroke="#58a6ff" stroke-width="1.5">
+      <animate attributeName="stroke-opacity" values="0.3;1;0.3" dur="4s" repeatCount="indefinite"/>
+    </rect>
+    <text x="100" y="42" text-anchor="middle" fill="#58a6ff" font-family="monospace" font-size="20">📝</text>
+    <text x="100" y="68" text-anchor="middle" fill="#58a6ff" font-family="monospace" font-size="12" font-weight="bold">Working</text>
+    <line x1="30" y1="80" x2="170" y2="80" stroke="#21262d" stroke-width="1"/>
+    <text x="100" y="100" text-anchor="middle" fill="#c9d1d9" font-family="sans-serif" font-size="9">Short-term scratchpad</text>
+    <text x="100" y="118" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">Current context</text>
+    <text x="100" y="133" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">Tool results</text>
+    <text x="100" y="148" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">Cleared per-task</text>
+    <!-- Pulse dot -->
+    <circle cx="170" cy="25" r="3" fill="#58a6ff">
+      <animate attributeName="r" values="2;4;2" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- Episodic Memory -->
+  <g>
+    <rect x="210" y="10" width="180" height="160" rx="12" fill="url(#cardBg)" stroke="#bc8cff" stroke-width="1.5">
+      <animate attributeName="stroke-opacity" values="0.3;1;0.3" dur="4s" begin="1s" repeatCount="indefinite"/>
+    </rect>
+    <text x="300" y="42" text-anchor="middle" fill="#bc8cff" font-family="monospace" font-size="20">📚</text>
+    <text x="300" y="68" text-anchor="middle" fill="#bc8cff" font-family="monospace" font-size="12" font-weight="bold">Episodic</text>
+    <line x1="230" y1="80" x2="370" y2="80" stroke="#21262d" stroke-width="1"/>
+    <text x="300" y="100" text-anchor="middle" fill="#c9d1d9" font-family="sans-serif" font-size="9">Event timeline</text>
+    <text x="300" y="118" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">What happened</text>
+    <text x="300" y="133" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">Cross-task patterns</text>
+    <text x="300" y="148" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">Auto-consolidated</text>
+    <circle cx="370" cy="25" r="3" fill="#bc8cff">
+      <animate attributeName="r" values="2;4;2" dur="1.5s" begin="0.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" begin="0.5s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- Semantic Memory -->
+  <g>
+    <rect x="410" y="10" width="180" height="160" rx="12" fill="url(#cardBg)" stroke="#3fb950" stroke-width="1.5">
+      <animate attributeName="stroke-opacity" values="0.3;1;0.3" dur="4s" begin="2s" repeatCount="indefinite"/>
+    </rect>
+    <text x="500" y="42" text-anchor="middle" fill="#3fb950" font-family="monospace" font-size="20">🧲</text>
+    <text x="500" y="68" text-anchor="middle" fill="#3fb950" font-family="monospace" font-size="12" font-weight="bold">Semantic</text>
+    <line x1="430" y1="80" x2="570" y2="80" stroke="#21262d" stroke-width="1"/>
+    <text x="500" y="100" text-anchor="middle" fill="#c9d1d9" font-family="sans-serif" font-size="9">Vector embeddings</text>
+    <text x="500" y="118" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">ChromaDB backend</text>
+    <text x="500" y="133" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">Meaning-based search</text>
+    <text x="500" y="148" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">Auto-dedup/merge</text>
+    <circle cx="570" cy="25" r="3" fill="#3fb950">
+      <animate attributeName="r" values="2;4;2" dur="1.5s" begin="1s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" begin="1s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- User Model -->
+  <g>
+    <rect x="610" y="10" width="180" height="160" rx="12" fill="url(#cardBg)" stroke="#f778ba" stroke-width="1.5">
+      <animate attributeName="stroke-opacity" values="0.3;1;0.3" dur="4s" begin="3s" repeatCount="indefinite"/>
+    </rect>
+    <text x="700" y="42" text-anchor="middle" fill="#f778ba" font-family="monospace" font-size="20">👤</text>
+    <text x="700" y="68" text-anchor="middle" fill="#f778ba" font-family="monospace" font-size="12" font-weight="bold">User Model</text>
+    <line x1="630" y1="80" x2="770" y2="80" stroke="#21262d" stroke-width="1"/>
+    <text x="700" y="100" text-anchor="middle" fill="#c9d1d9" font-family="sans-serif" font-size="9">Personalization</text>
+    <text x="700" y="118" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">Preferences</text>
+    <text x="700" y="133" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">Communication style</text>
+    <text x="700" y="148" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="8">Usage patterns</text>
+    <circle cx="770" cy="25" r="3" fill="#f778ba">
+      <animate attributeName="r" values="2;4;2" dur="1.5s" begin="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" begin="1.5s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- Connection lines between cards -->
+  <line x1="190" y1="90" x2="210" y2="90" stroke="#21262d" stroke-width="1" stroke-dasharray="3,3">
+    <animate attributeName="stroke-dashoffset" values="0;-6" dur="1s" repeatCount="indefinite"/>
+  </line>
+  <line x1="390" y1="90" x2="410" y2="90" stroke="#21262d" stroke-width="1" stroke-dasharray="3,3">
+    <animate attributeName="stroke-dashoffset" values="0;-6" dur="1s" repeatCount="indefinite"/>
+  </line>
+  <line x1="590" y1="90" x2="610" y2="90" stroke="#21262d" stroke-width="1" stroke-dasharray="3,3">
+    <animate attributeName="stroke-dashoffset" values="0;-6" dur="1s" repeatCount="indefinite"/>
+  </line>
+</svg>
