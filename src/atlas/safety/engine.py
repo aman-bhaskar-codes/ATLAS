@@ -18,7 +18,7 @@ from atlas.infra.clock import Clock
 from atlas.infra.config import SafetyCfg
 from atlas.infra.errors import AtlasError
 from atlas.infra.logging import get_logger
-from atlas.infra.types import AuditRecord, SafetyDecision, ToolRequest, ToolResult
+from atlas.infra.types import AuditRecord, SafetyDecision, Tier, ToolRequest, ToolResult
 from atlas.safety.audit import AuditLog
 from atlas.safety.classifier import TierClassifier
 from atlas.safety.confirm import Confirmer
@@ -101,7 +101,8 @@ class SafetyEngine:
             raise DeniedError(decision)
 
         if decision.decision == "require_confirm":
-            if not await self._confirm(req, decision, tool):
+            needs_code = decision.tier >= Tier.DANGEROUS
+            if not await self._confirm(req, decision, tool, require_code=needs_code):
                 await self._audit_decision(req, decision, outcome="denied")
                 raise DeniedError(decision)
 
@@ -130,16 +131,27 @@ class SafetyEngine:
         ))
         return result
 
-    async def _confirm(self, req: ToolRequest, decision: SafetyDecision, tool: Tool) -> bool:
+    async def _confirm(
+        self, req: ToolRequest, decision: SafetyDecision, tool: Tool,
+        *, require_code: bool = False,
+    ) -> bool:
         if self._confirmer is None:
             _log.warning("safety.no_confirmer", event_type="safety",
                          correlation_id=req.correlation_id)
             return False
         preview = tool.dry_run(req.args)
+        tier_label = "DANGEROUS" if require_code else f"TIER {int(decision.tier)}"
         prompt = (
-            f"[TIER {int(decision.tier)}] {req.tool}.{req.operation}\n"
+            f"[{tier_label}] {req.tool}.{req.operation}\n"
             f"reason: {decision.reason}\nwould do: {preview}"
         )
+        if require_code:
+            import secrets
+            code = f"{secrets.randbelow(10000):04d}"
+            prompt += f"\n⚠️  HIGH-IMPACT ACTION. Type confirmation code [{code}] to proceed."
+            _log.warning("safety.dangerous_confirm", event_type="safety",
+                         correlation_id=req.correlation_id, tool=req.tool,
+                         detail="confirmation code required")
         try:
             return await asyncio.wait_for(
                 self._confirmer.confirm(prompt, decision, req),

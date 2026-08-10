@@ -146,7 +146,8 @@ class TierClassifier:
     def _as_decision(tier: Tier, reason: str, rule: str) -> SafetyDecision:
         decision: Decision = (
             "allow" if tier <= Tier.NOTIFY
-            else "require_confirm" if tier == Tier.CONFIRM
+            else "require_confirm" if tier in (Tier.CONFIRM, Tier.DANGEROUS)
             else "deny"
         )
         return SafetyDecision(decision=decision, tier=tier, reason=reason, matched_rule=rule)
+

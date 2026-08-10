@@ -194,6 +194,63 @@ _MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id, sequence);
     CREATE INDEX IF NOT EXISTS idx_task_events_event_id ON task_events(event_id);
     """,
+    # 007 — Vamos alignment: hash chain audit + feedback + schedules + llm_calls + workflow_templates
+    """
+    ALTER TABLE audit_events ADD COLUMN prev_hash TEXT NOT NULL DEFAULT '';
+    ALTER TABLE audit_events ADD COLUMN row_hash TEXT NOT NULL DEFAULT '';
+
+    CREATE TABLE IF NOT EXISTS feedback (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        rating INTEGER CHECK (rating IN (-1, 1)),
+        comment TEXT,
+        original_output TEXT,
+        edited_output TEXT,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_feedback_task ON feedback(task_id);
+    CREATE INDEX IF NOT EXISTS idx_feedback_rating ON feedback(rating);
+
+    CREATE TABLE IF NOT EXISTS schedules (
+        id TEXT PRIMARY KEY,
+        description TEXT NOT NULL,
+        cron_expression TEXT NOT NULL,
+        task_template TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        last_run_ts TEXT,
+        next_run_ts TEXT NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS llm_calls (
+        id TEXT PRIMARY KEY,
+        task_id TEXT,
+        step_index INTEGER,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        tokens_in INTEGER NOT NULL,
+        tokens_out INTEGER NOT NULL,
+        cost_usd REAL NOT NULL,
+        latency_ms INTEGER NOT NULL,
+        cached INTEGER NOT NULL DEFAULT 0,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_llm_calls_task ON llm_calls(task_id);
+    CREATE INDEX IF NOT EXISTS idx_llm_calls_model ON llm_calls(model);
+    CREATE INDEX IF NOT EXISTS idx_llm_calls_created ON llm_calls(created_ts);
+
+    CREATE TABLE IF NOT EXISTS workflow_templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        steps TEXT NOT NULL,
+        variables TEXT NOT NULL DEFAULT '[]',
+        derived_from TEXT NOT NULL DEFAULT '[]',
+        use_count INTEGER NOT NULL DEFAULT 0,
+        success_rate REAL,
+        created_ts TEXT NOT NULL
+    );
+    """,
 )
 
 

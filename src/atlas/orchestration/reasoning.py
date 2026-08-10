@@ -1,10 +1,11 @@
-"""Bounded ReAct reasoning loop — the heart of the runtime.
+"""Bounded OTAR reasoning loop — the heart of the runtime.
 
-EXPLICIT BY DESIGN: each iteration drives the state machine through concrete
-states and every external call is timed, retried (if recoverable), and audited.
-The loop CANNOT run forever: limits raise typed errors the monitor turns into a
-graceful FAILED. Tool actions go through the dispatcher (Safety Engine); final/
-ask actions terminate. Reflection runs before consequential actions (Phase 4.5).
+OTAR: Observe → Think → Act → Reflect. Each iteration drives the state machine
+through concrete states and every external call is timed, retried (if
+recoverable), and audited. The loop CANNOT run forever: limits raise typed errors
+the monitor turns into a graceful FAILED. Tool actions go through the dispatcher
+(Safety Engine); final/ask actions terminate. Pre-action critique runs before
+consequential actions (Phase 4.5). Post-action reflection evaluates outcomes.
 """
 
 from __future__ import annotations
@@ -103,6 +104,15 @@ class ReasoningLoop:
                 obs = await self._retry.run(_do_dispatch, counter)
                 machine.transition(TaskState.OBSERVING)
                 await self._recorder.record_observation(correlation_id, obs)
+
+                # REFLECT (OTAR step 4): evaluate action outcome
+                reflection = await self._reflection.reflect(action, obs, context)
+                if reflection.learnings:
+                    _log.info("reasoning.reflect", event_type="orchestration",
+                              correlation_id=correlation_id, step=counter.steps,
+                              learnings=reflection.learnings,
+                              succeeded=reflection.succeeded)
+
                 history.append((thought, obs))
 
             except CancellationError as exc:

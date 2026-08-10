@@ -20,10 +20,12 @@ Source = Literal["cli", "file", "whatsapp", "api", "scheduler", "system"]
 
 
 class Tier(IntEnum):
-    AUTO = 0
-    NOTIFY = 1
-    CONFIRM = 2
-    BLOCK = 3
+    AUTO = 0       # Vamos Tier 1: read-only, no side effects — auto-approve
+    NOTIFY = 1     # Vamos Tier 2: reversible side effects — auto-approve with notification
+    CONFIRM = 2    # Vamos Tier 3: irreversible/external — require explicit user approval
+    DANGEROUS = 3  # Vamos Tier 4: high-impact (delete DB, spend money, access creds) — approval + confirmation code
+    BLOCK = 4      # Hard-blocked: never executed
+
 
 
 class _Frozen(BaseModel):

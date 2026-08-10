@@ -18,8 +18,9 @@ from atlas.infra.logging import get_logger
 from atlas.infra.types import ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 from atlas.orchestration.parser import ResponseParser
+from atlas.orchestration.reflection import ReflectionResult
 from atlas.orchestration.tiering import TierEstimator
-from atlas.orchestration.types import Action, Critique, CritiqueVerdict
+from atlas.orchestration.types import Action, Critique, CritiqueVerdict, Observation
 from atlas.orchestration.validator import OutputValidator
 
 _log = get_logger("atlas.orch.critique")
@@ -46,7 +47,11 @@ _REVISE_SYSTEM = (
 
 
 class SelfCritique:
-    """Implements the ReflectionHook protocol from Phase 4."""
+    """Implements the ReflectionHook protocol from Phase 4.
+
+    Pre-action: critique() reviews and can revise/abort risky actions.
+    Post-action: reflect() evaluates outcomes and extracts learnings.
+    """
 
     def __init__(
         self, *, gateway: ModelGateway, estimator: TierEstimator,
@@ -84,6 +89,31 @@ class SelfCritique:
         # REVISE: regenerate once, bounded
         revised = await self._revise(action, context, verdict, corr)
         return revised
+
+    async def reflect(
+        self, action: Action, observation: Observation, context: str,
+    ) -> ReflectionResult:
+        """Post-action OTAR Reflect step: evaluate observation outcome."""
+        succeeded = observation.success if hasattr(observation, "success") else True
+        learnings: list[str] = []
+
+        # Extract learnings from errors
+        if hasattr(observation, "error") and observation.error:
+            learnings.append(f"Action {action.tool}.{action.operation} failed: {observation.error}")
+            succeeded = False
+
+        # Extract learnings from side effects
+        if hasattr(observation, "side_effects") and observation.side_effects:
+            for se in observation.side_effects:
+                if hasattr(se, "kind"):
+                    learnings.append(f"Side effect: {se.kind} on {se.target}")
+
+        return ReflectionResult(
+            succeeded=succeeded,
+            learnings=learnings,
+            should_adjust_plan=not succeeded,
+            adjustment_reason=f"Action failed: {observation.error}" if not succeeded and hasattr(observation, "error") else None,
+        )
 
     async def _run_critique(
         self, action: Action, context: str, corr: CorrelationId
@@ -152,3 +182,4 @@ class SelfCritique:
         if s == -1 or e == -1:
             raise ValueError("no JSON")
         return text[s : e + 1]
+
