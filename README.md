@@ -3,10 +3,19 @@
 <!-- ║            Autonomous Task & Learning Agent System                       ║ -->
 <!-- ╚═══════════════════════════════════════════════════════════════════════════╝ -->
 
+<!-- Load custom animations and scripts -->
+<link rel="stylesheet" href="assets/styles/readme-animations.css">
+
 <div align="center">
 
-<!-- ═══ ANIMATED WAVE HEADER ═══ -->
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,20:161b22,40:1a1b27,60:161b22,80:1a1b27,100:0d1117&height=240&section=header&text=A%20T%20L%20A%20S&fontSize=90&fontColor=58a6ff&animation=fadeIn&fontAlignY=32&desc=Autonomous%20Task%20%26%20Learning%20Agent%20System&descAlignY=56&descSize=20&descColor=8b949e" width="100%" />
+<!-- ═══ HERO WITH PARTICLE BACKGROUND ═══ -->
+<div class="hero-container" style="position: relative; background: #0d1117; padding: 40px 0;">
+  <!-- Particle animation canvas -->
+  <canvas id="particles-canvas" width="100%" height="300"></canvas>
+  
+  <!-- Animated wave header -->
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,20:161b22,40:1a1b27,60:161b22,80:1a1b27,100:0d1117&height=240&section=header&text=A%20T%20L%20A%20S&fontSize=90&fontColor=58a6ff&animation=fadeIn&fontAlignY=32&desc=Autonomous%20Task%20%26%20Learning%20Agent%20System&descAlignY=56&descSize=20&descColor=8b949e" width="100%" style="position: relative; z-index: 1;" />
+</div>
 
 <!-- ═══ ANIMATED TYPING ═══ -->
 <a href="https://github.com/aman-bhaskar-codes/ATLAS">
@@ -15,12 +24,12 @@
 
 <br/>
 
-<!-- ═══ BADGES — ROW 1: STATUS ═══ -->
+<!-- ═══ BADGES — ROW 1: STATUS (with pulse animation on hover) ═══ -->
 <p>
-  <a href="https://github.com/aman-bhaskar-codes/ATLAS/actions"><img src="https://img.shields.io/badge/CI-passing-00d68f?style=for-the-badge&logo=github-actions&logoColor=white&labelColor=0d1117" alt="CI" /></a>
-  <img src="https://img.shields.io/badge/Tests-149_passing-00d68f?style=for-the-badge&logo=pytest&logoColor=white&labelColor=0d1117" alt="Tests" />
-  <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white&labelColor=0d1117" alt="Python" /></a>
-  <a href="https://docs.astral.sh/uv/"><img src="https://img.shields.io/badge/uv-managed-7c3aed?style=for-the-badge&logo=astral&logoColor=white&labelColor=0d1117" alt="uv" /></a>
+  <a href="https://github.com/aman-bhaskar-codes/ATLAS/actions" class="badge-pulse"><img src="https://img.shields.io/badge/CI-passing-00d68f?style=for-the-badge&logo=github-actions&logoColor=white&labelColor=0d1117" alt="CI" /></a>
+  <span data-counter data-target="149"><img src="https://img.shields.io/badge/Tests-149_passing-00d68f?style=for-the-badge&logo=pytest&logoColor=white&labelColor=0d1117" alt="Tests" /></span>
+  <a href="https://python.org" class="badge-pulse"><img src="https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white&labelColor=0d1117" alt="Python" /></a>
+  <a href="https://docs.astral.sh/uv/" class="badge-pulse"><img src="https://img.shields.io/badge/uv-managed-7c3aed?style=for-the-badge&logo=astral&logoColor=white&labelColor=0d1117" alt="uv" /></a>
 </p>
 
 <!-- ═══ BADGES — ROW 2: QUALITY ═══ -->
@@ -65,7 +74,7 @@
 
 <table>
 <tr>
-<td width="50%">
+<td width="50%" data-scroll-reveal>
 
 ### The Problem
 
@@ -83,40 +92,81 @@ A production-grade system with:
 &nbsp;&nbsp;✅&nbsp; **Multi-agent DAG** decomposition with parallel execution  
 &nbsp;&nbsp;✅&nbsp; **OTAR reasoning** — Observe → Think → Act → Reflect  
 &nbsp;&nbsp;✅&nbsp; **4-layer memory** with vector search and user modeling  
-&nbsp;&nbsp;✅&nbsp; **149 tests**, zero mocked business logic
+&nbsp;&nbsp;✅&nbsp; **<span data-counter data-target="149">149</span> tests**, zero mocked business logic
 
 </td>
-<td width="50%">
+<td width="50%" data-scroll-reveal>
 
-```
-  ╔══════════════════════════════════════╗
-  ║        ◈  ATLAS Runtime Flow        ║
-  ╠══════════════════════════════════════╣
-  ║                                      ║
-  ║    📥  Task Intake                   ║
-  ║     │                                ║
-  ║     ▼                                ║
-  ║    🧠  Memory Retrieval              ║
-  ║     │                                ║
-  ║     ▼                                ║
-  ║    📋  Plan Generation               ║
-  ║     │                                ║
-  ║     ▼                                ║
-  ║    🔄  OTAR Loop ◄───────────┐       ║
-  ║     │   Observe              │       ║
-  ║     │   Think                │       ║
-  ║     │   Act → 🛡️ Safety      │       ║
-  ║     │   Reflect ─────────────┘       ║
-  ║     │                                ║
-  ║     ▼                                ║
-  ║    📊  Evaluation & Learning         ║
-  ║                                      ║
-  ╚══════════════════════════════════════╝
-```
+<div class="terminal-3d" style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; font-family: 'JetBrains Mono', monospace; transform: perspective(1000px) rotateX(5deg) rotateY(-2deg); box-shadow: 0 25px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(88,166,255,0.1);">
+<div style="display: flex; gap: 8px; margin-bottom: 15px;">
+  <div style="width: 12px; height: 12px; border-radius: 50%; background: #f85149;"></div>
+  <div style="width: 12px; height: 12px; border-radius: 50%; background: #d29922;"></div>
+  <div style="width: 12px; height: 12px; border-radius: 50%; background: #3fb950;"></div>
+</div>
+<div style="color: #c9d1d9; font-size: 13px; line-height: 1.8;">
+<div><span style="color: #58a6ff; font-weight: 600;">$</span> <span style="color: #bc8cff;">atlas run "research quantum"</span></div>
+<div style="margin-left: 20px; color: #8b949e;">
+  <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0;">
+    <span>🧠</span><span>Context: 3 memories</span>
+  </div>
+  <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0;">
+    <span>📋</span><span>Plan: 4 steps</span>
+  </div>
+  <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0;">
+    <span>🔬</span><span>Research: arXiv + Wikipedia</span>
+  </div>
+  <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0;">
+    <span>🛡️</span><span>Safety: Tier 0 (auto)</span>
+  </div>
+  <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0; color: #3fb950;">
+    <span>✅</span><span>Complete in 4.2s</span>
+  </div>
+</div>
+<div style="margin-top: 10px;">
+  <span style="color: #58a6ff; font-weight: 600;">$</span>
+  <span style="display: inline-block; width: 8px; height: 14px; background: #58a6ff; animation: blink 1s step-end infinite;"></span>
+</div>
+</div>
+</div>
 
 </td>
 </tr>
 </table>
+
+<br/>
+
+<!-- ═══ LIVE DEMOS SECTION ═══ -->
+<div align="center" data-scroll-reveal>
+  <h3>🎬 See ATLAS in Action</h3>
+  <p><em>Watch the OTAR loop, safety intercepts, and multi-agent orchestration live</em></p>
+</div>
+
+<table>
+<tr>
+<td width="50%" align="center" data-scroll-reveal>
+  <img src="assets/demos/task-execution.gif" alt="Task Execution Demo" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
+  <p><strong>📋 Task Execution</strong><br/><em>Full OTAR loop with live streaming</em></p>
+</td>
+<td width="50%" align="center" data-scroll-reveal>
+  <img src="assets/demos/safety-intercept.gif" alt="Safety Intercept Demo" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
+  <p><strong>🛡️ Safety Intercept</strong><br/><em>Dangerous action → approval flow</em></p>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center" data-scroll-reveal>
+  <img src="assets/demos/multi-agent-dag.gif" alt="Multi-Agent DAG Demo" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
+  <p><strong>🤖 Multi-Agent DAG</strong><br/><em>Parallel task decomposition</em></p>
+</td>
+<td width="50%" align="center" data-scroll-reveal>
+  <img src="assets/demos/memory-retrieval.gif" alt="Memory Retrieval Demo" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
+  <p><strong>🧠 Memory Influence</strong><br/><em>Context shaping decisions</em></p>
+</td>
+</tr>
+</table>
+
+<div align="center">
+  <p><em>Note: Demo GIFs are placeholders. See <a href="assets/demos/README.md">assets/demos/README.md</a> for recording instructions.</em></p>
+</div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- ═══ SECTION: ARCHITECTURE ═══════════════════════════════════ -->
@@ -281,8 +331,9 @@ This prevents accidental approvals of high-impact operations.
 
 Every agent iteration follows the **Observe → Think → Act → Reflect** cycle. This isn't just ReAct — the explicit Reflect step evaluates outcomes and prevents repeating mistakes.
 
-<div align="center">
-  <img src="assets/otar-loop.svg" alt="OTAR Loop Animation" width="700" />
+<div align="center" data-scroll-reveal>
+  <img src="assets/animations/otar-loop.svg" alt="OTAR Loop Animation" width="700" style="border-radius: 12px; border: 1px solid #30363d; padding: 20px; background: #0d1117;" />
+  <p><em>Animated OTAR cycle — watch the flow progress through each phase</em></p>
 </div>
 
 <br/>
@@ -395,6 +446,92 @@ Each specialist has **its own system prompt, tool permissions, and model prefere
 
 <div align="center">
   <img src="assets/memory-layers.svg" alt="4-Layer Memory System" width="100%" />
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- ═══ SECTION: COMPARISON ═════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<img src="assets/divider.svg" width="100%" />
+
+<div align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=d29922&center=true&vCenter=true&repeat=false&width=600&height=50&lines=%F0%9F%94%8D+How+ATLAS+Compares" alt="Section" />
+  <p><em>Production-grade safety and transparency vs. existing frameworks</em></p>
+</div>
+
+<br/>
+
+<table data-scroll-reveal>
+<tr style="background: #161b22;">
+  <th align="left" width="35%">Feature</th>
+  <th align="center" width="16%">ATLAS</th>
+  <th align="center" width="16%">AutoGPT</th>
+  <th align="center" width="16%">LangChain</th>
+  <th align="center" width="16%">CrewAI</th>
+</tr>
+<tr class="atlas-row" style="background: linear-gradient(90deg, rgba(210, 153, 34, 0.1) 0%, rgba(210, 153, 34, 0.05) 100%);">
+  <td><strong>🛡️ 5-Tier Safety System</strong></td>
+  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+  <td align="center" style="color: #d29922;">⚠️</td>
+</tr>
+<tr class="comparison-row atlas-row">
+  <td><strong>🔗 Hash-Chain Audit Log</strong></td>
+  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+</tr>
+<tr class="comparison-row atlas-row">
+  <td><strong>🔄 OTAR Reasoning Loop</strong></td>
+  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
+  <td align="center" style="color: #d29922;">⚠️ ReAct</td>
+  <td align="center" style="color: #d29922;">⚠️ ReAct</td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+</tr>
+<tr class="comparison-row atlas-row">
+  <td><strong>📊 Multi-Agent DAGs</strong></td>
+  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
+  <td align="center" style="color: #d29922;">⚠️ Basic</td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
+</tr>
+<tr class="comparison-row atlas-row">
+  <td><strong>🧠 4-Layer Memory System</strong></td>
+  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
+  <td align="center" style="color: #d29922;">⚠️ Basic</td>
+  <td align="center" style="color: #d29922;">⚠️ Vector only</td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+</tr>
+<tr class="comparison-row atlas-row">
+  <td><strong>📈 Evaluation & Learning Loop</strong></td>
+  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+</tr>
+<tr class="comparison-row atlas-row">
+  <td><strong>🔴 Production-Ready Tests</strong></td>
+  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span> 149</td>
+  <td align="center" style="color: #d29922;">⚠️ Limited</td>
+  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
+  <td align="center" style="color: #d29922;">⚠️ Limited</td>
+</tr>
+<tr class="comparison-row atlas-row">
+  <td><strong>💰 Cost Tracking & Governance</strong></td>
+  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+  <td align="center" style="color: #d29922;">⚠️ Basic</td>
+  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
+</tr>
+</table>
+
+<br/>
+
+<div align="center">
+  <p style="color: #8b949e; font-style: italic;">
+    ✅ Full support • ⚠️ Partial/Basic • ❌ Not available
+  </p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -699,3 +836,22 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 <a href="https://github.com/aman-bhaskar-codes"><img src="https://img.shields.io/badge/GitHub-aman--bhaskar--codes-181717?style=for-the-badge&logo=github&logoColor=white&labelColor=0d1117" /></a>
 
 </div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- ═══ ANIMATION SCRIPTS ═══════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<!-- Load animation scripts -->
+<script src="assets/scripts/particles.js" defer></script>
+<script src="assets/scripts/counter.js" defer></script>
+<script src="assets/scripts/scroll-reveal.js" defer></script>
+<script src="assets/scripts/diagram-interactive.js" defer></script>
+
+<!-- Inline blink animation for cursor -->
+<style>
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+</style>

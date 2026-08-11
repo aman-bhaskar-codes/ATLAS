@@ -306,6 +306,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     cap_router = CapabilityRouter()
     selector = ModelSelector(capability_index, health)
     
+    embedder = OllamaEmbedder(settings)
     cache_vectors = ChromaVectorStore(str(settings.data_dir / "chroma"), collection="atlas_cache")
     semantic_cache = SemanticCache(db, cache_vectors, embedder)
     
@@ -414,7 +415,6 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     }
 
     vectors = ChromaVectorStore(str(settings.data_dir / "chroma"))
-    embedder = OllamaEmbedder(settings)
     episodic = EpisodicMemory(db, clock)
     semantic = SemanticMemory(db, vectors, embedder, ids, clock)
     user_model = UserModel(db, clock)

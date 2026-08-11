@@ -1,0 +1,115 @@
+<svg width="700" height="400" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <style>
+      @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; }
+      }
+      
+      .node { 
+        fill: #161b22; 
+        stroke: #58a6ff; 
+        stroke-width: 2;
+      }
+      
+      .node.active {
+        animation: pulse 2s ease-in-out infinite;
+      }
+      
+      @keyframes pulse {
+        0%, 100% { 
+          stroke: #58a6ff; 
+          stroke-width: 2;
+          filter: drop-shadow(0 0 3px #58a6ff);
+        }
+        50% { 
+          stroke: #3fb950; 
+          stroke-width: 3;
+          filter: drop-shadow(0 0 10px #3fb950);
+        }
+      }
+      
+      .label { 
+        fill: #c9d1d9; 
+        font-family: 'JetBrains Mono', monospace; 
+        font-size: 16px;
+        font-weight: 600;
+      }
+      
+      .flow-path {
+        fill: none;
+        stroke: #30363d;
+        stroke-width: 2;
+        stroke-dasharray: 1000;
+        stroke-dashoffset: 1000;
+        animation: draw 4s ease-in-out infinite;
+      }
+      
+      @keyframes draw {
+        to { stroke-dashoffset: 0; }
+      }
+      
+      .loop-arrow {
+        fill: none;
+        stroke: #bc8cff;
+        stroke-width: 2;
+        stroke-dasharray: 500;
+        stroke-dashoffset: 500;
+        animation: draw-loop 4s ease-in-out 4s infinite;
+      }
+      
+      @keyframes draw-loop {
+        to { stroke-dashoffset: 0; }
+      }
+      
+      .icon { font-size: 32px; }
+    </style>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="700" height="400" fill="#0d1117"/>
+  
+  <!-- Flow paths -->
+  <path class="flow-path" d="M 150 100 L 350 100"/>
+  <path class="flow-path" d="M 350 100 L 550 100"/>
+  <path class="flow-path" d="M 550 100 L 550 300"/>
+  <path class="flow-path" d="M 550 300 L 350 300"/>
+  <path class="loop-arrow" d="M 350 300 Q 100 300 100 100 L 130 100"/>
+  
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#30363d"/>
+    </marker>
+  </defs>
+  <path d="M 350 100" marker-end="url(#arrowhead)"/>
+  
+  <!-- Nodes -->
+  <g class="node active">
+    <circle cx="150" cy="100" r="50"/>
+    <text class="icon" x="150" y="110" text-anchor="middle">👁️</text>
+    <text class="label" x="150" y="170" text-anchor="middle">Observe</text>
+  </g>
+  
+  <g class="node">
+    <circle cx="350" cy="100" r="50"/>
+    <text class="icon" x="350" y="110" text-anchor="middle">🧠</text>
+    <text class="label" x="350" y="170" text-anchor="middle">Think</text>
+  </g>
+  
+  <g class="node">
+    <circle cx="550" cy="100" r="50"/>
+    <text class="icon" x="550" y="110" text-anchor="middle">⚡</text>
+    <text class="label" x="550" y="170" text-anchor="middle">Act</text>
+  </g>
+  
+  <g class="node">
+    <circle cx="550" cy="300" r="50"/>
+    <text class="icon" x="550" y="310" text-anchor="middle">🪞</text>
+    <text class="label" x="550" y="370" text-anchor="middle">Reflect</text>
+  </g>
+  
+  <!-- Loop annotation -->
+  <text x="50" y="200" fill="#bc8cff" font-family="'JetBrains Mono', monospace" font-size="14">
+    ← Loop
+  </text>
+</svg>

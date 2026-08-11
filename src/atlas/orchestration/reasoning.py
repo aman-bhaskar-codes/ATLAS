@@ -95,6 +95,10 @@ class ReasoningLoop:
                 action = await self._reflection.critique(action, context)
                 counter.tick_tool()
                 machine.transition(TaskState.WAITING_TOOL)
+                await self._events.emit(
+                    task_id=task_id, correlation_id=correlation_id, state=machine.state.value,
+                    kind="tool.requested", tool=action.tool, operation=action.operation, args=action.args
+                )
                 self._monitor.check_may_continue(token)
                 machine.transition(TaskState.EXECUTING)
 
@@ -102,6 +106,10 @@ class ReasoningLoop:
                     return await self._dispatch.dispatch(a, correlation_id)
 
                 obs = await self._retry.run(_do_dispatch, counter)
+                await self._events.emit(
+                    task_id=task_id, correlation_id=correlation_id, state=machine.state.value,
+                    kind="tool.result", tool=action.tool, ok=obs.ok, error=obs.error
+                )
                 machine.transition(TaskState.OBSERVING)
                 await self._recorder.record_observation(correlation_id, obs)
 

@@ -1,0 +1,173 @@
+<svg width="1200" height="800" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; }
+      }
+      
+      .component {
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+      
+      .component:hover {
+        filter: brightness(1.3);
+      }
+      
+      .component rect {
+        fill: #161b22;
+        stroke: #58a6ff;
+        stroke-width: 2;
+        rx: 8;
+      }
+      
+      .component text {
+        fill: #c9d1d9;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px;
+        font-weight: 500;
+        pointer-events: none;
+      }
+      
+      .status-dot {
+        animation: pulse-dot 2s ease-in-out infinite;
+      }
+      
+      @keyframes pulse-dot {
+        0%, 100% { 
+          r: 5;
+          fill: #3fb950;
+          opacity: 1;
+        }
+        50% { 
+          r: 7;
+          fill: #3fb950;
+          opacity: 0.6;
+        }
+      }
+      
+      .flow-line {
+        stroke: #30363d;
+        stroke-width: 2;
+        stroke-dasharray: 800;
+        stroke-dashoffset: 800;
+        animation: flow 4s linear infinite;
+      }
+      
+      @keyframes flow {
+        to { stroke-dashoffset: 0; }
+      }
+      
+      .layer-label {
+        fill: #8b949e;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 16px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+      }
+    </style>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="800" fill="#0d1117"/>
+  
+  <!-- Flow lines between layers -->
+  <line class="flow-line" x1="600" y1="100" x2="600" y2="200"/>
+  <line class="flow-line" x1="600" y1="300" x2="600" y2="400"/>
+  <line class="flow-line" x1="600" y1="500" x2="600" y2="600"/>
+  
+  <!-- Entry Layer -->
+  <text class="layer-label" x="50" y="80">🌐 Entry Points</text>
+  
+  <g class="component" data-info="CLI interface for terminal-based task submission">
+    <rect x="100" y="100" width="150" height="80"/>
+    <circle class="status-dot" cx="240" cy="110" r="5"/>
+    <text x="175" y="135">⌨️ CLI</text>
+    <text x="140" y="155" font-size="11" fill="#8b949e">atlas run</text>
+  </g>
+  
+  <g class="component" data-info="FastAPI REST API with SSE support">
+    <rect x="300" y="100" width="150" height="80"/>
+    <circle class="status-dot" cx="440" cy="110" r="5"/>
+    <text x="365" y="135">📡 FastAPI</text>
+    <text x="330" y="155" font-size="11" fill="#8b949e">:8730</text>
+  </g>
+  
+  <g class="component" data-info="Cron scheduler for recurring tasks">
+    <rect x="500" y="100" width="150" height="80"/>
+    <circle class="status-dot" cx="640" cy="110" r="5"/>
+    <text x="555" y="135">⏰ Scheduler</text>
+    <text x="540" y="155" font-size="11" fill="#8b949e">5-field cron</text>
+  </g>
+  
+  <!-- Orchestration Layer -->
+  <text class="layer-label" x="50" y="280">🔄 OTAR Loop</text>
+  
+  <g class="component" data-info="Observe → Think → Act → Reflect reasoning cycle">
+    <rect x="200" y="300" width="800" height="120"/>
+    <circle class="status-dot" cx="990" cy="310" r="5"/>
+    <text x="570" y="350" font-size="18" fill="#3fb950">OTAR Reasoning</text>
+    <text x="300" y="385" font-size="12" fill="#8b949e">👁️ Observe</text>
+    <text x="480" y="385" font-size="12" fill="#8b949e">🧠 Think</text>
+    <text x="660" y="385" font-size="12" fill="#8b949e">⚡ Act</text>
+    <text x="840" y="385" font-size="12" fill="#8b949e">🪞 Reflect</text>
+  </g>
+  
+  <!-- Safety Layer -->
+  <text class="layer-label" x="50" y="480">🛡️ Safety Engine</text>
+  
+  <g class="component" data-info="5-tier action classifier with hash-chain audit">
+    <rect x="100" y="500" width="200" height="80"/>
+    <circle class="status-dot" cx="290" cy="510" r="5" fill="#f85149"/>
+    <text x="175" y="535">🔒 Classifier</text>
+    <text x="145" y="555" font-size="11" fill="#8b949e">5 safety tiers</text>
+  </g>
+  
+  <g class="component" data-info="Policy chain with kill switch">
+    <rect x="350" y="500" width="200" height="80"/>
+    <circle class="status-dot" cx="540" cy="510" r="5" fill="#f85149"/>
+    <text x="430" y="535">📜 Policy</text>
+    <text x="390" y="555" font-size="11" fill="#8b949e">deny-by-default</text>
+  </g>
+  
+  <g class="component" data-info="SHA-256 hash-chain tamper-proof audit log">
+    <rect x="600" y="500" width="200" height="80"/>
+    <circle class="status-dot" cx="790" cy="510" r="5" fill="#f85149"/>
+    <text x="680" y="535">🔗 Audit</text>
+    <text x="650" y="555" font-size="11" fill="#8b949e">hash-chain</text>
+  </g>
+  
+  <!-- Memory Layer -->
+  <text class="layer-label" x="50" y="680">🧠 Memory System</text>
+  
+  <g class="component" data-info="Working memory: per-task scratchpad">
+    <rect x="100" y="700" width="180" height="70"/>
+    <circle class="status-dot" cx="270" cy="710" r="5" fill="#f778ba"/>
+    <text x="165" y="740">📝 Working</text>
+  </g>
+  
+  <g class="component" data-info="Episodic memory: event timeline">
+    <rect x="320" y="700" width="180" height="70"/>
+    <circle class="status-dot" cx="490" cy="710" r="5" fill="#f778ba"/>
+    <text x="380" y="740">📚 Episodic</text>
+  </g>
+  
+  <g class="component" data-info="Semantic memory: vector embeddings with ChromaDB">
+    <rect x="540" y="700" width="180" height="70"/>
+    <circle class="status-dot" cx="710" cy="710" r="5" fill="#f778ba"/>
+    <text x="600" y="740">🧲 Semantic</text>
+  </g>
+  
+  <g class="component" data-info="User model: preference learning">
+    <rect x="760" y="700" width="180" height="70"/>
+    <circle class="status-dot" cx="930" cy="710" r="5" fill="#f778ba"/>
+    <text x="820" y="740">👤 User Model</text>
+  </g>
+  
+  <!-- Tooltip (hidden by default, shown on hover via JS) -->
+  <g id="tooltip" style="display: none;">
+    <rect x="0" y="0" width="300" height="60" fill="#161b22" stroke="#58a6ff" stroke-width="2" rx="8"/>
+    <text id="tooltip-text" x="10" y="25" fill="#c9d1d9" font-family="'JetBrains Mono', monospace" font-size="12"/>
+  </g>
+</svg>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Terminal Mockup</title>
+  <style>
+    body {
+      background: #0d1117;
+      font-family: 'JetBrains Mono', monospace;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+    
+    .terminal-3d {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 20px;
+      max-width: 700px;
+      width: 100%;
+      transform: perspective(1000px) rotateX(5deg) rotateY(-2deg);
+      box-shadow: 
+        0 25px 50px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(88, 166, 255, 0.1);
+      transition: transform 0.3s ease;
+    }
+    
+    .terminal-3d:hover {
+      transform: perspective(1000px) rotateX(0deg) rotateY(0deg);
+    }
+    
+    .terminal-header {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 15px;
+    }
+    
+    .terminal-button {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    
+    .terminal-button.close { background: #f85149; }
+    .terminal-button.minimize { background: #d29922; }
+    .terminal-button.maximize { background: #3fb950; }
+    
+    .terminal-content {
+      color: #c9d1d9;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    
+    .prompt {
+      color: #58a6ff;
+      font-weight: 600;
+    }
+    
+    .command {
+      color: #bc8cff;
+    }
+    
+    .output {
+      margin-left: 20px;
+      color: #8b949e;
+    }
+    
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 5px 0;
+    }
+    
+    .icon { font-size: 16px; }
+    
+    .success { color: #3fb950; }
+    .info { color: #58a6ff; }
+    .warning { color: #d29922; }
+    
+    .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 16px;
+      background: #58a6ff;
+      animation: blink 1s step-end infinite;
+    }
+    
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="terminal-3d">
+    <div class="terminal-header">
+      <div class="terminal-button close"></div>
+      <div class="terminal-button minimize"></div>
+      <div class="terminal-button maximize"></div>
+    </div>
+    <div class="terminal-content">
+      <div>
+        <span class="prompt">$</span>
+        <span class="command"> atlas run "research quantum computing"</span>
+      </div>
+      <div class="output">
+        <div class="step info">
+          <span class="icon">🧠</span>
+          <span>Context retrieved (3 memories)</span>
+        </div>
+        <div class="step info">
+          <span class="icon">📋</span>
+          <span>Plan: 4 steps → Researcher agent</span>
+        </div>
+        <div class="step info">
+          <span class="icon">🔬</span>
+          <span>Research: arXiv + Wikipedia</span>
+        </div>
+        <div class="step info">
+          <span class="icon">🛡️</span>
+          <span>Safety: Tier 0 (auto-approved)</span>
+        </div>
+        <div class="step success">
+          <span class="icon">✅</span>
+          <span>Complete in 4.2s</span>
+        </div>
+      </div>
+      <div style="margin-top: 10px;">
+        <span class="prompt">$</span>
+        <span class="cursor"></span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,262 @@
+/* ATLAS README Animations */
+/* Respects prefers-reduced-motion */
+
+:root {
+  --atlas-black: #0d1117;
+  --atlas-dark: #161b22;
+  --atlas-border: #30363d;
+  --atlas-text: #c9d1d9;
+  --atlas-blue: #58a6ff;
+  --atlas-purple: #bc8cff;
+  --atlas-green: #3fb950;
+  --atlas-gold: #d29922;
+  --atlas-red: #f85149;
+  --atlas-pink: #f778ba;
+}
+
+/* Particle canvas background */
+#particles-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero-container {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Neon glow text effect */
+.neon-glow {
+  color: var(--atlas-blue);
+  text-shadow: 
+    0 0 10px rgba(88, 166, 255, 0.8),
+    0 0 20px rgba(88, 166, 255, 0.6),
+    0 0 30px rgba(88, 166, 255, 0.4);
+  animation: flicker 3s ease-in-out infinite;
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.95; }
+  75% { opacity: 0.98; }
+}
+
+/* Scroll reveal animation */
+[data-scroll-reveal] {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+[data-scroll-reveal].revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Stagger delays for sequential reveals */
+[data-scroll-reveal]:nth-child(1) { transition-delay: 0s; }
+[data-scroll-reveal]:nth-child(2) { transition-delay: 0.1s; }
+[data-scroll-reveal]:nth-child(3) { transition-delay: 0.2s; }
+[data-scroll-reveal]:nth-child(4) { transition-delay: 0.3s; }
+[data-scroll-reveal]:nth-child(5) { transition-delay: 0.4s; }
+
+/* 3D Terminal mockup */
+.terminal-3d {
+  background: var(--atlas-dark);
+  border: 1px solid var(--atlas-border);
+  border-radius: 8px;
+  padding: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  transform: perspective(1000px) rotateX(5deg) rotateY(-2deg);
+  box-shadow: 
+    0 25px 50px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(88, 166, 255, 0.1);
+  transition: transform 0.3s ease;
+}
+
+.terminal-3d:hover {
+  transform: perspective(1000px) rotateX(0deg) rotateY(0deg);
+}
+
+/* Typing animation for code blocks */
+.code-typing {
+  overflow: hidden;
+  border-right: 2px solid var(--atlas-blue);
+  white-space: nowrap;
+  animation: typing 3s steps(40) 1s 1 normal both;
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+/* Pulse animation for badges */
+.badge-pulse {
+  animation: badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.7);
+  }
+  50% { 
+    transform: scale(1.05);
+    box-shadow: 0 0 20px 5px rgba(88, 166, 255, 0);
+  }
+}
+
+/* Comparison table animations */
+.comparison-row {
+  opacity: 0;
+  transform: translateX(-20px);
+  animation: slide-in 0.5s ease-out forwards;
+}
+
+.comparison-row:nth-child(1) { animation-delay: 0.1s; }
+.comparison-row:nth-child(2) { animation-delay: 0.2s; }
+.comparison-row:nth-child(3) { animation-delay: 0.3s; }
+.comparison-row:nth-child(4) { animation-delay: 0.4s; }
+.comparison-row:nth-child(5) { animation-delay: 0.5s; }
+
+@keyframes slide-in {
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.checkmark {
+  display: inline-block;
+  animation: pop 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes pop {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.x-mark {
+  display: inline-block;
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+/* ATLAS row highlight */
+.atlas-row {
+  background: linear-gradient(90deg, 
+    rgba(210, 153, 34, 0.1) 0%, 
+    rgba(210, 153, 34, 0.05) 100%);
+  box-shadow: 0 0 20px rgba(210, 153, 34, 0.3);
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(210, 153, 34, 0.3); }
+  50% { box-shadow: 0 0 25px rgba(210, 153, 34, 0.5); }
+}
+
+/* Copy button animation */
+.copy-btn {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.copy-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(88, 166, 255, 0.3);
+}
+
+.copy-btn.copied::after {
+  content: "✓ Copied!";
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--atlas-green);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  animation: fade-up 2s ease-out;
+}
+
+@keyframes fade-up {
+  0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  20% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  80% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+}
+
+/* Contribution graph heatmap */
+.contrib-square {
+  opacity: 0;
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+.contrib-square:nth-child(n) {
+  animation-delay: calc(0.02s * var(--index));
+}
+
+@keyframes fade-in {
+  to { opacity: 1; }
+}
+
+/* Prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  .terminal-3d {
+    transform: none;
+  }
+  
+  [data-scroll-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Dark theme specific adjustments */
+@media (prefers-color-scheme: dark) {
+  .terminal-3d {
+    box-shadow: 
+      0 25px 50px rgba(0, 0, 0, 0.8),
+      0 0 0 1px rgba(88, 166, 255, 0.2);
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .terminal-3d {
+    transform: none;
+    padding: 15px;
+  }
+  
+  .neon-glow {
+    font-size: 2rem;
+  }
+  
+  [data-scroll-reveal] {
+    transform: translateY(20px);
+  }
+}

@@ -68,7 +68,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 k: str(v)
                 for k, v in event.metadata.items()
                 if k not in {"summary", "capability", "operation", "provider", "tier",
-                              "requires_approval", "steps", "risk", "confidence"}
+                              "requires_approval", "steps", "risk", "confidence",
+                              "tool", "args", "ok", "error"}
             },
             ts=atlas.clock.now().isoformat(),
         )
@@ -78,19 +79,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # SSE connections subscribe per-task; we store queues in a shared dict.
     # Key: task_id → list of asyncio.Queue instances (one per active SSE client)
     sse_queues: dict[str, list[asyncio.Queue[str | None]]] = {}
+    
+    # WebSocket global connections
+    global_ws_queues: list[asyncio.Queue[Event]] = []
+    
+    # WebSocket task connections
+    ws_queues: dict[str, list[asyncio.Queue[Event]]] = {}
 
-    async def _on_orchestrator_event_sse(event: Event) -> None:
+    async def _on_orchestrator_event_bus(event: Event) -> None:
         if not isinstance(event, OrchestratorEvent):
             return
+            
+        # Notify SSE clients
         queues = sse_queues.get(event.task_id, [])
         for q in queues:
             await q.put(event.task_id)  # signal: new event available for this task
+            
+        # Notify global WS clients
+        for q in global_ws_queues:
+            await q.put(event)
+            
+        # Notify task WS clients
+        t_queues = ws_queues.get(event.task_id, [])
+        for q in t_queues:
+            await q.put(event)
 
-    atlas.bus.subscribe("orchestrator", _on_orchestrator_event_sse)
+    atlas.bus.subscribe("orchestrator", _on_orchestrator_event_bus)
 
     app.state.atlas = atlas
     app.state.event_store = event_store
     app.state.sse_queues = sse_queues
+    app.state.global_ws_queues = global_ws_queues
+    app.state.ws_queues = ws_queues
     app.state.version = version("atlas")
     app.state.active_task_count = 0
     app.state.active_task_lock = asyncio.Lock()
