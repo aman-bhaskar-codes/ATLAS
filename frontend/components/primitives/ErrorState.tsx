@@ -1,6 +1,5 @@
 import React from "react";
 import { AlertCircle } from "lucide-react";
-import { Button } from "./Button";
 
 interface ErrorStateProps {
   title?: string;
@@ -12,16 +11,16 @@ export function ErrorState({ title = "An error occurred", error, onRetry }: Erro
   const errorMessage = error instanceof Error ? error.message : error;
 
   return (
-    <div className="flex flex-col items-start p-4 bg-red-950/20 border border-red-900/50 rounded-[var(--radius-md)]">
-      <div className="flex items-center text-[var(--color-danger-400)] mb-2">
-        <AlertCircle className="w-5 h-5 mr-2" />
-        <h3 className="font-medium">{title}</h3>
+    <div style={{ padding: '1rem', background: 'oklch(30% .1 22 / .15)', border: '1px solid oklch(68% .18 22 / .38)', borderRadius: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', color: 'var(--danger-400)', marginBottom: '0.5rem' }}>
+        <AlertCircle style={{ width: 20, height: 20, marginRight: '8px' }} />
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 500, margin: 0 }}>{title}</h3>
       </div>
-      {errorMessage && <p className="text-sm text-red-200/70 mb-3">{errorMessage}</p>}
+      {errorMessage && <p style={{ fontSize: '0.85rem', color: 'var(--paper-300)', margin: '0 0 1rem 0' }}>{errorMessage}</p>}
       {onRetry && (
-        <Button variant="secondary" size="sm" onClick={onRetry}>
+        <button className="ghost-btn kill" onClick={onRetry} style={{ height: '32px', fontSize: '0.8rem' }}>
           Try Again
-        </Button>
+        </button>
       )}
     </div>
   );

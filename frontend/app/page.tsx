@@ -4,18 +4,26 @@ import { HeroSection } from "@/components/dashboard/HeroSection";
 import { CommandComposer } from "@/components/dashboard/CommandComposer";
 import { ActivityTimeline } from "@/components/dashboard/ActivityTimeline";
 import { ApprovalInbox } from "@/components/dashboard/ApprovalInbox";
-import { CapabilityPosture } from "@/components/dashboard/CapabilityPosture";
 
 export default function Dashboard() {
   return (
     <>
+      {/* Top Zone: System Posture */}
       <HeroSection />
-      <CommandComposer />
+
+      {/* Primary & Secondary Zones */}
       <div className="grid-cols-panel">
-        <ActivityTimeline />
-        <ApprovalInbox />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* Primary Zone: Command & Activity */}
+          <CommandComposer />
+          <ActivityTimeline />
+        </div>
+        
+        <div>
+          {/* Secondary Zone: Inbox Preview */}
+          <ApprovalInbox />
+        </div>
       </div>
-      <CapabilityPosture />
     </>
   );
 }

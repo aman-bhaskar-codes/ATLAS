@@ -9,12 +9,12 @@ interface EmptyStateProps {
 
 export function EmptyState({ title, description, action }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center p-8 text-center bg-[var(--color-ink-950)] border border-dashed border-[var(--color-line)] rounded-[var(--radius-md)]">
-      <div className="flex items-center justify-center w-12 h-12 mb-4 rounded-full bg-[var(--color-ink-850)] text-[var(--color-paper-300)]">
-        <CircleSlash className="w-6 h-6" />
+    <div className="panel" style={{ textAlign: 'center', padding: '3rem 1rem', borderTop: 'none', border: '1px dashed var(--line)', borderRadius: '8px', background: 'var(--ink-950)' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+        <CircleSlash style={{ width: 32, height: 32, color: 'var(--paper-500)' }} />
       </div>
-      <h3 className="text-base font-medium text-[var(--color-paper-100)] mb-1">{title}</h3>
-      {description && <p className="text-sm text-[var(--color-paper-300)] max-w-sm mb-4">{description}</p>}
+      <h3 style={{ fontSize: '1.1rem', color: 'var(--paper-100)', marginBottom: '0.5rem' }}>{title}</h3>
+      {description && <p className="muted" style={{ maxWidth: '400px', margin: '0 auto 1.5rem', fontSize: '0.85rem' }}>{description}</p>}
       {action && <div>{action}</div>}
     </div>
   );

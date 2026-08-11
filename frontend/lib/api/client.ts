@@ -8,12 +8,28 @@ import {
 const API_BASE =
   process.env.NEXT_PUBLIC_ATLAS_API_URL ?? "http://localhost:8730/api/v1";
 
+async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    return response;
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("ATLAS Backend Timeout: Request took longer than 8 seconds.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 async function request<T extends z.ZodTypeAny>(
   path: string,
   schema: T,
   init?: RequestInit,
 ): Promise<z.infer<T>> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetchWithTimeout(`${API_BASE}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
@@ -22,6 +38,18 @@ async function request<T extends z.ZodTypeAny>(
     throw new Error(`ATLAS API ${response.status}: ${detail.slice(0, 500)}`);
   }
   return schema.parse(await response.json());
+}
+
+async function requestJSON(path: string, init?: RequestInit): Promise<unknown> {
+  const response = await fetchWithTimeout(`${API_BASE}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...init?.headers },
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`ATLAS API ${response.status}: ${detail.slice(0, 500)}`);
+  }
+  return response.json();
 }
 
 export const atlasApi = {
@@ -69,57 +97,39 @@ export const trustApi = {
     const params = new URLSearchParams();
     if (cursor) params.append('cursor', cursor);
     params.append('limit', limit.toString());
-    const res = await fetch(`${API_BASE}/tasks?${params}`);
-    if (!res.ok) throw new Error('Failed to fetch tasks');
-    return res.json();
+    return requestJSON(`/tasks?${params}`);
   },
   getTask: async (taskId: string) => {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}`);
-    if (!res.ok) throw new Error('Failed to fetch task');
-    return res.json();
+    return requestJSON(`/tasks/${taskId}`);
   },
 
   // Approvals
   pendingApprovals: async () => {
-    const res = await fetch(`${API_BASE}/approvals/pending`);
-    if (!res.ok) throw new Error('Failed to fetch approvals');
-    return res.json();
+    return requestJSON(`/approvals/pending`);
   },
   getApproval: async (approvalId: string) => {
-    const res = await fetch(`${API_BASE}/approvals/${approvalId}`);
-    if (!res.ok) throw new Error('Failed to fetch approval');
-    return res.json();
+    return requestJSON(`/approvals/${approvalId}`);
   },
   decideApproval: async (approvalId: string, decision: 'approve' | 'deny', idempotencyKey: string, requestId: string) => {
-    const res = await fetch(`${API_BASE}/approvals/${approvalId}/decide`, {
+    return requestJSON(`/approvals/${approvalId}/decide`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ approval_id: approvalId, decision, idempotency_key: idempotencyKey, request_id: requestId }),
     });
-    if (!res.ok) throw new Error('Failed to decide approval');
-    return res.json();
   },
 
   // Memory
   searchMemory: async (query: string, limit: number = 30) => {
     const params = new URLSearchParams({ q: query, limit: limit.toString() });
-    const res = await fetch(`${API_BASE}/memory/search?${params}`);
-    if (!res.ok) throw new Error('Failed to search memory');
-    return res.json();
+    return requestJSON(`/memory/search?${params}`);
   },
   getMemoryFact: async (factId: string) => {
-    const res = await fetch(`${API_BASE}/memory/facts/${factId}`);
-    if (!res.ok) throw new Error('Failed to fetch memory fact');
-    return res.json();
+    return requestJSON(`/memory/facts/${factId}`);
   },
   correctMemory: async (factId: string, replacementText: string, idempotencyKey: string, requestId: string) => {
-    const res = await fetch(`${API_BASE}/memory/facts/${factId}/correct`, {
+    return requestJSON(`/memory/facts/${factId}/correct`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fact_id: factId, replacement_text: replacementText, idempotency_key: idempotencyKey, request_id: requestId }),
     });
-    if (!res.ok) throw new Error('Failed to correct memory');
-    return res.json();
   },
 
   // Audit
@@ -130,8 +140,6 @@ export const trustApi = {
     if (filters?.taskId) params.append('task_id', filters.taskId);
     if (filters?.correlationId) params.append('correlation_id', filters.correlationId);
     if (filters?.executionId) params.append('execution_id', filters.executionId);
-    const res = await fetch(`${API_BASE}/audit?${params}`);
-    if (!res.ok) throw new Error('Failed to fetch audit log');
-    return res.json();
+    return requestJSON(`/audit?${params}`);
   }
 };

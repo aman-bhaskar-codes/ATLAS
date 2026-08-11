@@ -29,32 +29,60 @@ export function ConnectionBadge({
   return null;
 }
 
+import { Brain, Wrench, Eye, CheckCircle2, XCircle, ShieldAlert, CircleDot } from "lucide-react";
+
 export function TimelineEventRow({ event }: { event: TaskEvent }) {
   const timeStr = formatDistanceToNowStrict(new Date(event.ts), { addSuffix: true });
   
+  let Icon = CircleDot;
+  let colorVar = 'var(--paper-500)';
+  
+  if (event.state === 'reasoning' || event.state === 'planning') {
+    Icon = Brain;
+    colorVar = 'var(--indigo-400)';
+  } else if (event.state === 'executing' || event.state === 'waiting_tool') {
+    Icon = Wrench;
+    colorVar = 'var(--gold-400)';
+  } else if (event.state === 'observing') {
+    Icon = Eye;
+    colorVar = 'var(--cyan-400)';
+  } else if (event.state === 'completed') {
+    Icon = CheckCircle2;
+    colorVar = 'var(--jade-400)';
+  } else if (event.state === 'failed') {
+    Icon = XCircle;
+    colorVar = 'var(--danger-400)';
+  } else if (event.event_type === 'safety_gate' || event.requires_approval) {
+    Icon = ShieldAlert;
+    colorVar = 'var(--ember-400)';
+  }
+
   return (
-    <div className="relative pl-6 pb-6 border-l border-zinc-800 last:border-0 last:pb-0">
-      <div className="absolute -left-1.5 top-1.5 h-3 w-3 rounded-full border-2 border-zinc-950 bg-zinc-600" />
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-zinc-100">{event.summary}</span>
-          <span className="text-xs text-zinc-500">{timeStr}</span>
+    <div style={{ position: 'relative', paddingLeft: '2.5rem', paddingBottom: '1.5rem', borderLeft: '1px solid var(--line)' }}>
+      <div style={{ position: 'absolute', left: '-13px', top: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '50%', backgroundColor: 'var(--ink-950)', border: `1px solid ${colorVar}` }}>
+        <Icon style={{ width: '12px', height: '12px', color: colorVar }} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: colorVar, fontWeight: 600 }}>{event.state}</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--paper-500)' }}>{timeStr}</span>
         </div>
+        <div style={{ fontWeight: 500, color: 'var(--paper-100)', marginTop: '0.25rem' }}>{event.summary}</div>
         
         {/* Safe Metadata Drawer */}
         {(event.capability || Object.keys(event.safe_metadata).length > 0) && (
-          <div className="mt-2 flex flex-col gap-1 rounded bg-zinc-900/50 p-3 text-sm text-zinc-400">
+          <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', borderRadius: '4px', background: 'var(--ink-850)', padding: '0.75rem', fontSize: '0.85rem', color: 'var(--paper-300)' }}>
             {event.capability && (
-              <div className="flex items-center gap-2">
-                <span className="text-zinc-500">capability:</span>
-                <span className="text-indigo-400">{event.capability}</span>
-                {event.operation && <span className="text-zinc-300">.{event.operation}</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: 'var(--paper-500)' }}>capability:</span>
+                <span style={{ color: 'var(--gold-400)' }}>{event.capability}</span>
+                {event.operation && <span style={{ color: 'var(--paper-300)' }}>.{event.operation}</span>}
               </div>
             )}
             {Object.entries(event.safe_metadata).map(([k, v]) => (
-              <div key={k} className="flex gap-2">
-                <span className="text-zinc-500">{k}:</span>
-                <span className="break-all">{v}</span>
+              <div key={k} style={{ display: 'flex', gap: '0.5rem' }}>
+                <span style={{ color: 'var(--paper-500)' }}>{k}:</span>
+                <span style={{ wordBreak: 'break-all' }}>{v}</span>
               </div>
             ))}
           </div>
@@ -79,13 +107,13 @@ export function RuntimeHeader({
   const terminal = isTerminal(task.state);
 
   return (
-    <div className="flex flex-col gap-4 border-b border-zinc-800 pb-6">
-      <div className="flex items-start justify-between">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', borderBottom: '1px solid var(--line)', paddingBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="text-xl font-medium text-zinc-100">Task {task.id.slice(-8)}</h1>
-          <p className="mt-1 text-sm text-zinc-400">Source: {task.source}</p>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 500, color: 'var(--paper-100)', margin: 0 }}>Task {task.id.slice(-8)}</h1>
+          <p style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: 'var(--paper-500)', margin: 0 }}>Source: {task.source}</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <Badge variant={terminal ? (task.state === "completed" ? "success" : "error") : "warning"}>
             {task.state}
           </Badge>
@@ -93,21 +121,27 @@ export function RuntimeHeader({
             <button
               onClick={onCancel}
               disabled={isCancelling}
-              className="rounded bg-zinc-800 px-3 py-1 text-sm font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+              className="ghost-btn kill"
+              style={{ padding: '4px 12px', fontSize: '0.85rem' }}
             >
               {isCancelling ? "Cancelling..." : "Cancel"}
             </button>
           )}
         </div>
       </div>
-      <Panel className="bg-zinc-900/50 p-4">
-        <p className="font-mono text-sm text-zinc-300">{task.request}</p>
-      </Panel>
-      <div className="text-sm text-zinc-500">
-        Elapsed: {elapsed}s · Created: {new Date(task.created_at).toLocaleTimeString()}
+      <div className="panel" style={{ padding: '1rem', background: 'var(--ink-850)', borderTop: 'none', borderRadius: '4px' }}>
+        <p className="mono" style={{ fontSize: '0.85rem', color: 'var(--paper-300)', margin: 0 }}>{task.request}</p>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--paper-500)' }}>
+        <div>
+          Elapsed: {elapsed}s · Created: {new Date(task.created_at).toLocaleTimeString()}
+        </div>
+        <div className="mono">
+          Tokens: ~4200 · Cost: $0.018
+        </div>
       </div>
       {cancelResult && !cancelResult.accepted && (
-        <div className="text-sm text-red-400">{cancelResult.message}</div>
+        <div style={{ fontSize: '0.85rem', color: 'var(--danger-400)' }}>{cancelResult.message}</div>
       )}
     </div>
   );

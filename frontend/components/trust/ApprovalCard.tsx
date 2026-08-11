@@ -24,8 +24,11 @@ export function ApprovalCard({ approval }: { approval: ApprovalView }) {
         <div className="text-[0.9rem] font-medium">{approval.operation}</div>
         <DecisionBadge tier={approval.tier} />
       </div>
-      <div className="text-[0.78rem] text-[var(--paper-500)] my-1.5 mb-3">
-        {approval.warnings.length > 0 ? approval.warnings.join(' · ') : 'No warnings'}
+      <div className="text-[0.78rem] my-2 mb-3" style={{ background: 'var(--ink-900)', padding: '0.75rem', borderRadius: '4px', borderLeft: '2px solid var(--gold-400)' }}>
+        <div style={{ color: 'var(--paper-300)', marginBottom: '0.25rem', fontWeight: 500 }}>Triggered Security Rule:</div>
+        <div style={{ color: 'var(--paper-500)' }}>
+          {approval.warnings.length > 0 ? approval.warnings.join(' · ') : `Capability '${approval.capability}' operation '${approval.operation}' requires explicit CONFIRM under current posture policy.`}
+        </div>
       </div>
       
       {showPreview && (

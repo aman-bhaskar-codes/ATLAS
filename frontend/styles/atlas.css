@@ -99,6 +99,8 @@ button { cursor: pointer; }
 .cap small { display: block; color: var(--paper-500); font-size: .72rem; margin-top: 4px; }
 .cap .mono { display: block; color: var(--paper-500); margin-top: 14px; font-size: .66rem; }
 
+.mobile-nav { display: none; }
+
 /* Responsive Media Queries */
 @media (max-width: 1050px) {
   .app { grid-template-columns: 76px 1fr; }
@@ -125,4 +127,9 @@ button { cursor: pointer; }
   .cap-grid { grid-template-columns: 1fr 1fr; }
   .command-foot { align-items: flex-start; flex-direction: column; }
   .primary { width: 100%; justify-content: center; }
+  
+  .mobile-nav { position: fixed; display: flex; bottom: 0; left: 0; right: 0; background: var(--ink-900); border-top: 1px solid var(--line); z-index: 10; justify-content: space-around; padding: 8px 6px; }
+  .mobile-nav a, .mobile-nav button { background: transparent; color: var(--paper-500); border: 0; font-size: .62rem; display: grid; gap: 3px; justify-items: center; padding: 5px; text-decoration: none; }
+  .mobile-nav a.active, .mobile-nav button.active { color: var(--gold-400); }
+  .mobile-nav svg { width: 18px; height: 18px; }
 }
