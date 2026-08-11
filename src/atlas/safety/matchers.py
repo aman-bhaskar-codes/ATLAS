@@ -10,6 +10,7 @@ any internal error returns a hit.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 _CRED_NAMES = {"id_rsa", "id_ed25519", ".env", "credentials", ".netrc", ".pgpass"}
@@ -92,3 +93,99 @@ def is_financial(
         return False, ""
     except Exception as exc:
         return True, f"matcher error, failing closed: {exc!r}"
+
+
+def reaches_external_person(value: Any) -> tuple[bool, str]:
+    """Return whether a request names at least one external recipient or attendee.
+
+    The classifier only needs a conservative, transport-neutral signal. Identity
+    and contact-policy checks remain capability concerns; an empty recipient list
+    is not an external communication action.
+    """
+    try:
+        if value is None:
+            return False, ""
+        if isinstance(value, str):
+            return bool(value.strip()), "external recipient supplied" if value.strip() else ""
+        if isinstance(value, dict):
+            for key in ("email", "address", "recipient", "id"):
+                if reaches_external_person(value.get(key))[0]:
+                    return True, "external recipient supplied"
+            return False, ""
+        if isinstance(value, (list, tuple, set, frozenset)):
+            for item in value:
+                if reaches_external_person(item)[0]:
+                    return True, "external recipient supplied"
+        return False, ""
+    except Exception as exc:
+        return True, f"matcher error, failing closed: {exc!r}"
+
+
+def is_sends_to_person(args: dict[str, Any]) -> tuple[bool, str]:
+    for key in ("recipients", "recipient", "to", "to_addresses"):
+        hit, reason = reaches_external_person(args.get(key))
+        if hit:
+            return hit, reason
+    return False, ""
+
+
+def is_invites_person(args: dict[str, Any]) -> tuple[bool, str]:
+    return reaches_external_person(args.get("attendees"))
+
+
+def is_destructive_pim(tool: str, operation: str) -> tuple[bool, str]:
+    if (tool == "calendar" and operation == "delete") or (
+        tool == "contacts" and operation in {"merge", "delete"}
+    ):
+        return True, f"destructive PIM operation: {tool}.{operation}"
+    return False, ""
+
+
+def _locator_text(args: dict[str, Any]) -> str:
+    locator = args.get("locator")
+    if isinstance(locator, dict):
+        return " ".join(str(locator.get(key, "")) for key in ("value", "label", "name", "role"))
+    if locator is not None:
+        return " ".join(str(getattr(locator, key, "")) for key in ("value", "label", "name", "role"))
+    return ""
+
+
+def _browser_locator_matches(
+    tool: str, operation: str, args: dict[str, Any], terms: tuple[str, ...]
+) -> tuple[bool, str]:
+    try:
+        if tool != "browser" or operation not in {"click", "type", "submit"}:
+            return False, ""
+        locator = _locator_text(args).lower()
+        for term in terms:
+            if term in locator:
+                return True, f"sensitive browser target contains {term!r}"
+        return False, ""
+    except Exception as exc:
+        return True, f"matcher error, failing closed: {exc!r}"
+
+
+def is_financial_ui(tool: str, operation: str, args: dict[str, Any]) -> tuple[bool, str]:
+    return _browser_locator_matches(
+        tool, operation, args, ("pay", "checkout", "buy", "purchase", "order", "subscribe")
+    )
+
+
+def is_destructive_ui(tool: str, operation: str, args: dict[str, Any]) -> tuple[bool, str]:
+    return _browser_locator_matches(
+        tool, operation, args, ("delete", "remove", "deactivate", "destroy")
+    )
+
+
+def is_credential_entry(tool: str, operation: str, args: dict[str, Any]) -> tuple[bool, str]:
+    if operation != "type":
+        return False, ""
+    return _browser_locator_matches(
+        tool, operation, args, ("password", "pass", "otp", "pin", "cvv", "secret")
+    )
+
+
+def is_form_submission(tool: str, operation: str) -> tuple[bool, str]:
+    if tool == "browser" and operation == "submit":
+        return True, "browser form submission"
+    return False, ""

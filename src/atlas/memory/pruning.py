@@ -18,7 +18,7 @@ from atlas.infra.clock import Clock
 from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
-from atlas.infra.types import ModelRequest
+from atlas.infra.types import ModelCapability, ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 
 _log = get_logger("atlas.memory.pruning")
@@ -61,7 +61,9 @@ class Pruner:
         resp = await self._gw.complete(ModelRequest(
             correlation_id=self._ids.correlation_id(),
             system="Summarize these old episodes into a short factual narrative.",
-            prompt=blob, max_tokens=400,
+            prompt=blob,
+            required_capabilities=frozenset({ModelCapability.SUMMARIZATION}),
+            max_tokens=400,
         ))
         await self._db.conn.execute(
             "INSERT INTO memory_archive(period, summary, episode_count, created_ts) "

@@ -16,7 +16,7 @@ import json
 from atlas.capabilities.domain.knowledge import KnowledgeIntent, KnowledgeQuery
 from atlas.infra.ids import CorrelationId
 from atlas.infra.logging import get_logger
-from atlas.infra.types import ModelRequest
+from atlas.infra.types import ModelCapability, ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 
 _log = get_logger("atlas.knowledge.router")
@@ -40,6 +40,10 @@ class KnowledgeRouter:
         try:
             resp = await self._gw.complete(ModelRequest(
                 correlation_id=correlation_id, system=_CLASSIFY, prompt=query.text,
+                required_capabilities=frozenset({
+                    ModelCapability.CLASSIFICATION,
+                    ModelCapability.JSON_GENERATION,
+                }),
                 max_tokens=40, temperature=0.0))
             intent = json.loads(self._json(resp.text)).get("intent", "live")
             return KnowledgeIntent(intent)

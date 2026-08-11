@@ -14,7 +14,7 @@ import time
 
 from atlas.infra.ids import CorrelationId, TaskId
 from atlas.infra.logging import get_logger
-from atlas.infra.types import ModelRequest, Tier
+from atlas.infra.types import ModelCapability, ModelRequest, Tier
 from atlas.intelligence.gateway import ModelGateway
 from atlas.orchestration.dispatcher import ToolDispatcher
 from atlas.orchestration.errors import CancellationError, OrchestrationError
@@ -139,6 +139,11 @@ class ReasoningLoop:
         resp = await with_timeout(
             self._gw.complete(ModelRequest(
                 correlation_id=correlation_id, prompt=prompt,
+                required_capabilities=frozenset({
+                    ModelCapability.REASONING,
+                    ModelCapability.TOOL_CALLING,
+                    ModelCapability.JSON_GENERATION,
+                }),
                 needs_deep_reasoning=(plan.confidence < 0.6),
                 stakes_tier=Tier.CONFIRM if plan.risk.value != "low" else Tier.AUTO,
                 max_tokens=2048,

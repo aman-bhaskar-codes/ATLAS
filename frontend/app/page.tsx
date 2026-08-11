@@ -11,11 +11,13 @@ export default function Dashboard() {
       {/* Top Zone: System Posture */}
       <HeroSection />
 
+      {/* Full Width Zone: Command Composer */}
+      <CommandComposer />
+
       {/* Primary & Secondary Zones */}
       <div className="grid-cols-panel">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* Primary Zone: Command & Activity */}
-          <CommandComposer />
+          {/* Primary Zone: Activity */}
           <ActivityTimeline />
         </div>
         

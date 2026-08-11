@@ -77,7 +77,7 @@ class AuditLog:
             "FROM audit_events ae LEFT JOIN payloads p ON ae.payload_id = p.id "
             "ORDER BY ae.id ASC"
         )
-        rows = await cur.fetchall()
+        rows = list(await cur.fetchall())
         expected_prev = _GENESIS_HASH
         for i, row in enumerate(rows):
             if str(row["prev_hash"]) != expected_prev:

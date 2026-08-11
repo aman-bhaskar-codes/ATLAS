@@ -1,7 +1,7 @@
 from typing import Any
 
 from atlas.infra.ids import CorrelationId, TaskId
-from atlas.infra.types import ModelRequest, ModelResponse, ModelTarget, TokenCost
+from atlas.infra.types import ModelCapability, ModelRequest, ModelResponse, ModelTarget, TokenCost
 from atlas.orchestration.limits import ExecutionLimits
 from atlas.orchestration.managers.cancellation import CancellationToken
 from atlas.orchestration.managers.retry import RetryManager
@@ -19,7 +19,10 @@ class FakeGateway:
     def __init__(self, scripted: list[str]) -> None:
         self._s = scripted
         self._i = 0
+        self.requests: list[ModelRequest] = []
+
     async def complete(self, req: ModelRequest) -> ModelResponse:
+        self.requests.append(req)
         text = self._s[min(self._i, len(self._s) - 1)]
         self._i += 1
         return ModelResponse(text=text, target=ModelTarget.LOCAL_FAST, model="fake",
@@ -83,6 +86,11 @@ async def test_tool_then_final() -> None:
         machine=_make_machine(), token=CancellationToken(),
     )
     assert result.ok and result.answer == "here it is" and disp.calls == 1
+    assert all(req.required_capabilities == frozenset({
+        ModelCapability.REASONING,
+        ModelCapability.TOOL_CALLING,
+        ModelCapability.JSON_GENERATION,
+    }) for req in gw.requests)
 
 
 async def test_max_steps_terminates_gracefully() -> None:

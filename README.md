@@ -18,7 +18,7 @@
 <!-- ═══ BADGES — ROW 1: STATUS ═══ -->
 <p>
   <a href="https://github.com/aman-bhaskar-codes/ATLAS/actions"><img src="https://img.shields.io/badge/CI-passing-00d68f?style=for-the-badge&logo=github-actions&logoColor=white&labelColor=0d1117" alt="CI" /></a>
-  <img src="https://img.shields.io/badge/Tests-140_passing-00d68f?style=for-the-badge&logo=pytest&logoColor=white&labelColor=0d1117" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-149_passing-00d68f?style=for-the-badge&logo=pytest&logoColor=white&labelColor=0d1117" alt="Tests" />
   <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white&labelColor=0d1117" alt="Python" /></a>
   <a href="https://docs.astral.sh/uv/"><img src="https://img.shields.io/badge/uv-managed-7c3aed?style=for-the-badge&logo=astral&logoColor=white&labelColor=0d1117" alt="uv" /></a>
 </p>
@@ -83,7 +83,7 @@ A production-grade system with:
 &nbsp;&nbsp;✅&nbsp; **Multi-agent DAG** decomposition with parallel execution  
 &nbsp;&nbsp;✅&nbsp; **OTAR reasoning** — Observe → Think → Act → Reflect  
 &nbsp;&nbsp;✅&nbsp; **4-layer memory** with vector search and user modeling  
-&nbsp;&nbsp;✅&nbsp; **140+ tests**, zero mocked business logic
+&nbsp;&nbsp;✅&nbsp; **149 tests**, zero mocked business logic
 
 </td>
 <td width="50%">
@@ -582,7 +582,7 @@ atlas/
 │   │
 │   └── app.py                       # 🎯 Composition root (all DI wiring)
 │
-├── tests/                           # ✅ 140+ unit tests
+├── tests/                           # ✅ 149 collected tests
 ├── frontend/                        # 💻 Next.js dashboard
 └── pyproject.toml                   # 📦 Project configuration
 ```
@@ -601,7 +601,7 @@ atlas/
 <br/>
 
 ```bash
-uv run pytest                  # Full suite (140+ tests)
+uv run pytest                  # Full suite (149 tests)
 uv run pytest -v               # Verbose output
 uv run ruff check .            # Linter
 uv run mypy                    # Type checking (strict)

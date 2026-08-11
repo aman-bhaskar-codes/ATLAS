@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-from atlas.infra.ids import CorrelationId, TaskId
+from atlas.infra.ids import CorrelationId
 
 
 @dataclass(frozen=True)

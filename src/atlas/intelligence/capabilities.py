@@ -8,28 +8,10 @@ model exists today'.
 
 from __future__ import annotations
 
-from enum import StrEnum
+from atlas.infra.types import ModelCapability as Capability
+from atlas.infra.types import ModelCapabilitySet as CapabilitySet
 
-
-class Capability(StrEnum):
-    PLANNING = "planning"
-    REASONING = "reasoning"
-    CODING = "coding"
-    VISION = "vision"
-    TOOL_CALLING = "tool_calling"
-    STRUCTURED_OUTPUT = "structured_output"
-    LONG_CONTEXT = "long_context"
-    EMBEDDING = "embedding"
-    CLASSIFICATION = "classification"
-    SUMMARIZATION = "summarization"
-    TRANSLATION = "translation"
-    REFLECTION = "reflection"
-    CONSENSUS = "consensus"
-    JSON_GENERATION = "json_generation"
-    STREAMING = "streaming"
-
-
-CapabilitySet = frozenset[Capability]
+__all__ = ["Capability", "CapabilitySet", "parse_capabilities"]
 
 
 def parse_capabilities(values: list[str]) -> CapabilitySet:

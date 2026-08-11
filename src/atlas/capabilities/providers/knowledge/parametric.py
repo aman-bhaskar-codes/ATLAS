@@ -14,7 +14,7 @@ from atlas.capabilities.domain.knowledge import KnowledgeItem
 from atlas.capabilities.providers.base import CapabilityRequest, RetryPolicy
 from atlas.capabilities.registry.capability import Capability
 from atlas.infra.ids import CorrelationId
-from atlas.infra.types import ModelRequest
+from atlas.infra.types import ModelCapability, ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 
 
@@ -38,6 +38,7 @@ class ParametricKnowledgeSource:
                 correlation_id=CorrelationId("parametric-lookup"),
                 system="You are an expert knowledge base. Provide a concise, accurate answer.",
                 prompt=query,
+                required_capabilities=frozenset({ModelCapability.REASONING}),
                 max_tokens=600
             ))
             

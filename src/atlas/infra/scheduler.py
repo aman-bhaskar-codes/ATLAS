@@ -9,7 +9,7 @@ the main event loop or a background timer).
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 from atlas.infra.clock import Clock
 from atlas.infra.db import Database
@@ -64,7 +64,7 @@ class CronScheduler:
         task_template: dict[str, object],
     ) -> str:
         """Register a new recurring schedule."""
-        sid = self._ids.new()
+        sid = self._ids.execution_id()
         now = self._clock.now()
         await self._db.conn.execute(
             "INSERT INTO schedules(id, description, cron_expression, task_template, "

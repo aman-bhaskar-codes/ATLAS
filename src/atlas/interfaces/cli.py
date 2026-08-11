@@ -20,7 +20,7 @@ from rich.table import Table
 
 from atlas.app import Atlas, build
 from atlas.diagnostics.doctor import exit_code, run_doctor
-from atlas.infra.types import InboundEvent, ModelRequest, SideEffect, ToolRequest, ToolResult
+from atlas.infra.types import InboundEvent, ModelCapability, ModelRequest, SideEffect, ToolRequest, ToolResult
 from atlas.safety.engine import DeniedError, HaltedError
 
 app = typer.Typer(add_completion=False, help="ATLAS control CLI (Phase 1)")
@@ -198,8 +198,12 @@ def run_tool(
 def model(prompt: str, deep: bool = typer.Option(False)) -> None:
     async def go() -> None:
         async with build_atlas() as atlas:
-            req = ModelRequest(correlation_id=atlas.ids.correlation_id(),
-                               prompt=prompt, needs_deep_reasoning=deep)
+            req = ModelRequest(
+                correlation_id=atlas.ids.correlation_id(),
+                prompt=prompt,
+                required_capabilities=frozenset({ModelCapability.REASONING}),
+                needs_deep_reasoning=deep,
+            )
             resp = await atlas.gateway.complete(req)
             console.print(f"[dim]{resp.model} · {resp.target.name} · {resp.latency_ms}ms[/]")
             console.print(resp.text)

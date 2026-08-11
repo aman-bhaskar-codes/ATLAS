@@ -15,7 +15,7 @@ from collections.abc import Awaitable, Callable
 
 from atlas.infra.ids import CorrelationId
 from atlas.infra.logging import get_logger
-from atlas.infra.types import ModelRequest
+from atlas.infra.types import ModelCapability, ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 from atlas.orchestration.parser import ResponseParser
 from atlas.orchestration.reflection import ReflectionResult
@@ -94,25 +94,21 @@ class SelfCritique:
         self, action: Action, observation: Observation, context: str,
     ) -> ReflectionResult:
         """Post-action OTAR Reflect step: evaluate observation outcome."""
-        succeeded = observation.success if hasattr(observation, "success") else True
+        succeeded = observation.ok
         learnings: list[str] = []
 
-        # Extract learnings from errors
-        if hasattr(observation, "error") and observation.error:
+        if observation.error:
             learnings.append(f"Action {action.tool}.{action.operation} failed: {observation.error}")
-            succeeded = False
-
-        # Extract learnings from side effects
-        if hasattr(observation, "side_effects") and observation.side_effects:
-            for se in observation.side_effects:
-                if hasattr(se, "kind"):
-                    learnings.append(f"Side effect: {se.kind} on {se.target}")
 
         return ReflectionResult(
             succeeded=succeeded,
             learnings=learnings,
             should_adjust_plan=not succeeded,
-            adjustment_reason=f"Action failed: {observation.error}" if not succeeded and hasattr(observation, "error") else None,
+            adjustment_reason=(
+                f"Action failed: {observation.error or 'observation reported failure'}"
+                if not succeeded
+                else None
+            ),
         )
 
     async def _run_critique(
@@ -125,6 +121,10 @@ class SelfCritique:
         try:
             resp = await self._gw.complete(ModelRequest(
                 correlation_id=corr, system=_CRITIQUE_SYSTEM, prompt=prompt,
+                required_capabilities=frozenset({
+                    ModelCapability.REFLECTION,
+                    ModelCapability.JSON_GENERATION,
+                }),
                 max_tokens=512, temperature=0.0,  # thinking off: fast + cheap
             ))
             data = json.loads(self._json(resp.text))
@@ -153,6 +153,11 @@ class SelfCritique:
         try:
             resp = await self._gw.complete(ModelRequest(
                 correlation_id=corr, system=_REVISE_SYSTEM, prompt=prompt,
+                required_capabilities=frozenset({
+                    ModelCapability.REASONING,
+                    ModelCapability.TOOL_CALLING,
+                    ModelCapability.JSON_GENERATION,
+                }),
                 max_tokens=1024, temperature=0.1,
             ))
             _thought, revised = self._parser.parse(resp.text, action.step)

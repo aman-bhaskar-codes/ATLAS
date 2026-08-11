@@ -52,7 +52,9 @@ class ModelGateway:
         from atlas.intelligence.contracts import Constraints, Message, Role
         
         mr = model_request  # ModelRequest
-        caps: frozenset[Any] = frozenset()
+        caps = mr.required_capabilities
+        if not caps:
+            raise ValueError("ModelRequest.required_capabilities must not be empty")
         constraints = Constraints(prefer_local=not getattr(mr, "needs_deep_reasoning", False))
         messages = []
         if getattr(mr, "system", None):

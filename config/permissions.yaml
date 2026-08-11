@@ -87,14 +87,18 @@ hard_block:
   - {tool: "*",        operation: "*",      match: financial_transaction}
   - {tool: filesystem, operation: delete,   match: mass_deletion}
   - {tool: "*",        operation: "*",      match: edit_safety_config}
-  - {tool: email,      operation: send,     match: sends_to_person}
-  - {tool: calendar,   operation: create,   match: invites_person}
-  - {tool: calendar,   operation: update,   match: invites_person}
-  - {tool: calendar,   operation: delete,   match: destructive_pim}
-  - {tool: contacts,   operation: merge,    match: destructive_pim}
-  - {tool: contacts,   operation: delete,   match: destructive_pim}
-  - {tool: browser,    operation: click,    match: financial_ui}
-  - {tool: browser,    operation: click,    match: destructive_ui}
-  - {tool: browser,    operation: type,     match: credential_entry}
-  - {tool: browser,    operation: submit,   match: submits_form}
+
+# These actions are allowed only after the normal confirmation/preview flow.
+# Matchers may raise a lower base rule to the configured tier, never lower it.
+require_confirm:
+  - {tool: email,      operation: send,     match: sends_to_person, tier: 2}
+  - {tool: calendar,   operation: create,   match: invites_person, tier: 2}
+  - {tool: calendar,   operation: update,   match: invites_person, tier: 2}
+  - {tool: calendar,   operation: delete,   match: destructive_pim, tier: 2}
+  - {tool: contacts,   operation: merge,    match: destructive_pim, tier: 2}
+  - {tool: contacts,   operation: delete,   match: destructive_pim, tier: 2}
+  - {tool: browser,    operation: click,    match: financial_ui, tier: 2}
+  - {tool: browser,    operation: click,    match: destructive_ui, tier: 2}
+  - {tool: browser,    operation: type,     match: credential_entry, tier: 2}
+  - {tool: browser,    operation: submit,   match: submits_form, tier: 2}
 

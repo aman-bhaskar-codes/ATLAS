@@ -43,6 +43,7 @@ dev = [
     "import-linter>=2.0",
     "types-PyYAML>=6.0",
     "pre-commit>=3.7",
+    "pytest-cov>=7.1.0",
 ]
 
 [build-system]
@@ -56,6 +57,15 @@ packages = ["src/atlas"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.coverage.run]
+branch = true
+source = ["atlas"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
 
 [tool.ruff]
 line-length = 120

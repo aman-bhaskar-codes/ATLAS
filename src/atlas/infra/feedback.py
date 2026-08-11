@@ -7,9 +7,6 @@ improve prompts and model selection over time.
 
 from __future__ import annotations
 
-import json
-from datetime import datetime
-
 from atlas.infra.clock import Clock
 from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
@@ -30,7 +27,7 @@ class FeedbackStore:
         """Record user feedback. rating must be -1 (thumbs down) or 1 (thumbs up)."""
         if rating not in (-1, 1):
             raise ValueError(f"rating must be -1 or 1, got {rating}")
-        fid = self._ids.new()
+        fid = self._ids.execution_id()
         await self._db.conn.execute(
             "INSERT INTO feedback(id, task_id, rating, comment, original_output, "
             "edited_output, created_ts) VALUES (?,?,?,?,?,?,?)",

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Rule(BaseModel):
@@ -28,6 +28,14 @@ class HardBlock(BaseModel):
     match: str
 
 
+class RequiredConfirmation(BaseModel):
+    model_config = {"frozen": True}
+    tool: str
+    operation: str
+    match: str
+    tier: int = Field(default=2, ge=2, le=3)
+
+
 class Manifest(BaseModel):
     model_config = {"frozen": True}
     version: int
@@ -37,6 +45,7 @@ class Manifest(BaseModel):
     safety: dict[str, Any]
     rules: list[Rule]
     hard_block: list[HardBlock]
+    require_confirm: list[RequiredConfirmation] = Field(default_factory=list)
 
 
 class ManifestReport(BaseModel):
@@ -44,7 +53,7 @@ class ManifestReport(BaseModel):
     missing_rules: list[str]
     orphan_rules: list[str]
     unmatched_constraints: list[str]
-    hard_block_gaps: list[str]
+    matcher_gaps: list[str]
 
 
 def load_manifest(raw: dict[str, Any]) -> Manifest:
@@ -76,11 +85,13 @@ def verify_manifest(
         f"{r.tool}.{r.operation}->{r.constraint}" for r in manifest.rules
         if r.constraint is not None and r.constraint not in known_constraints
     ]
-    hb_gaps = [hb.match for hb in manifest.hard_block if hb.match not in known_matchers]
+    policy_matchers = [entry.match for entry in manifest.hard_block]
+    policy_matchers.extend(entry.match for entry in manifest.require_confirm)
+    matcher_gaps = [name for name in policy_matchers if name not in known_matchers]
 
     # orphans are a warning (rule for a not-yet-built tool); the rest fail.
-    ok = not (missing or bad_constraints or hb_gaps)
+    ok = not (missing or bad_constraints or matcher_gaps)
     return ManifestReport(
         ok=ok, missing_rules=missing, orphan_rules=orphan,
-        unmatched_constraints=bad_constraints, hard_block_gaps=hb_gaps,
+        unmatched_constraints=bad_constraints, matcher_gaps=matcher_gaps,
     )

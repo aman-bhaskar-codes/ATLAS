@@ -76,7 +76,9 @@ class OpenAICompatibleProvider:
         text = data["choices"][0]["message"].get("content")
         if text is None:
             import logging
-            logging.getLogger("atlas.intel.provider").warning(f"{self.name} returned content=None. Raw response: {data}")
+            logging.getLogger("atlas.intel.provider").warning(
+                f"{self.name} returned content=None. Raw response: {data}"
+            )
             text = ""
         u = data.get("usage", {})
         it, ot = int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0))

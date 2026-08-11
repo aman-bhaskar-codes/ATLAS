@@ -5,7 +5,7 @@ BaseAgent, AgentConfig, AgentRegistry, TaskDAG.
 """
 
 from atlas.agents.base import AgentConfig, BaseAgent
+from atlas.agents.dag import SubTask, TaskDAG
 from atlas.agents.registry import AgentRegistry
-from atlas.agents.dag import TaskDAG, SubTask
 
-__all__ = ["AgentConfig", "BaseAgent", "AgentRegistry", "TaskDAG", "SubTask"]
+__all__ = ["AgentConfig", "AgentRegistry", "BaseAgent", "SubTask", "TaskDAG"]

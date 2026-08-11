@@ -59,6 +59,18 @@ class IdentityPlatform:
             provider_hint=row["provider_hint"], secret=secret,
             scopes=tuple(row["scopes"].split(",")) if row["scopes"] else ())
 
+    async def verify_store(self) -> tuple[bool, int]:
+        """Verify every stored secret decrypts and no row equals its plaintext."""
+        assert self._db.conn is not None
+        cur = await self._db.conn.execute("SELECT id, ciphertext FROM secrets")
+        rows = list(await cur.fetchall())
+        for index, row in enumerate(rows):
+            plaintext = await self._store.get(str(row["id"]))
+            ciphertext = str(row["ciphertext"])
+            if plaintext is None or not ciphertext or ciphertext == plaintext:
+                return False, index
+        return True, len(rows)
+
     async def get_usable_secret(self, credential_id: str) -> str:
         """Return a ready-to-use secret (fresh access token / API key), refreshing
         + persisting rotation transparently. The provider calls ONLY this."""

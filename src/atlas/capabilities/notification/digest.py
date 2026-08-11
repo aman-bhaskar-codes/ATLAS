@@ -18,7 +18,7 @@ from atlas.capabilities.notification.domain.models import (
 from atlas.capabilities.notification.queue import NotificationQueue
 from atlas.infra.clock import Clock
 from atlas.infra.ids import IdGenerator
-from atlas.infra.types import ModelRequest
+from atlas.infra.types import ModelCapability, ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 
 
@@ -48,7 +48,9 @@ class DigestEngine:
         # optional: summarize prose-heavy categories via P5
         resp = await self._gw.complete(ModelRequest(
             correlation_id=correlation_id, system="Summarize this digest crisply, keep all headers.",  # type: ignore
-            prompt=raw, max_tokens=600))
+            prompt=raw,
+            required_capabilities=frozenset({ModelCapability.SUMMARIZATION}),
+            max_tokens=600))
             
         for n in batched:
             await self._queue.complete(n.id)

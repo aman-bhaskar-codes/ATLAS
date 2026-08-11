@@ -25,7 +25,7 @@ from atlas.capabilities.providers.knowledge.base import KnowledgeProvider
 from atlas.infra.clock import Clock
 from atlas.infra.ids import CorrelationId, IdGenerator
 from atlas.infra.logging import get_logger
-from atlas.infra.types import ModelRequest
+from atlas.infra.types import ModelCapability, ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 from atlas.memory.episodic import EpisodicMemory
 from atlas.memory.types import Episode, EpisodeKind
@@ -111,6 +111,7 @@ class KnowledgePlatform:
         resp = await self._gw.complete(ModelRequest(
             correlation_id=correlation_id, system=_SUMMARIZE,
             prompt=f"QUESTION: {query.text}\n\nSOURCES:\n{corpus}",
+            required_capabilities=frozenset({ModelCapability.SUMMARIZATION}),
             needs_deep_reasoning=len(ranked) > 3, max_tokens=600))
         # confidence: official sources + agreement raise it; single web source lowers it
         official_n = sum(1 for i in ranked if i.provenance.source_kind.value in ("official", "local"))

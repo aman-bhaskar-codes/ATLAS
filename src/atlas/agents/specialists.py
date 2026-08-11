@@ -13,7 +13,7 @@ from typing import Any
 from atlas.agents.base import AgentConfig, BaseAgent, SubTaskResult
 from atlas.infra.ids import CorrelationId
 from atlas.infra.logging import get_logger
-from atlas.infra.types import ModelRequest
+from atlas.infra.types import ModelCapability, ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 
 _log = get_logger("atlas.agents.specialists")
@@ -54,6 +54,11 @@ class SimpleSpecialist(BaseAgent):
                 correlation_id=correlation_id,
                 system=self._config.system_prompt,
                 prompt=prompt,
+                required_capabilities=frozenset({
+                    ModelCapability.CODING
+                    if self.agent_type == "coder"
+                    else ModelCapability.REASONING
+                }),
                 max_tokens=self._config.context_window,
                 temperature=self._config.temperature,
             ))

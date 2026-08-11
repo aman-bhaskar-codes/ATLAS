@@ -8,7 +8,7 @@ gives every layer a single source of truth for wire shapes.
 from __future__ import annotations
 
 from datetime import datetime
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -66,6 +66,27 @@ class SafetyDecision(_Frozen):
     matched_rule: str | None = None
 
 
+class ModelCapability(StrEnum):
+    PLANNING = "planning"
+    REASONING = "reasoning"
+    CODING = "coding"
+    VISION = "vision"
+    TOOL_CALLING = "tool_calling"
+    STRUCTURED_OUTPUT = "structured_output"
+    LONG_CONTEXT = "long_context"
+    EMBEDDING = "embedding"
+    CLASSIFICATION = "classification"
+    SUMMARIZATION = "summarization"
+    TRANSLATION = "translation"
+    REFLECTION = "reflection"
+    CONSENSUS = "consensus"
+    JSON_GENERATION = "json_generation"
+    STREAMING = "streaming"
+
+
+ModelCapabilitySet = frozenset[ModelCapability]
+
+
 class ModelTarget(IntEnum):
     LOCAL_FAST = 0
     LOCAL_HEAVY = 1
@@ -75,6 +96,7 @@ class ModelTarget(IntEnum):
 class ModelRequest(_Frozen):
     correlation_id: CorrelationId
     prompt: str
+    required_capabilities: ModelCapabilitySet = frozenset()
     system: str | None = None
     force_target: ModelTarget | None = None
     needs_deep_reasoning: bool = False

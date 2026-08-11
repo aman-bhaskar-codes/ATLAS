@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from atlas.agents.base import AgentConfig, SubTaskResult
+
+from atlas.agents.base import AgentConfig
 from atlas.agents.dag import SubTask, TaskDAG
 from atlas.agents.registry import AgentRegistry
-
 
 # ── TaskDAG tests ──────────────────────────────────────────────────── #
 

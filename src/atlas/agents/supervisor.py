@@ -15,14 +15,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, cast
 
 from atlas.agents.base import AgentConfig, BaseAgent, SubTaskResult
 from atlas.agents.dag import SubTask, TaskDAG
 from atlas.agents.registry import AgentRegistry
 from atlas.infra.ids import CorrelationId, IdGenerator
 from atlas.infra.logging import get_logger
-from atlas.infra.types import ModelRequest, ModelTarget
+from atlas.infra.types import ModelCapability, ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 
 _log = get_logger("atlas.agents.supervisor")
@@ -110,7 +110,12 @@ class SupervisorAgent(BaseAgent):
         )
         resp = await self._gw.complete(ModelRequest(
             correlation_id=correlation_id, system=_DECOMPOSE_SYSTEM,
-            prompt=prompt, max_tokens=2048, temperature=0.1,
+            prompt=prompt,
+            required_capabilities=frozenset({
+                ModelCapability.PLANNING,
+                ModelCapability.JSON_GENERATION,
+            }),
+            max_tokens=2048, temperature=0.1,
         ))
         return self._parse_dag(resp.text, task)
 
@@ -131,14 +136,14 @@ class SupervisorAgent(BaseAgent):
                 tasks.append(self._dispatch(subtask, dep_results, correlation_id))
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            for subtask, result in zip(batch, results):
+            for subtask, result in zip(batch, results, strict=False):
                 if isinstance(result, Exception):
                     completed[subtask.id] = SubTaskResult(
                         subtask_id=subtask.id, agent_type=subtask.agent_type,
                         ok=False, error=str(result),
                     )
                 else:
-                    completed[subtask.id] = result
+                    completed[subtask.id] = cast(SubTaskResult, result)
 
         return completed
 
@@ -179,9 +184,10 @@ class SupervisorAgent(BaseAgent):
         resp = await self._gw.complete(ModelRequest(
             correlation_id=correlation_id, system=_SYNTHESIZE_SYSTEM,
             prompt=f"ORIGINAL TASK: {original_task}\n\nSUBTASK RESULTS:\n{combined}",
+            required_capabilities=frozenset({ModelCapability.SUMMARIZATION}),
             max_tokens=4096, temperature=0.2,
         ))
-        return resp.text
+        return cast(str, resp.text)
 
     def _parse_dag(self, text: str, goal: str) -> TaskDAG:
         """Parse LLM output into a TaskDAG."""

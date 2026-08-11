@@ -13,7 +13,7 @@ import json
 
 from atlas.infra.ids import CorrelationId
 from atlas.infra.logging import get_logger
-from atlas.infra.types import ModelRequest
+from atlas.infra.types import ModelCapability, ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 from atlas.orchestration.types import Capabilities, RiskLevel
 
@@ -37,15 +37,27 @@ class Router:
             k in low for k in ("file", "open", "run", "delete", "send", "install", "search")
         )
         # 2) local classification (thinking off; cheap)
+        raw_text: str | None = None
         try:
             resp = await self._gw.complete(ModelRequest(
                 correlation_id=correlation_id, system=_CLASSIFY_SYSTEM,
-                prompt=request, max_tokens=1024, temperature=0.0,
+                prompt=request,
+                required_capabilities=frozenset({
+                    ModelCapability.CLASSIFICATION,
+                    ModelCapability.JSON_GENERATION,
+                }),
+                max_tokens=1024, temperature=0.0,
             ))
-            data = json.loads(self._json(resp.text))
+            raw_text = str(resp.text)
+            data = json.loads(self._json(raw_text))
         except Exception as exc:  # fail toward MORE caution, not less
-            _log.warning("router.classify_failed", event_type="orch",
-                         correlation_id=correlation_id, error=repr(exc), raw_text=resp.text if 'resp' in locals() else None)
+            _log.warning(
+                "router.classify_failed",
+                event_type="orch",
+                correlation_id=correlation_id,
+                error=repr(exc),
+                raw_text=raw_text,
+            )
             return Capabilities(needs_tools=tool_hint, needs_confirmation=True,
                                 max_risk=RiskLevel.MEDIUM)
         return Capabilities(

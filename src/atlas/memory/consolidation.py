@@ -15,7 +15,7 @@ from atlas.infra.clock import Clock
 from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
-from atlas.infra.types import ModelRequest
+from atlas.infra.types import ModelCapability, ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 from atlas.memory.episodic import EpisodicMemory
 from atlas.memory.semantic import SemanticMemory
@@ -57,6 +57,11 @@ class Consolidator:
             correlation_id=self._ids.correlation_id(),
             system="Extract durable memory. Output ONLY JSON.",
             prompt=_DISTILL_PROMPT + blob,
+            required_capabilities=frozenset({
+                ModelCapability.REASONING,
+                ModelCapability.SUMMARIZATION,
+                ModelCapability.JSON_GENERATION,
+            }),
             needs_deep_reasoning=True,  # thinking on; offline, no latency pressure
             max_tokens=1200,
         ))

@@ -9,9 +9,10 @@ POST /schedules         — Create a new recurring schedule
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from atlas.app import Atlas
 from atlas.interfaces.api.dependencies import get_atlas
 
 router = APIRouter(tags=["feedback"])
@@ -28,14 +29,16 @@ class FeedbackRequest(BaseModel):
 class ScheduleRequest(BaseModel):
     description: str
     cron_expression: str
-    task_template: dict
+    task_template: dict[str, object]
 
 
 @router.post("/feedback")
-async def submit_feedback(req: FeedbackRequest) -> dict:
+async def submit_feedback(
+    req: FeedbackRequest,
+    atlas: Atlas = Depends(get_atlas),
+) -> dict[str, str]:
     """Record user feedback on a task outcome."""
-    atlas = get_atlas()
-    if not hasattr(atlas, "feedback") or atlas.feedback is None:
+    if atlas.feedback is None:
         raise HTTPException(503, "Feedback store not initialized")
     try:
         fid = await atlas.feedback.record(
@@ -46,22 +49,24 @@ async def submit_feedback(req: FeedbackRequest) -> dict:
         )
         return {"id": fid, "status": "recorded"}
     except ValueError as e:
-        raise HTTPException(422, str(e))
+        raise HTTPException(422, str(e)) from e
 
 
 @router.get("/feedback/stats")
-async def feedback_stats() -> dict:
+async def feedback_stats(
+    atlas: Atlas = Depends(get_atlas),
+) -> dict[str, int]:
     """Get aggregate feedback statistics."""
-    atlas = get_atlas()
-    if not hasattr(atlas, "feedback") or atlas.feedback is None:
+    if atlas.feedback is None:
         raise HTTPException(503, "Feedback store not initialized")
     return await atlas.feedback.stats()
 
 
 @router.get("/audit/verify")
-async def verify_audit_chain() -> dict:
+async def verify_audit_chain(
+    atlas: Atlas = Depends(get_atlas),
+) -> dict[str, object]:
     """Verify the SHA-256 hash chain integrity of the audit log."""
-    atlas = get_atlas()
     valid, count = await atlas.audit.verify_chain()
     return {
         "chain_valid": valid,
@@ -71,20 +76,23 @@ async def verify_audit_chain() -> dict:
 
 
 @router.get("/schedules")
-async def list_schedules() -> dict:
+async def list_schedules(
+    atlas: Atlas = Depends(get_atlas),
+) -> dict[str, object]:
     """List all recurring schedules."""
-    atlas = get_atlas()
-    if not hasattr(atlas, "scheduler") or atlas.scheduler is None:
+    if atlas.scheduler is None:
         raise HTTPException(503, "Scheduler not initialized")
     schedules = await atlas.scheduler.list_schedules()
     return {"schedules": schedules, "count": len(schedules)}
 
 
 @router.post("/schedules")
-async def create_schedule(req: ScheduleRequest) -> dict:
+async def create_schedule(
+    req: ScheduleRequest,
+    atlas: Atlas = Depends(get_atlas),
+) -> dict[str, str]:
     """Create a new recurring schedule."""
-    atlas = get_atlas()
-    if not hasattr(atlas, "scheduler") or atlas.scheduler is None:
+    if atlas.scheduler is None:
         raise HTTPException(503, "Scheduler not initialized")
     sid = await atlas.scheduler.add_schedule(
         description=req.description,

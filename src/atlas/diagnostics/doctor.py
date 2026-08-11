@@ -12,8 +12,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 from atlas.app import Atlas
-from atlas.infra.config import resolve_master_key
-from atlas.infra.errors import ConfigError
 from atlas.safety.classifier import KNOWN_CONSTRAINTS
 from atlas.safety.manifest import verify_manifest
 from atlas.safety.matchers import KNOWN_MATCHERS
@@ -36,12 +34,18 @@ _REGISTERED_TOOLS: dict[str, list[str]] = {
 }
 
 
-def _master_key_present(atlas: Atlas) -> bool:
+async def _verify_encrypted_store(atlas: Atlas) -> tuple[bool, str]:
+    """Verify existing vault rows through the initialized identity platform."""
     try:
-        resolve_master_key(atlas.settings)
-        return True
-    except ConfigError:
-        return False
+        ok, count = await atlas.identity.verify_store()
+        detail = (
+            f"{count} encrypted secret rows verified"
+            if ok
+            else f"vault verification failed at row {count}"
+        )
+        return ok, detail
+    except Exception as exc:
+        return False, f"vault verification failed: {type(exc).__name__}"
 
 
 async def _count_identities(atlas: Atlas) -> int:
@@ -61,9 +65,9 @@ async def run_doctor(atlas: Atlas, *, verify_manifest_only: bool = False) -> lis
     report = verify_manifest(
         atlas.manifest, _REGISTERED_TOOLS, set(KNOWN_CONSTRAINTS), set(KNOWN_MATCHERS)
     )
-    if report.hard_block_gaps:
+    if report.matcher_gaps:
         results.append(CheckResult("manifest.matchers", "fail",
-                                   f"unimplemented hard-block matchers: {report.hard_block_gaps}"))
+                                   f"unimplemented safety matchers: {report.matcher_gaps}"))
     elif report.unmatched_constraints:
         results.append(CheckResult("manifest.constraints", "fail",
                                    f"unknown constraints: {report.unmatched_constraints}"))
@@ -81,8 +85,16 @@ async def run_doctor(atlas: Atlas, *, verify_manifest_only: bool = False) -> lis
     from atlas.safety.sandbox_docker import DockerSandbox, SandboxSpec
     sb = DockerSandbox(SandboxSpec(image=atlas.config.sandbox.image))
     docker_ok = await sb.health()
-    results.append(CheckResult("sandbox.docker", "pass" if docker_ok else "fail",
-                               "docker reachable" if docker_ok else "start Docker/Colima"))
+    if docker_ok:
+        results.append(CheckResult("sandbox.runtime", "pass", "Docker sandbox reachable"))
+    elif atlas.settings.env == "dev":
+        results.append(CheckResult(
+            "sandbox.runtime", "warn", "Docker unavailable; native development fallback active"
+        ))
+    else:
+        results.append(CheckResult(
+            "sandbox.runtime", "fail", "Docker sandbox required outside development"
+        ))
 
     # configuration
     results.append(CheckResult("config", "pass", f"env={atlas.settings.env}"))
@@ -101,9 +113,17 @@ async def run_doctor(atlas: Atlas, *, verify_manifest_only: bool = False) -> lis
 
     # permissions posture
     has_hard_blocks = bool(atlas.manifest.hard_block)
+    has_confirmations = bool(atlas.manifest.require_confirm)
+    permissions_ok = has_hard_blocks and has_confirmations
     results.append(CheckResult(
-        "permissions", "pass" if has_hard_blocks else "fail",
-        "deny-by-default + hard blocks present" if has_hard_blocks else "NO hard blocks"))
+        "permissions",
+        "pass" if permissions_ok else "fail",
+        (
+            "deny-by-default + hard blocks + confirmation rules present"
+            if permissions_ok
+            else "hard blocks or confirmation rules missing"
+        ),
+    ))
 
     # environment
     py_ok = sys.version_info >= (3, 13)
@@ -121,15 +141,23 @@ async def run_doctor(atlas: Atlas, *, verify_manifest_only: bool = False) -> lis
     results.append(CheckResult("database", "pass" if db_ok else "fail",
                                "connected, migrations applied" if db_ok else "not connected"))
 
-    # identity vault health
-    key_ok = _master_key_present(atlas)
-    results.append(CheckResult("identity.master_key", "pass" if key_ok else "fail",
-                               "present (keychain/env)" if key_ok else
-                               "set Keychain 'atlas-master' or ATLAS_MASTER_KEY"))
+    # audit ledger integrity
+    audit_ok, audit_count = await atlas.audit.verify_chain()
+    results.append(CheckResult(
+        "audit.chain",
+        "pass" if audit_ok else "fail",
+        f"{audit_count} records verified" if audit_ok else f"chain broken at record {audit_count}",
+    ))
+
+    # identity vault health; successful decryption also proves the initialized key works
+    vault_ok, vault_detail = await _verify_encrypted_store(atlas)
+    results.append(CheckResult(
+        "identity.encryption", "pass" if vault_ok else "fail", vault_detail
+    ))
 
     # count stored credentials (never values)
     n_identities = await _count_identities(atlas)
-    results.append(CheckResult("identity.credentials", "pass", f"{n_identities} stored (encrypted)"))
+    results.append(CheckResult("identity.credentials", "pass", f"{n_identities} stored"))
 
     # future compatibility
     results.append(CheckResult("future.providers", "pass",

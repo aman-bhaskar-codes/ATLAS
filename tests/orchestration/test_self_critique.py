@@ -1,5 +1,13 @@
 from atlas.infra.ids import CorrelationId
-from atlas.infra.types import ModelResponse, ModelTarget, SafetyDecision, Tier, TokenCost
+from atlas.infra.types import (
+    ModelCapability,
+    ModelRequest,
+    ModelResponse,
+    ModelTarget,
+    SafetyDecision,
+    Tier,
+    TokenCost,
+)
 from atlas.orchestration.parser import ResponseParser
 from atlas.orchestration.self_critique import SelfCritique
 from atlas.orchestration.tiering import TierEstimator
@@ -11,8 +19,10 @@ class ScriptedGateway:
     def __init__(self, texts: list[str]) -> None:
         self._t = texts
         self._i = 0
+        self.requests: list[ModelRequest] = []
 
-    async def complete(self, req: object) -> ModelResponse:
+    async def complete(self, req: ModelRequest) -> ModelResponse:
+        self.requests.append(req)
         text = self._t[min(self._i, len(self._t) - 1)]
         self._i += 1
         return ModelResponse(text=text, target=ModelTarget.LOCAL_FAST, model="fake",
@@ -52,6 +62,10 @@ async def test_ok_verdict_passes_through_unchanged() -> None:
     gw = ScriptedGateway(['{"verdict":"ok","reason":"fine"}'])
     out = await _hook(gw, Tier.CONFIRM).critique(_TOOL_ACTION, "ctx")
     assert out.kind == "tool_call" and out.operation == "delete"  # UNCHANGED (still gated by L1)
+    assert gw.requests[0].required_capabilities == frozenset({
+        ModelCapability.REFLECTION,
+        ModelCapability.JSON_GENERATION,
+    })
 
 
 async def test_abort_becomes_ask_user() -> None:
@@ -68,6 +82,15 @@ async def test_revise_regenerates_once() -> None:
     ])
     out = await _hook(gw, Tier.CONFIRM).critique(_TOOL_ACTION, "ctx")
     assert out.args["path"] == "/x/one.txt"  # revised, narrower
+    assert gw.requests[0].required_capabilities == frozenset({
+        ModelCapability.REFLECTION,
+        ModelCapability.JSON_GENERATION,
+    })
+    assert gw.requests[1].required_capabilities == frozenset({
+        ModelCapability.REASONING,
+        ModelCapability.TOOL_CALLING,
+        ModelCapability.JSON_GENERATION,
+    })
 
 
 async def test_critic_failure_falls_open_to_safety() -> None:

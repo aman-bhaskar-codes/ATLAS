@@ -26,11 +26,11 @@ class WorkflowStore:
 
     async def save_template(
         self, *, name: str, description: str,
-        steps: list[dict], variables: list[str] | None = None,
+        steps: list[dict[str, object]], variables: list[str] | None = None,
         derived_from: list[str] | None = None,
     ) -> str:
         """Save a workflow template derived from a successful task execution."""
-        wid = self._ids.new()
+        wid = self._ids.execution_id()
         await self._db.conn.execute(
             "INSERT INTO workflow_templates(id, name, description, steps, "
             "variables, derived_from, created_ts) VALUES (?,?,?,?,?,?,?)",
@@ -72,7 +72,6 @@ class WorkflowStore:
         )
         row = await cur.fetchone()
         if row:
-            count = int(row["use_count"])
             old_rate = float(row["success_rate"]) if row["success_rate"] is not None else 0.0
             # Exponential moving average
             new_rate = old_rate * 0.8 + (1.0 if succeeded else 0.0) * 0.2

@@ -44,16 +44,26 @@ class TierClassifier:
         hb = self._hard_block(req)
         if hb is not None:
             return hb
+        confirmation = self._required_confirmation(req)
         for rule in self._m.rules:
             if fnmatch.fnmatch(req.tool, rule.tool) and fnmatch.fnmatch(
                 req.operation, rule.operation
             ):
                 tier = Tier(rule.tier)
                 tier, reason = self._apply_constraint(rule.constraint, req, tier)
+                matched_rule = f"{req.tool}.{req.operation}"
+                if confirmation is not None:
+                    required_tier, confirmation_reason, confirmation_rule = confirmation
+                    tier = max(tier, required_tier)
+                    reason = confirmation_reason
+                    matched_rule = confirmation_rule
                 if req.declared_tier_hint is not None:
                     tier = max(tier, req.declared_tier_hint)
-                return self._as_decision(tier, reason or f"rule {req.tool}.{req.operation}",
-                                         f"{req.tool}.{req.operation}")
+                return self._as_decision(
+                    tier,
+                    reason or f"rule {req.tool}.{req.operation}",
+                    matched_rule,
+                )
         return SafetyDecision(
             decision="deny", tier=Tier.CONFIRM,
             reason="deny-by-default: no manifest rule matched",
@@ -82,6 +92,42 @@ class TierClassifier:
                 )
         return None
 
+    def _required_confirmation(self, req: ToolRequest) -> tuple[Tier, str, str] | None:
+        paths = [str(v) for k, v in req.args.items() if "path" in k.lower()]
+        blob = " ".join(str(v) for v in req.args.values())
+        cred_dirs = list(self._m.safety.get("credential_dirs", []))
+        fin_domains = list(self._m.safety.get("financial_domains", []))
+        threshold = int(self._m.safety.get("mass_deletion_threshold", 25))
+
+        for confirmation in self._m.require_confirm:
+            if not (
+                fnmatch.fnmatch(req.tool, confirmation.tool)
+                and fnmatch.fnmatch(req.operation, confirmation.operation)
+            ):
+                continue
+            hit, reason = self._match(
+                confirmation.match,
+                req,
+                paths,
+                blob,
+                cred_dirs,
+                fin_domains,
+                threshold,
+            )
+            if hit:
+                tier = max(Tier.CONFIRM, Tier(confirmation.tier))
+                matched_rule = f"require_confirm:{confirmation.match}"
+                _log.info(
+                    "safety.require_confirm",
+                    event_type="safety",
+                    correlation_id=req.correlation_id,
+                    match=confirmation.match,
+                    reason=reason,
+                    tier=tier.name,
+                )
+                return tier, f"{matched_rule}: {reason}", matched_rule
+        return None
+
     def _match(
         self, name: str, req: ToolRequest, paths: list[str], blob: str,
         cred_dirs: list[str], fin_domains: list[str], threshold: int,
@@ -95,7 +141,21 @@ class TierClassifier:
             return matchers.is_financial(req.args.get("url"), req.args.get("command"), fin_domains)
         if name == "edit_safety_config":
             hit = "permissions.yaml" in blob or ("safety" in blob and ".py" in blob)
-            return hit, "attempt to edit safety config"
+            return hit, "attempt to edit safety config" if hit else ""
+        if name == "sends_to_person":
+            return matchers.is_sends_to_person(req.args)
+        if name == "invites_person":
+            return matchers.is_invites_person(req.args)
+        if name == "destructive_pim":
+            return matchers.is_destructive_pim(req.tool, req.operation)
+        if name == "financial_ui":
+            return matchers.is_financial_ui(req.tool, req.operation, req.args)
+        if name == "destructive_ui":
+            return matchers.is_destructive_ui(req.tool, req.operation, req.args)
+        if name == "credential_entry":
+            return matchers.is_credential_entry(req.tool, req.operation, req.args)
+        if name == "submits_form":
+            return matchers.is_form_submission(req.tool, req.operation)
         return False, ""
 
     def _apply_constraint(

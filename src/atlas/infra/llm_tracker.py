@@ -30,7 +30,7 @@ class LLMCallTracker:
         cached: bool = False,
     ) -> str:
         """Record a single LLM call."""
-        call_id = self._ids.new()
+        call_id = self._ids.execution_id()
         await self._db.conn.execute(
             "INSERT INTO llm_calls(id, task_id, step_index, provider, model, "
             "tokens_in, tokens_out, cost_usd, latency_ms, cached, created_ts) "

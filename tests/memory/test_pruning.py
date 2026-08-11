@@ -1,4 +1,6 @@
+from collections.abc import AsyncIterator
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 
@@ -15,14 +17,14 @@ class FakeGateway:
         return Resp()  # type: ignore
 
 @pytest.fixture
-async def prune_db(tmp_path) -> None:  # type: ignore
+async def prune_db(tmp_path: Path) -> AsyncIterator[Database]:
     db = Database(tmp_path / "test.db")
     await db.start()
     yield db
     await db.stop()
 
 @pytest.mark.asyncio
-async def test_pruning_compacts_old_episodes(prune_db) -> None:  # type: ignore
+async def test_pruning_compacts_old_episodes(prune_db: Database) -> None:
     clock = SystemClock()
     ids = UuidGenerator()
     pruner = Pruner(db=prune_db, gateway=FakeGateway(), ids=ids, clock=clock) # type: ignore
@@ -39,7 +41,11 @@ async def test_pruning_compacts_old_episodes(prune_db) -> None:  # type: ignore
     assert stats["archived"] == 1
     
     cur = await prune_db.conn.execute("SELECT COUNT(*) as c FROM episodes")
-    assert (await cur.fetchone())["c"] == 0
-    
+    count_row = await cur.fetchone()
+    assert count_row is not None
+    assert count_row["c"] == 0
+
     cur2 = await prune_db.conn.execute("SELECT summary FROM memory_archive")
-    assert (await cur2.fetchone())["summary"] == "summarized!"
+    summary_row = await cur2.fetchone()
+    assert summary_row is not None
+    assert summary_row["summary"] == "summarized!"

@@ -12,7 +12,7 @@ import json
 
 from atlas.infra.ids import CorrelationId
 from atlas.infra.logging import get_logger
-from atlas.infra.types import ModelRequest, Tier
+from atlas.infra.types import ModelCapability, ModelRequest, Tier
 from atlas.intelligence.gateway import ModelGateway
 from atlas.orchestration.errors import PlanningError
 from atlas.orchestration.types import Capabilities, Plan, PlanStep, RiskLevel
@@ -40,6 +40,10 @@ class Planner:
         resp = await self._gw.complete(ModelRequest(
             correlation_id=correlation_id, system=_PLAN_SYSTEM,
             prompt=f"CONTEXT:\n{context}\n\nREQUEST:\n{request}",
+            required_capabilities=frozenset({
+                ModelCapability.PLANNING,
+                ModelCapability.JSON_GENERATION,
+            }),
             needs_deep_reasoning=caps.needs_reasoning,
             stakes_tier=Tier.CONFIRM if caps.needs_confirmation else Tier.AUTO,
             max_tokens=2048,
