@@ -16,6 +16,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from atlas.infra.circuit_breaker import CircuitBreaker
 from atlas.infra.logging import get_logger
 from atlas.safety.sandbox import SandboxResult
 
@@ -67,6 +68,7 @@ class DockerSandbox:
     def __init__(self, spec: SandboxSpec, runner: DockerRunner | None = None) -> None:
         self._spec = spec
         self._runner = runner or SubprocessDockerRunner()
+        self._breaker = CircuitBreaker(fail_threshold=3, cooldown_s=30.0)
 
     def _build_argv(
         self, command: list[str], mounts: dict[str, str], *, network: bool,
@@ -104,12 +106,24 @@ class DockerSandbox:
         self, command: list[str], *, mounts: dict[str, str],
         network: bool = False, timeout_s: float = 60.0, stdin: bytes | None = None
     ) -> SandboxResult:
+        if not self._breaker.allow():
+            _log.error("sandbox.circuit_open", event_type="sandbox")
+            return SandboxResult(exit_code=-1, stdout_tail="", stderr_tail="Sandbox circuit breaker OPEN", duration_ms=0)
+            
         argv = self._build_argv(command, mounts, network=network, stdin=stdin)
         _log.info("sandbox.run", event_type="sandbox",
                   cmd=shlex.join(command), mounts=list(mounts.values()), network=network)
         start = time.perf_counter()
         code, out, err = await self._runner.run(argv, timeout_s=timeout_s, stdin=stdin)
         dur = int((time.perf_counter() - start) * 1000)
+        
+        # 125 is Docker daemon error (failed to run container). 
+        # Anything else is either container exit code or timeout (124) which is normal behavior.
+        if code == 125:
+            self._breaker.record_failure()
+        else:
+            self._breaker.record_success()
+            
         return SandboxResult(
             exit_code=code,
             stdout_tail=out[-_MAX_OUTPUT:],

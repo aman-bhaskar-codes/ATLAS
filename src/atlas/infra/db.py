@@ -251,6 +251,29 @@ _MIGRATIONS: tuple[str, ...] = (
         created_ts TEXT NOT NULL
     );
     """,
+    # 008 — semantic response cache (Phase 11)
+    """
+    CREATE TABLE IF NOT EXISTS semantic_cache (
+        id TEXT PRIMARY KEY,
+        prompt_hash TEXT,
+        embedding_ref TEXT,
+        response_json TEXT NOT NULL,
+        ttl_expires_ts TEXT,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sem_cache_hash ON semantic_cache(prompt_hash);
+    CREATE INDEX IF NOT EXISTS idx_sem_cache_ttl ON semantic_cache(ttl_expires_ts);
+    """,
+    # 009 — durable event bus queue (Phase 11)
+    """
+    CREATE TABLE IF NOT EXISTS event_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_queue_topic ON event_queue(topic);
+    """
 )
 
 

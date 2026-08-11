@@ -12,13 +12,19 @@ jobs:
           python-version: "3.13"
       - name: Sync (dev only; macos extras skipped on Linux)
         run: uv sync
+      - name: Install Playwright Chromium
+        run: uv run playwright install --with-deps chromium
       - name: Lint
         run: uv run ruff check .
       - name: Types
         run: uv run mypy
       - name: Import boundaries
         run: uv run lint-imports --config importlinter.ini
-      - name: Tests
-        run: uv run pytest
+      - name: Tests + global coverage floor
+        run: uv run pytest --cov=atlas --cov-report=term-missing --cov-report=xml
+      - name: Safety coverage floor
+        run: uv run coverage report --include="*/atlas/safety/*" --fail-under=70
+      - name: Orchestration coverage floor
+        run: uv run coverage report --include="*/atlas/orchestration/*" --fail-under=85
       - name: Verify manifest
         run: uv run atlas doctor --verify-manifest

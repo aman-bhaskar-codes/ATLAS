@@ -1,4 +1,4 @@
-"""Token-bucket rate limiter + circuit breaker, per provider.
+"""Token-bucket rate limiter + circuit breaker, per provider/service.
 
 WHY per-provider: a rate limit or outage at DeepSeek must not affect GLM. The
 breaker opens after N consecutive failures, half-opens after a cooldown, and the

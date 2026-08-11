@@ -42,6 +42,14 @@ async def create_task(
     The task runs in the background. Connect to the SSE stream to follow progress.
     Idempotent: repeat calls with the same idempotency_key return the same task.
     """
+    if command.attachments:
+        att_summary = "\n\n[Attachments Provided:\n"
+        for att in command.attachments:
+            att_summary += f"- {att.type} ({att.id})\n"
+        att_summary += "]"
+        # Update the request string because Task schema is frozen.
+        command = command.model_copy(update={"request": command.request + att_summary})
+
     task = await control_plane.create_task(command)
     return JSONResponse(content=task.model_dump(mode="json"), status_code=202)
 

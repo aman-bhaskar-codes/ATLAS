@@ -62,6 +62,7 @@ from atlas.infra.types import AuditRecord, Tier
 from atlas.infra.workflows import WorkflowStore
 from atlas.intelligence.contracts import Usage
 from atlas.intelligence.gateway import ModelGateway
+from atlas.intelligence.cache import SemanticCache
 from atlas.intelligence.governance.budget import Budgets
 from atlas.intelligence.governance.cost_governor import CostGovernor
 from atlas.intelligence.health.health_monitor import HealthMonitor
@@ -184,6 +185,7 @@ class Atlas:
 
     async def start(self) -> None:
         await self.db.start()
+        await self.bus.start()
         await self.lifecycle.start()
 
     async def close(self) -> None:
@@ -217,7 +219,9 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     registry.register("db", db)
     lifecycle = Lifecycle(registry)
     
-    bus = MessageBus()
+    bus = MessageBus(db)
+    from atlas.orchestration.events import OrchestratorEvent
+    bus.register_type("orchestrator", OrchestratorEvent)
 
     audit = AuditLog(db)
     killswitch = KillSwitch(config.safety.stop_flag_path)
@@ -302,9 +306,12 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     cap_router = CapabilityRouter()
     selector = ModelSelector(capability_index, health)
     
+    cache_vectors = ChromaVectorStore(str(settings.data_dir / "chroma"), collection="atlas_cache")
+    semantic_cache = SemanticCache(db, cache_vectors, embedder)
+    
     gateway = ModelGateway(
         router=cap_router, selector=selector,
-        fallback=fallback, runtime=runtime,
+        fallback=fallback, runtime=runtime, cache=semantic_cache,
     )
 
     cap_registry = CapabilityRegistry()

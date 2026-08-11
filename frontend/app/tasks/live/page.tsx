@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { atlasApi } from '@/lib/api/client';
-import { CommandComposer } from '@/components/dashboard/CommandComposer';
+import { CommandWorkspace } from '@/components/workspace/CommandWorkspace';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { ErrorState } from '@/components/primitives/ErrorState';
@@ -49,7 +49,7 @@ export default function LiveRunPage() {
         <h1 className="text-2xl font-medium text-[var(--paper-100)] mb-2">Live Run</h1>
         <p className="text-[var(--paper-500)]">Start a new task to view its live execution trace.</p>
       </div>
-      <CommandComposer />
+      <CommandWorkspace />
     </div>
   );
 }

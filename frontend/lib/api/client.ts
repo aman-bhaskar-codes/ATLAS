@@ -67,7 +67,7 @@ export const atlasApi = {
   approvals: () => request("/approvals/pending", z.array(ApprovalSchema)),
   capabilities: () => request("/capabilities", z.array(CapabilitySchema)),
 
-  createTask: (payload: { request: string; idempotency_key: string }) =>
+  createTask: (payload: { request: string; idempotency_key: string; attachments?: { id: string; type: string }[] }) =>
     request("/tasks", TaskSchema, {
       method: "POST",
       body: JSON.stringify({ ...payload, source: "api" }),

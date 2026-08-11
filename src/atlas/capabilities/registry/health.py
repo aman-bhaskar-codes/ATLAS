@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 
-from atlas.intelligence.governance.circuit_breaker import CircuitBreaker
+from atlas.infra.circuit_breaker import CircuitBreaker
 
 
 class CapabilityHealth:

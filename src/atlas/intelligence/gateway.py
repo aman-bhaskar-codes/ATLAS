@@ -16,17 +16,20 @@ from atlas.intelligence.runtime.fallback import FallbackEngine
 from atlas.intelligence.runtime.inference import InferenceRuntime
 from atlas.intelligence.selection.router import CapabilityRouter
 from atlas.intelligence.selection.selector import ModelSelector
+from atlas.intelligence.cache import SemanticCache
 
 
 class ModelGateway:
     def __init__(
         self, *, router: CapabilityRouter, selector: ModelSelector,
         fallback: FallbackEngine, runtime: InferenceRuntime,
+        cache: SemanticCache | None = None,
     ) -> None:
         self._router = router
         self._selector = selector
         self._fallback = fallback
         self._runtime = runtime
+        self._cache = cache
 
     async def close(self) -> None:
         await self._runtime.close()
@@ -39,9 +42,19 @@ class ModelGateway:
         return status
 
     async def infer(self, req: InferenceRequest) -> InferenceResponse:
+        if self._cache:
+            cached_resp = await self._cache.get(req)
+            if cached_resp:
+                return cached_resp
+
         required = self._router.required(req)
         ranked = self._selector.select(required, req.constraints)
-        return await self._fallback.run(ranked, lambda spec: self._runtime.attempt(req, spec))
+        resp = await self._fallback.run(ranked, lambda spec: self._runtime.attempt(req, spec))
+        
+        if self._cache and not resp.fell_back:
+            await self._cache.put(req, resp)
+            
+        return resp
 
     # --- Phase 1-4 compatibility: accept the old ModelRequest shape ---
     async def complete(self, model_request: Any) -> Any:

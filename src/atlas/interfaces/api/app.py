@@ -41,6 +41,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     atlas = await build()
     await atlas.start()
+    
+    # Run a startup backup in the background
+    from atlas.infra.backup import create_backup
+    asyncio.create_task(create_backup(atlas.settings))
 
     event_store = TaskEventStore(atlas.db)
 
@@ -127,6 +131,7 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.routes_runtime import router as runtime_router
     from atlas.interfaces.api.routes_tasks import router as tasks_router
     from atlas.interfaces.api.routes_trust import router as trust_router
+    from atlas.interfaces.api.routes_attachments import router as attachments_router
 
     # Each API path now has exactly one owning router — see routes_tasks.py
     # and routes_trust.py module docstrings/comments for the split:
@@ -143,6 +148,7 @@ def create_app() -> FastAPI:
     app.include_router(approvals_router, prefix="/api/v1")
     app.include_router(capabilities_router, prefix="/api/v1")
     app.include_router(feedback_router, prefix="/api/v1")
+    app.include_router(attachments_router, prefix="/api/v1")
     app.include_router(trust_router, prefix="")
     app.include_router(events_router, prefix="/api/v1")
 

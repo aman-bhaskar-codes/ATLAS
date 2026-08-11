@@ -102,10 +102,15 @@ class CapabilityResponse(BaseModel):
     requires_auth: bool
 
 
+class AttachmentRef(BaseModel):
+    id: str
+    type: str
+    
 class CreateTaskRequest(BaseModel):
     request: str = Field(min_length=1, max_length=20_000)
     source: Literal["api"] = "api"
     idempotency_key: str = Field(min_length=16)
+    attachments: list[AttachmentRef] = Field(default_factory=list)
 
 
 class CancelTaskRequest(BaseModel):
