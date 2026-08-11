@@ -37,8 +37,13 @@ export default function TaskLiveRunPage({
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-6 md:p-12">
-      <div className="mb-6 flex items-center justify-between">
+    <>
+      <div className="crumb mb-6">
+        ATLAS / Tasks / <strong>{task_id}</strong>
+      </div>
+
+      <section className="panel">
+        <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <ConnectionBadge state={connection} />
           {lastSyncedAt && (
@@ -73,6 +78,7 @@ export default function TaskLiveRunPage({
           </div>
         )}
       </div>
-    </div>
+      </section>
+    </>
   );
 }

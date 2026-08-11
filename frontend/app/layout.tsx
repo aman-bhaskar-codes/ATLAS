@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import { Providers } from "./providers";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { Topbar } from "@/components/layout/Topbar";
+import { MobileNav } from "@/components/layout/MobileNav";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
 
 export const metadata: Metadata = {
   title: "ATLAS | Command Center",
@@ -20,10 +17,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body
-        className={`${inter.variable} antialiased bg-[var(--color-ink-950)] text-[var(--color-paper-100)]`}
-      >
-        <Providers>{children}</Providers>
+      <body>
+        <Providers>
+          <div className="app">
+            <Sidebar />
+            <main className="main">
+              <Topbar />
+              {children}
+            </main>
+          </div>
+          <MobileNav />
+        </Providers>
       </body>
     </html>
   );

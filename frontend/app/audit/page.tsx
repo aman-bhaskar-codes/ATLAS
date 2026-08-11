@@ -1,24 +1,26 @@
-'use client';
+"use client";
 
 import React from 'react';
-import { TrustHeader } from '../../components/trust/TrustHeader';
 import { useAuditLog } from '../../features/trust/queries';
 
 export default function AuditPage() {
   const { data, isLoading, error } = useAuditLog();
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-6">
-      <h1 className="text-3xl font-serif text-[var(--paper-100)] mb-6">Trust Center</h1>
-      <TrustHeader active="audit" />
+    <>
+      <div className="crumb mb-6">
+        ATLAS / <strong>Audit Log</strong>
+      </div>
 
-      <div className="glass-panel p-6 rounded-lg">
-        <h2 className="text-lg font-medium mb-4">System Audit Trail</h2>
+      <section className="panel">
+        <div className="section-head">
+          <h2>System Audit Trail</h2>
+        </div>
         
         {isLoading ? (
-          <div className="text-[var(--paper-500)] text-sm">Loading audit log...</div>
+          <div className="text-[var(--paper-500)] text-sm py-4">Loading audit log...</div>
         ) : error ? (
-          <div className="text-[var(--danger-400)] text-sm">Error loading audit log.</div>
+          <div className="text-[var(--danger-400)] text-sm py-4">Error loading audit log.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -58,7 +60,7 @@ export default function AuditPage() {
             )}
           </div>
         )}
-      </div>
-    </div>
+      </section>
+    </>
   );
 }
