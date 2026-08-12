@@ -8,6 +8,8 @@ highest fused-score items until the budget is spent, never 'everything'.
 
 from __future__ import annotations
 
+from typing import Any
+
 from atlas.memory.episodic import EpisodicMemory
 from atlas.memory.semantic import SemanticMemory
 from atlas.memory.types import Episode, RetrievedContext, SemanticFact
@@ -20,13 +22,20 @@ class Retriever:
     def __init__(
         self, *, semantic: SemanticMemory, episodic: EpisodicMemory,
         user_model: UserModel, token_budget: int = 1500,
+        events: Any | None = None,  # EventPublisher - Any to avoid circular import
     ) -> None:
         self._sem = semantic
         self._epi = episodic
         self._um = user_model
         self._budget = token_budget
+        self._events = events
+    
+    def set_events(self, events: Any) -> None:
+        """Set EventPublisher after construction."""
+        self._events = events
 
-    async def retrieve(self, query: str, *, terms: list[str] | None = None) -> RetrievedContext:
+    async def retrieve(self, query: str, *, terms: list[str] | None = None,
+                      task_id: str | None = None, correlation_id: str | None = None) -> RetrievedContext:
         # 1. dense (meaning) over semantic facts
         dense = await self._sem.semantic_search(query, k=15)
         # 2. sparse (exact) over recent episodic
@@ -40,6 +49,19 @@ class Retriever:
 
         # 5. knapsack into the token budget (facts first, then recent episodes)
         facts, epis, used = self._pack(ranked_facts, sparse, budget=self._budget)
+        
+        # Emit memory retrieval event
+        if self._events and task_id and correlation_id:
+            await self._events.emit_memory(
+                task_id=task_id,
+                correlation_id=correlation_id,
+                kind="memory.retrieved",
+                memory_type="hybrid",
+                count=len(facts) + len(epis),
+                query=query[:100],
+                items=[f.text[:50] for f in facts[:5]],  # Sample of retrieved facts
+            )
+        
         return RetrievedContext(
             user_model=user_model, facts=tuple(facts),
             recent_episodes=tuple(epis), token_estimate=used,

@@ -244,6 +244,140 @@ def revive() -> None:
     _run(go())
 
 
+@app.command("watch")
+def watch_task(
+    task_id: str = typer.Argument(..., help="Task ID to watch"),
+    json_output: bool = typer.Option(False, "--json", help="Output raw JSON instead of formatted display"),
+    host: str = typer.Option("localhost:8000", "--host", help="API server host:port"),
+) -> None:
+    """Watch task events in real-time via WebSocket.
+    
+    Connects to the task-scoped event stream and displays events as they occur.
+    Historical events are replayed first, then live events stream continuously.
+    
+    Examples:
+      atlas watch abc-123              # Watch task with pretty formatting
+      atlas watch abc-123 --json       # Output raw JSON for scripting
+      atlas watch abc-123 --host prod.example.com:8000
+    """
+    from websockets.sync.client import connect
+    from websockets.exceptions import WebSocketException
+    import json
+    from datetime import datetime
+    from rich.text import Text
+    
+    uri = f"ws://{host}/ws/tasks/{task_id}/stream"
+    
+    def format_timestamp(ts_str: str) -> str:
+        """Format ISO timestamp to HH:MM:SS"""
+        try:
+            dt = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+            return dt.strftime("%H:%M:%S")
+        except Exception:
+            return ts_str[:8] if len(ts_str) >= 8 else ts_str
+    
+    def get_event_symbol(kind: str) -> tuple[str, str]:
+        """Return (symbol, color) for event kind"""
+        if "started" in kind or "building" in kind:
+            return "▶", "blue"
+        elif "completed" in kind or "resolved" in kind:
+            return "✓", "green"
+        elif "failed" in kind or "denied" in kind:
+            return "✗", "red"
+        elif "thought" in kind or "action" in kind:
+            return "💭", "cyan"
+        elif "executing" in kind:
+            return "⚙", "yellow"
+        elif "classified" in kind:
+            return "🛡", "magenta"
+        elif "retrieved" in kind:
+            return "📚", "blue"
+        elif "requested" in kind:
+            return "❓", "yellow"
+        else:
+            return "•", "white"
+    
+    def render_event(event: dict[str, Any], is_historical: bool = False) -> None:
+        """Render a single event with rich formatting"""
+        kind = event.get("kind", "unknown")
+        timestamp = format_timestamp(event.get("_timestamp", ""))
+        task_id_short = event.get("task_id", "")[:8]
+        symbol, color = get_event_symbol(kind)
+        
+        # Build the main line
+        prefix = "[dim]REPLAY[/] " if is_historical else ""
+        line = Text()
+        line.append(f"{prefix}[dim]{timestamp}[/] ")
+        line.append(f"[{color}]{symbol}[/] ")
+        line.append(f"[bold]{kind}[/bold] ")
+        line.append(f"[dim]({task_id_short})[/]")
+        
+        console.print(line)
+        
+        # Show metadata if present
+        metadata = event.get("metadata", {})
+        if metadata:
+            # Show key metadata fields
+            if "summary" in metadata:
+                console.print(f"  [dim]→[/] {metadata['summary']}")
+            if "thought" in metadata:
+                console.print(f"  [cyan]💭[/] {metadata['thought']}")
+            if "action" in metadata:
+                console.print(f"  [yellow]⚡[/] {metadata['action']}")
+            if "tool" in metadata:
+                console.print(f"  [yellow]🔧[/] {metadata['tool']}")
+            if "tier" in metadata:
+                tier = metadata['tier']
+                tier_color = "red" if tier >= 3 else "yellow" if tier >= 2 else "green"
+                console.print(f"  [dim]Tier[/] [{tier_color}]{tier}[/{tier_color}]")
+            if "reason" in metadata:
+                console.print(f"  [dim]→[/] {metadata['reason']}")
+    
+    try:
+        console.print(f"[dim]Connecting to {uri}...[/]")
+        
+        with connect(uri, close_timeout=1) as websocket:
+            console.print("[green]✓ Connected[/] Watching for events...\n")
+            
+            replay_complete = False
+            event_count = 0
+            
+            for message in websocket:
+                event = json.loads(message)
+                
+                # Handle replay_complete marker
+                if event.get("type") == "replay_complete":
+                    historical_count = event.get("historical_count", 0)
+                    if historical_count > 0:
+                        console.print(f"\n[dim]─── End of replay ({historical_count} events) ───[/]\n")
+                    replay_complete = True
+                    continue
+                
+                # Handle ping/pong
+                if event.get("type") == "ping":
+                    websocket.send("pong")
+                    continue
+                
+                # Render event
+                is_historical = event.get("historical", False) or not replay_complete
+                
+                if json_output:
+                    console.print_json(data=event)
+                else:
+                    render_event(event, is_historical)
+                
+                event_count += 1
+    
+    except KeyboardInterrupt:
+        console.print("\n[yellow]⏸ Stopped watching[/]")
+    except WebSocketException as exc:
+        console.print(f"[red]✗ WebSocket error:[/] {exc}")
+        raise typer.Exit(1)
+    except Exception as exc:
+        console.print(f"[red]✗ Error:[/] {exc}")
+        raise typer.Exit(1)
+
+
 @app.command("audit")
 def audit_tail(limit: int = 30) -> None:
     async def go() -> None:

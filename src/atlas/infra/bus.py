@@ -70,10 +70,23 @@ class MessageBus:
             
         now = datetime.now(timezone.utc).isoformat()
         payload = event.model_dump_json()
+        
+        # Write to event_queue for immediate processing
         await self._db.conn.execute(
             "INSERT INTO event_queue(topic, payload_json, created_ts) VALUES (?,?,?)",
             (topic, payload, now)
         )
+        
+        # Also write to event_log for historical replay
+        event_dict = event.model_dump()
+        task_id = event_dict.get("task_id")
+        correlation_id = event_dict.get("correlation_id", event.correlation_id)
+        
+        await self._db.conn.execute(
+            "INSERT INTO event_log(topic, payload_json, task_id, correlation_id, created_ts) VALUES (?,?,?,?,?)",
+            (topic, payload, task_id, correlation_id, now)
+        )
+        
         await self._db.conn.commit()
         self._wake_event.set()
 

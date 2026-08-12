@@ -77,6 +77,7 @@ class SafetyEngine:
         self, *, classifier: TierClassifier, policy: PolicyEngine,
         audit: AuditLog, killswitch: KillSwitch, clock: Clock, cfg: SafetyCfg,
         confirmer: Confirmer | None = None,
+        events: Any | None = None,  # EventPublisher - Any to avoid circular import
     ) -> None:
         self._clf = classifier
         self._policy = policy
@@ -85,9 +86,14 @@ class SafetyEngine:
         self._clock = clock
         self._cfg = cfg
         self._confirmer = confirmer
+        self._events = events
 
     def set_confirmer(self, confirmer: Confirmer) -> None:
         self._confirmer = confirmer
+    
+    def set_events(self, events: Any) -> None:
+        """Set the EventPublisher after construction (avoids circular dependency)."""
+        self._events = events
 
     async def guard(self, req: ToolRequest, tool: Tool) -> ToolResult:
         if self._ks.is_active():
@@ -95,16 +101,80 @@ class SafetyEngine:
             raise HaltedError("kill switch active")
 
         decision = self._policy.evaluate(self._clf.classify(req))
+        
+        # Emit tier classification event
+        if self._events:
+            await self._events.emit_safety(
+                task_id=req.correlation_id,  # Using correlation_id as task_id proxy
+                correlation_id=req.correlation_id,
+                kind="tier.classified",
+                tier=decision.tier.name,
+                action=f"{req.tool}.{req.operation}",
+                tool=req.tool,
+                requires_approval=(decision.decision == "require_confirm"),
+            )
+        
         await self._audit_decision(req, decision)
 
         if decision.decision == "deny":
+            if self._events:
+                await self._events.emit_safety(
+                    task_id=req.correlation_id,
+                    correlation_id=req.correlation_id,
+                    kind="approval.denied",
+                    tier=decision.tier.name,
+                    action=f"{req.tool}.{req.operation}",
+                    tool=req.tool,
+                    decision="denied",
+                    reason=decision.reason,
+                )
             raise DeniedError(decision)
 
         if decision.decision == "require_confirm":
             needs_code = decision.tier >= Tier.DANGEROUS
-            if not await self._confirm(req, decision, tool, require_code=needs_code):
+            
+            # Emit approval requested event
+            if self._events:
+                await self._events.emit_safety(
+                    task_id=req.correlation_id,
+                    correlation_id=req.correlation_id,
+                    kind="approval.requested",
+                    tier=decision.tier.name,
+                    action=f"{req.tool}.{req.operation}",
+                    tool=req.tool,
+                    requires_approval=True,
+                    reason=decision.reason,
+                )
+            
+            confirmed = await self._confirm(req, decision, tool, require_code=needs_code)
+            
+            if not confirmed:
+                if self._events:
+                    await self._events.emit_safety(
+                        task_id=req.correlation_id,
+                        correlation_id=req.correlation_id,
+                        kind="approval.denied",
+                        tier=decision.tier.name,
+                        action=f"{req.tool}.{req.operation}",
+                        tool=req.tool,
+                        decision="denied",
+                        reason="User declined or timeout",
+                    )
                 await self._audit_decision(req, decision, outcome="denied")
                 raise DeniedError(decision)
+            
+            # Emit approval granted event
+            if self._events:
+                await self._events.emit_safety(
+                    task_id=req.correlation_id,
+                    correlation_id=req.correlation_id,
+                    kind="approval.resolved",
+                    tier=decision.tier.name,
+                    action=f"{req.tool}.{req.operation}",
+                    tool=req.tool,
+                    decision="approved",
+                    reason="User approved",
+                )
 
         if self._ks.is_active():  # re-check: confirmation may have taken time
             await self._audit_decision(req, decision, outcome="halted")

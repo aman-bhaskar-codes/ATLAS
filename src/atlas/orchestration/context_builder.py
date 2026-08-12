@@ -38,9 +38,11 @@ class ContextBuilder:
 
     async def build(
         self, request: str, *, safety_constraints: str, tool_catalog: str,
-        plan_summary: str | None = None,
+        plan_summary: str | None = None, task_id: str | None = None, 
+        correlation_id: str | None = None,
     ) -> str:
-        retrieved = await self._retriever.retrieve(request)
+        retrieved = await self._retriever.retrieve(request, task_id=task_id, 
+                                                   correlation_id=correlation_id)
         working = "\n".join(e.content[:200] for e in self._working.recent(10))
 
         layers: list[ContextLayer] = [

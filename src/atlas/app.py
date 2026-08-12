@@ -220,8 +220,12 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     lifecycle = Lifecycle(registry)
     
     bus = MessageBus(db)
-    from atlas.orchestration.events import OrchestratorEvent
+    from atlas.orchestration.events import OrchestratorEvent, SafetyEvent, PlanningEvent, MemoryEvent, ToolEvent
     bus.register_type("orchestrator", OrchestratorEvent)
+    bus.register_type("safety", SafetyEvent)
+    bus.register_type("planning", PlanningEvent)
+    bus.register_type("memory", MemoryEvent)
+    bus.register_type("tool", ToolEvent)
 
     audit = AuditLog(db)
     killswitch = KillSwitch(config.safety.stop_flag_path)
@@ -561,6 +565,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
 
     events = EventPublisher(bus)
+    safety.set_events(events)
+    retriever.set_events(events)
     router = Router(gateway)
     planner = Planner(gateway)
     context_builder = ContextBuilder(

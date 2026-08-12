@@ -78,8 +78,16 @@ class ReasoningLoop:
                 thought, action = await self._reason_once(
                     task_id, correlation_id, plan, context, history, counter,
                 )
+                await self._events.emit(
+                    task_id=task_id, correlation_id=correlation_id, state=machine.state.value,
+                    kind="reasoning.thought", step=counter.steps, thought=thought.content[:200]
+                )
                 await self._recorder.record_thought(correlation_id, thought)
                 await self._recorder.record_action(correlation_id, action)
+                await self._events.emit(
+                    task_id=task_id, correlation_id=correlation_id, state=machine.state.value,
+                    kind="reasoning.action", step=counter.steps, action_kind=action.kind, tool=action.tool
+                )
 
                 if action.kind in ("final_answer", "ask_user"):
                     machine.transition(TaskState.VALIDATING)
@@ -101,6 +109,10 @@ class ReasoningLoop:
                 )
                 self._monitor.check_may_continue(token)
                 machine.transition(TaskState.EXECUTING)
+                await self._events.emit(
+                    task_id=task_id, correlation_id=correlation_id, state=machine.state.value,
+                    kind="tool.executing", tool=action.tool
+                )
 
                 async def _do_dispatch(a: Action = action) -> Observation:
                     return await self._dispatch.dispatch(a, correlation_id)
@@ -108,7 +120,8 @@ class ReasoningLoop:
                 obs = await self._retry.run(_do_dispatch, counter)
                 await self._events.emit(
                     task_id=task_id, correlation_id=correlation_id, state=machine.state.value,
-                    kind="tool.result", tool=action.tool, ok=obs.ok, error=obs.error
+                    kind="tool.completed" if obs.ok else "tool.failed", 
+                    tool=action.tool, ok=obs.ok, error=obs.error
                 )
                 machine.transition(TaskState.OBSERVING)
                 await self._recorder.record_observation(correlation_id, obs)

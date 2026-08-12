@@ -77,11 +77,16 @@ class Orchestrator:
                                 state=machine.state.value, kind="task.created")
         try:
             machine.transition(TaskState.READY)
+            await self._events.emit(task_id=task.id, correlation_id=task.correlation_id,
+                                    state=machine.state.value, kind="task.started")
             machine.transition(TaskState.BUILDING_CONTEXT)
+            await self._events.emit(task_id=task.id, correlation_id=task.correlation_id,
+                                    state=machine.state.value, kind="context.building")
             caps = await self._router.route(task.request, task.correlation_id)
             context = await self._context.build(
                 task.request, safety_constraints=_SAFETY_CONSTRAINTS,
                 tool_catalog=self._registry.catalog(),
+                task_id=task.id, correlation_id=task.correlation_id,
             )
 
             machine.transition(TaskState.PLANNING)

@@ -273,6 +273,20 @@ _MIGRATIONS: tuple[str, ...] = (
         created_ts TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_event_queue_topic ON event_queue(topic);
+    """,
+    # 010 — event log for WebSocket replay (Phase 1)
+    """
+    CREATE TABLE IF NOT EXISTS event_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        task_id TEXT,
+        correlation_id TEXT,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_log_task ON event_log(task_id, created_ts);
+    CREATE INDEX IF NOT EXISTS idx_event_log_correlation ON event_log(correlation_id);
+    CREATE INDEX IF NOT EXISTS idx_event_log_topic ON event_log(topic);
     """
 )
 

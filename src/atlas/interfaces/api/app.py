@@ -37,6 +37,8 @@ if TYPE_CHECKING:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Build and start Atlas on startup; close it on shutdown."""
     from atlas.interfaces.api.event_store import TaskEventStore
+    from atlas.interfaces.api.websocket import ConnectionManager, EventBroadcaster
+    from atlas.interfaces.api import routes_events
     from atlas.orchestration.events import OrchestratorEvent
 
     atlas = await build()
@@ -76,15 +78,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     atlas.bus.subscribe("orchestrator", _on_orchestrator_event)
 
+    # Initialize WebSocket connection manager and broadcaster
+    ws_manager = ConnectionManager()
+    ws_broadcaster = EventBroadcaster(atlas.bus, ws_manager)
+    ws_broadcaster.start()
+    
+    # Set dependencies for WebSocket routes
+    routes_events.set_dependencies(ws_manager, atlas.db)
+
     # SSE connections subscribe per-task; we store queues in a shared dict.
     # Key: task_id → list of asyncio.Queue instances (one per active SSE client)
     sse_queues: dict[str, list[asyncio.Queue[str | None]]] = {}
-    
-    # WebSocket global connections
-    global_ws_queues: list[asyncio.Queue[Event]] = []
-    
-    # WebSocket task connections
-    ws_queues: dict[str, list[asyncio.Queue[Event]]] = {}
 
     async def _on_orchestrator_event_bus(event: Event) -> None:
         if not isinstance(event, OrchestratorEvent):
@@ -94,23 +98,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         queues = sse_queues.get(event.task_id, [])
         for q in queues:
             await q.put(event.task_id)  # signal: new event available for this task
-            
-        # Notify global WS clients
-        for q in global_ws_queues:
-            await q.put(event)
-            
-        # Notify task WS clients
-        t_queues = ws_queues.get(event.task_id, [])
-        for q in t_queues:
-            await q.put(event)
 
     atlas.bus.subscribe("orchestrator", _on_orchestrator_event_bus)
 
     app.state.atlas = atlas
     app.state.event_store = event_store
+    app.state.ws_manager = ws_manager
+    app.state.ws_broadcaster = ws_broadcaster
     app.state.sse_queues = sse_queues
-    app.state.global_ws_queues = global_ws_queues
-    app.state.ws_queues = ws_queues
     app.state.version = version("atlas")
     app.state.active_task_count = 0
     app.state.active_task_lock = asyncio.Lock()
@@ -152,6 +147,7 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.routes_tasks import router as tasks_router
     from atlas.interfaces.api.routes_trust import router as trust_router
     from atlas.interfaces.api.routes_attachments import router as attachments_router
+    from atlas.interfaces.api.routes_events import router as events_ws_router
 
     # Each API path now has exactly one owning router — see routes_tasks.py
     # and routes_trust.py module docstrings/comments for the split:
@@ -171,5 +167,6 @@ def create_app() -> FastAPI:
     app.include_router(attachments_router, prefix="/api/v1")
     app.include_router(trust_router, prefix="")
     app.include_router(events_router, prefix="/api/v1")
+    app.include_router(events_ws_router, prefix="")  # WebSocket routes already include /ws/ prefix
 
     return app
