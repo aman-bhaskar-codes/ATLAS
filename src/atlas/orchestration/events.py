@@ -70,6 +70,17 @@ class ToolEvent(Event):
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+class FeedbackEvent(Event):
+    """User feedback events for preference learning."""
+    task_id: str
+    kind: str  # feedback.submitted | feedback.processed
+    rating: int | None = None  # -1 (negative) or 1 (positive)
+    comment: str | None = None
+    original_output: str | None = None
+    edited_output: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
 class EventPublisher:
     def __init__(self, bus: MessageBus) -> None:
         self._bus = bus
@@ -127,4 +138,16 @@ class EventPublisher:
             correlation_id=correlation_id, task_id=task_id, kind=kind,
             tool=tool, operation=operation, args=args or {},
             result=result, error=error, latency_ms=latency_ms, metadata=metadata,
+        ))
+
+    async def emit_feedback(
+        self, *, task_id: str, correlation_id: str, kind: str,
+        rating: int | None = None, comment: str | None = None,
+        original_output: str | None = None, edited_output: str | None = None,
+        **metadata: Any,
+    ) -> None:
+        await self._bus.publish("feedback", FeedbackEvent(
+            correlation_id=correlation_id, task_id=task_id, kind=kind,
+            rating=rating, comment=comment, original_output=original_output,
+            edited_output=edited_output, metadata=metadata,
         ))

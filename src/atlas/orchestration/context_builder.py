@@ -73,5 +73,11 @@ class ContextBuilder:
 
     @staticmethod
     def _render_memory(retrieved: object) -> str:
+        """Render memory using the RetrievedContext.render() method."""
+        # Phase 3: Use full render() method which includes knowledge chunks
+        from atlas.memory.types import RetrievedContext
+        if isinstance(retrieved, RetrievedContext):
+            return retrieved.render()
+        # Fallback for testing
         facts = getattr(retrieved, "facts", ())
         return "\n".join(f"- {f.text}" for f in facts)

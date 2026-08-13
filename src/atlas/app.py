@@ -80,6 +80,7 @@ from atlas.interfaces.notify import CliConfirmer, CompositeConfirmer
 from atlas.memory.consolidation import Consolidator
 from atlas.memory.embedder import OllamaEmbedder
 from atlas.memory.episodic import EpisodicMemory
+from atlas.memory.knowledge_store import KnowledgeStore
 from atlas.memory.pruning import Pruner
 from atlas.memory.retrieval import Retriever
 from atlas.memory.semantic import SemanticMemory
@@ -164,6 +165,7 @@ class Atlas:
     retriever: Retriever
     consolidator: Consolidator
     pruner: Pruner
+    knowledge_store: KnowledgeStore
     bus: MessageBus
     orchestrator: Orchestrator
     cap_registry: CapabilityRegistry
@@ -423,7 +425,14 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     semantic = SemanticMemory(db, vectors, embedder, ids, clock)
     user_model = UserModel(db, clock)
     working = WorkingMemory()
-    retriever = Retriever(semantic=semantic, episodic=episodic, user_model=user_model)
+    
+    # Phase 3: Knowledge Store for document indexing
+    knowledge_store = KnowledgeStore(db=db, vector_store=vectors, embedder=embedder, 
+                                     ids=ids, clock=clock)
+    
+    # Phase 3: Retriever with knowledge store integration
+    retriever = Retriever(semantic=semantic, episodic=episodic, user_model=user_model,
+                         knowledge_store=knowledge_store)
     consolidator = Consolidator(episodic=episodic, semantic=semantic, gateway=gateway,
                                 db=db, ids=ids, clock=clock)
     pruner = Pruner(db=db, gateway=gateway, ids=ids, clock=clock)
@@ -629,7 +638,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         tools=tools, gateway=gateway, notification_platform=notification_platform,
         vectors=vectors, embedder=embedder, episodic=episodic, semantic=semantic,
         user_model=user_model, working=working, retriever=retriever,
-        consolidator=consolidator, pruner=pruner, bus=bus, orchestrator=orchestrator,
+        consolidator=consolidator, pruner=pruner, knowledge_store=knowledge_store,
+        bus=bus, orchestrator=orchestrator,
         cap_registry=cap_registry, cap_health=cap_health, cap_providers=cap_providers,
         ext_cap_router=ext_cap_router,
         cap_dispatcher=cap_dispatcher,

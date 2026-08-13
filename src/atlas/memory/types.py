@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -61,6 +62,7 @@ class RetrievedContext(BaseModel):
     user_model: str
     facts: tuple[SemanticFact, ...] = ()
     recent_episodes: tuple[Episode, ...] = ()
+    knowledge_chunks: tuple[dict[str, Any], ...] = ()  # Phase 3: Knowledge store results
     token_estimate: int = 0
 
     def render(self) -> str:
@@ -69,6 +71,13 @@ class RetrievedContext(BaseModel):
             lines.append("## Relevant memory")
             for f in self.facts:
                 lines.append(f"- [{f.kind.value}] {f.text}")
+            lines.append("")
+        if self.knowledge_chunks:
+            lines.append("## Knowledge base")
+            for chunk in self.knowledge_chunks:
+                title = chunk.get("document_title", "Unknown")
+                content = chunk.get("content", "")[:200]
+                lines.append(f"- [{title}] {content}")
             lines.append("")
         if self.recent_episodes:
             lines.append("## Recent context")

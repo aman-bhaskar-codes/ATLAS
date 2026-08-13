@@ -483,5 +483,129 @@ def contacts(
     _run(go())
 
 
+@app.command("knowledge")
+def knowledge(
+    action: str = typer.Argument(..., help="ingest|search|list|delete"),
+    path: str = typer.Option("", help="file path for ingest"),
+    query_text: str = typer.Option("", "--query", help="search query"),
+    doc_id_opt: str = typer.Option("", "--id", help="document ID for delete"),
+    source_type_opt: str = typer.Option("", "--type", help="markdown|pdf|txt|web"),
+    limit: int = typer.Option(5, help="max search results"),
+) -> None:
+    """Knowledge Store: ingest documents, search, list, delete."""
+    from pathlib import Path
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+    
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            store = atlas.knowledge_store
+            
+            if action == "ingest":
+                if not path:
+                    console.print("[red]Error:[/] --path required for ingest")
+                    return
+                
+                file_path = Path(path)
+                if not file_path.exists():
+                    console.print(f"[red]Error:[/] File not found: {path}")
+                    return
+                
+                # Auto-detect source type if not provided
+                source_type = source_type_opt
+                if not source_type:
+                    suffix = file_path.suffix.lower()
+                    if suffix == ".md":
+                        source_type = "markdown"
+                    elif suffix == ".pdf":
+                        source_type = "pdf"
+                    elif suffix in (".txt", ".text"):
+                        source_type = "txt"
+                    else:
+                        console.print(f"[red]Error:[/] Cannot auto-detect type for {suffix}. Use --type")
+                        return
+                
+                console.print(f"[cyan]Ingesting[/] {file_path.name} as {source_type}...")
+                
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    console=console
+                ) as progress:
+                    task = progress.add_task("Processing...", total=100)
+                    
+                    async def progress_callback(update: dict[str, Any]) -> None:
+                        status = update.get("status", "")
+                        if status == "chunking":
+                            chunks = update.get("chunks_processed", 0)
+                            progress.update(task, description=f"Chunking... ({chunks} chunks)", completed=30)
+                        elif status == "indexing":
+                            indexed = update.get("chunk_indexed", 0)
+                            total = update.get("total_chunks", 1)
+                            pct = int((indexed / total) * 70) + 30
+                            progress.update(task, description=f"Indexing... ({indexed}/{total})", completed=pct)
+                        elif status == "complete":
+                            progress.update(task, description="Complete!", completed=100)
+                    
+                    result_doc_id = await store.ingest_document(
+                        file_path,
+                        source_type,
+                        metadata={"title": file_path.stem},
+                        progress_callback=progress_callback
+                    )
+                
+                console.print(f"[green]✓ Ingested[/] document {result_doc_id}")
+            
+            elif action == "search":
+                if not query_text:
+                    console.print("[red]Error:[/] --query required for search")
+                    return
+                
+                console.print(f"[cyan]Searching for:[/] {query_text}\n")
+                results = await store.search(query_text, limit=limit)
+                
+                if not results:
+                    console.print("[yellow]No results found[/]")
+                    return
+                
+                for i, result in enumerate(results, 1):
+                    console.print(f"[bold]{i}. {result['document_title']}[/bold] [dim](chunk {result['chunk_index'] + 1}/{result['total_chunks']})[/]")
+                    console.print(f"   [dim]Score:[/] {result['score']:.3f}")
+                    console.print(f"   {result['content'][:200]}...")
+                    console.print()
+            
+            elif action == "list":
+                docs = await store.list_documents(limit=50)
+                if not docs:
+                    console.print("[yellow]No documents found[/]")
+                    return
+                
+                table = Table("ID", "Title", "Type", "Chunks", "Indexed", "Created")
+                for doc in docs:
+                    table.add_row(
+                        doc.id[:8],
+                        doc.title[:40],
+                        doc.source_type,
+                        str(doc.chunk_count),
+                        "✓" if doc.indexed else "⏳",
+                        doc.created_ts.strftime("%Y-%m-%d %H:%M")
+                    )
+                console.print(table)
+            
+            elif action == "delete":
+                if not doc_id_opt:
+                    console.print("[red]Error:[/] --id required for delete")
+                    return
+                
+                await store.delete_document(doc_id_opt)
+                console.print(f"[green]✓ Deleted[/] document {doc_id_opt}")
+            
+            else:
+                console.print(f"[red]Unknown action:[/] {action}")
+    
+    _run(go())
+
+
 if __name__ == "__main__":
     app()

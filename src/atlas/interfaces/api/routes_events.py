@@ -1,4 +1,4 @@
-1"""WebSocket routes for real-time event streaming.
+"""WebSocket routes for real-time event streaming.
 
 WHY two endpoints: /ws/events for dashboard observability (all events) and
 /ws/tasks/{id}/stream for CLI task tracking (scoped to one task). WHY historical
