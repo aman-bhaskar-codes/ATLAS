@@ -6,6 +6,11 @@ recoverable), and audited. The loop CANNOT run forever: limits raise typed error
 the monitor turns into a graceful FAILED. Tool actions go through the dispatcher
 (Safety Engine); final/ask actions terminate. Pre-action critique runs before
 consequential actions (Phase 4.5). Post-action reflection evaluates outcomes.
+
+Phase 1 additions:
+  - GoalState tracks desired vs current state and replan budget
+  - Replanner produces a revised plan after tool failure or verification miss
+  - Verifier checks the final answer against success criteria before returning
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from atlas.memory.types import Episode, EpisodeKind
 from atlas.orchestration.dispatcher import ToolDispatcher
 from atlas.orchestration.errors import CancellationError, OrchestrationError
 from atlas.orchestration.events import EventPublisher
+from atlas.orchestration.goal import GoalState, NullVerifier, VerificationResult, Verifier
 from atlas.orchestration.limits import ExecutionLimits, LimitCounter
 from atlas.orchestration.managers.cancellation import CancellationToken
 from atlas.orchestration.managers.retry import RetryManager
@@ -31,9 +37,11 @@ from atlas.orchestration.parser import ResponseParser
 from atlas.orchestration.prompt_builder import PromptBuilder
 from atlas.orchestration.recorder import ExecutionRecorder
 from atlas.orchestration.reflection import ReflectionHook
+from atlas.orchestration.replanner import Replanner
 from atlas.orchestration.state import TaskState, TaskStateMachine
 from atlas.orchestration.types import (
     Action,
+    Capabilities,
     Observation,
     Plan,
     TaskResult,
@@ -55,6 +63,8 @@ class ReasoningLoop:
         retry: RetryManager, reflection: ReflectionHook, events: EventPublisher,
         limits: ExecutionLimits, model_timeout_s: float = 120.0,
         working: "WorkingMemory | None" = None,
+        replanner: Replanner | None = None,       # Phase 1: bounded replanning
+        verifier: Verifier | None = None,         # Phase 1: answer verification
     ) -> None:
         self._gw = gateway
         self._dispatch = dispatcher
@@ -69,13 +79,29 @@ class ReasoningLoop:
         self._limits = limits
         self._model_timeout_s = model_timeout_s
         self._working = working
+        self._replanner = replanner
+        self._verifier: Verifier = verifier if verifier is not None else NullVerifier()
 
     async def run(
         self, *, task_id: TaskId, correlation_id: CorrelationId, plan: Plan, context: str,
         machine: TaskStateMachine, token: CancellationToken,
+        goal: GoalState | None = None,
+        caps: Capabilities | None = None,
     ) -> TaskResult:
+        """Execute the OTAR loop.
+
+        Phase 1 additions:
+          - goal:  if provided, enables verification and replanning
+          - caps:  forwarded to Replanner for capability-aware plan revision
+        """
+        # Build a GoalState from the plan when none is provided (backward compat)
+        if goal is None:
+            goal = GoalState(objective=plan.goal)
+
         counter = LimitCounter(self._limits)
         history: list[tuple[Thought, Observation | None]] = []
+        current_plan = plan
+        verification: VerificationResult | None = None
 
         while True:
             try:
@@ -84,7 +110,7 @@ class ReasoningLoop:
                 machine.transition(TaskState.REASONING)
 
                 thought, action = await self._reason_once(
-                    task_id, correlation_id, plan, context, history, counter,
+                    task_id, correlation_id, current_plan, context, history, counter,
                 )
                 await self._events.emit(
                     task_id=task_id, correlation_id=correlation_id, state=machine.state.value,
@@ -98,16 +124,64 @@ class ReasoningLoop:
                 )
 
                 if action.kind in ("final_answer", "ask_user"):
+                    # ── Phase 1: Verify the answer before returning ──────────
                     machine.transition(TaskState.VALIDATING)
+                    answer_text = action.final_text or ""
+                    verification = await self._verifier.verify(goal, answer_text, context)
+
+                    if not verification.passed and goal.can_replan() and self._replanner:
+                        # Verification failed — try replanning
+                        await self._events.emit(
+                            task_id=task_id, correlation_id=correlation_id,
+                            state=machine.state.value,
+                            kind="replan.started",
+                            replan_count=goal.replan_count + 1,
+                            trigger="verification_failed",
+                            score=verification.score,
+                        )
+                        failure_context = (
+                            f"The answer failed verification "
+                            f"(score {verification.score:.2f}). "
+                            f"Reason: {verification.failure_reason or 'unspecified'}. "
+                            f"Suggestions: {'; '.join(verification.suggestions) or 'none'}. "
+                            f"Previous answer: {answer_text[:400]}"
+                        )
+                        goal.record_replan()
+                        current_plan = await self._replanner.replan(
+                            goal=goal,
+                            original_plan=current_plan,
+                            failure_context=failure_context,
+                            correlation_id=correlation_id,
+                            caps=caps,
+                        )
+                        # Summarise history to stay within context budget
+                        history = history[-3:]
+                        await self._events.emit(
+                            task_id=task_id, correlation_id=correlation_id,
+                            state=machine.state.value,
+                            kind="replan.finished",
+                            replan_count=goal.replan_count,
+                            new_goal=current_plan.goal,
+                        )
+                        machine.transition(TaskState.REASONING)
+                        continue
+
                     machine.transition(TaskState.COMPLETED)
-                    return TaskResult(task_id=task_id, ok=True,
-                                      answer=action.final_text, steps_taken=counter.steps)
+                    return TaskResult(
+                        task_id=task_id, ok=True,
+                        answer=answer_text,
+                        steps_taken=counter.steps,
+                        replan_count=goal.replan_count,
+                        verification_passed=verification.passed,
+                        verification_score=verification.score,
+                    )
+
                 if action.kind == "noop":
                     machine.transition(TaskState.VALIDATING)
                     history.append((thought, None))
                     continue
 
-                # tool_call: reflect (Phase 4.5 seam) -> dispatch through Safety Engine
+                # ── Tool call: critique → dispatch → observe → reflect ───────
                 action = await self._reflection.critique(action, context)
                 counter.tick_tool()
                 machine.transition(TaskState.WAITING_TOOL)
@@ -128,13 +202,13 @@ class ReasoningLoop:
                 obs = await self._retry.run(_do_dispatch, counter)
                 await self._events.emit(
                     task_id=task_id, correlation_id=correlation_id, state=machine.state.value,
-                    kind="tool.completed" if obs.ok else "tool.failed", 
+                    kind="tool.completed" if obs.ok else "tool.failed",
                     tool=action.tool, ok=obs.ok, error=obs.error
                 )
                 machine.transition(TaskState.OBSERVING)
                 await self._recorder.record_observation(correlation_id, obs)
 
-                # Phase 0: Push observation into WorkingMemory so ContextBuilder can read it
+                # Phase 0: Push observation into WorkingMemory
                 if self._working:
                     self._working.add(Episode(
                         correlation_id=correlation_id,
@@ -148,7 +222,45 @@ class ReasoningLoop:
                         salience=0.5,
                     ))
 
-                # REFLECT (OTAR step 4): evaluate action outcome
+                # ── Phase 1: Replan on tool dispatch failure ─────────────────
+                if (
+                    not obs.ok
+                    and self._replanner
+                    and await self._replanner.should_replan(goal, obs)
+                ):
+                    await self._events.emit(
+                        task_id=task_id, correlation_id=correlation_id,
+                        state=machine.state.value,
+                        kind="replan.started",
+                        replan_count=goal.replan_count + 1,
+                        trigger="tool_failure",
+                        tool=action.tool,
+                        error=obs.error,
+                    )
+                    failure_context = (
+                        f"Tool '{action.tool}' (operation={action.operation}) failed: "
+                        f"{obs.error or 'unknown error'}. "
+                        f"Tried: {action.args}. "
+                        f"Step {counter.steps} of the plan."
+                    )
+                    goal.record_replan()
+                    current_plan = await self._replanner.replan(
+                        goal=goal,
+                        original_plan=current_plan,
+                        failure_context=failure_context,
+                        correlation_id=correlation_id,
+                        caps=caps,
+                    )
+                    history = history[-3:]
+                    await self._events.emit(
+                        task_id=task_id, correlation_id=correlation_id,
+                        state=machine.state.value,
+                        kind="replan.finished",
+                        replan_count=goal.replan_count,
+                        new_goal=current_plan.goal,
+                    )
+
+                # OTAR Reflect step
                 reflection = await self._reflection.reflect(action, obs, context)
                 if reflection.learnings:
                     _log.info("reasoning.reflect", event_type="orchestration",
@@ -161,15 +273,21 @@ class ReasoningLoop:
             except CancellationError as exc:
                 machine.transition(TaskState.CANCELLING)
                 machine.transition(TaskState.FAILED)
-                return TaskResult(task_id=task_id, ok=False, error=str(exc),
-                                  steps_taken=counter.steps)
+                return TaskResult(
+                    task_id=task_id, ok=False, error=str(exc),
+                    steps_taken=counter.steps,
+                    replan_count=goal.replan_count,
+                )
             except OrchestrationError as exc:
                 await self._events.emit(task_id=task_id, correlation_id=correlation_id,
                                         state=machine.state.value, kind="task.failed",
                                         error=str(exc))
                 machine.transition(TaskState.FAILED)
-                return TaskResult(task_id=task_id, ok=False, error=str(exc),
-                                  steps_taken=counter.steps)
+                return TaskResult(
+                    task_id=task_id, ok=False, error=str(exc),
+                    steps_taken=counter.steps,
+                    replan_count=goal.replan_count,
+                )
 
     async def _reason_once(
         self, task_id: TaskId, correlation_id: CorrelationId, plan: Plan, context: str,

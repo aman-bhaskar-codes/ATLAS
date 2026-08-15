@@ -18,6 +18,7 @@ from atlas.infra.logging import get_logger
 from atlas.infra.types import InboundEvent
 from atlas.orchestration.context_builder import ContextBuilder
 from atlas.orchestration.events import EventPublisher
+from atlas.orchestration.goal import GoalState
 from atlas.orchestration.managers.cancellation import CancellationToken
 from atlas.orchestration.planner import Planner
 from atlas.orchestration.reasoning import ReasoningLoop
@@ -98,9 +99,18 @@ class Orchestrator:
                                     steps=len(plan.steps), risk=plan.risk.value,
                                     confidence=plan.confidence)
 
+            # Phase 1: Build GoalState from plan so the loop can track and replan
+            goal = GoalState(
+                objective=plan.goal,
+                constraints=list(plan.constraints),
+                current_state="planning_complete",
+                confidence=plan.confidence,
+            )
+
             result = await self._reasoning.run(
                 task_id=task.id, correlation_id=task.correlation_id, plan=plan,
                 context=context, machine=machine, token=token,
+                goal=goal, caps=caps,
             )
             await self._events.emit(
                 task_id=task.id, correlation_id=task.correlation_id,

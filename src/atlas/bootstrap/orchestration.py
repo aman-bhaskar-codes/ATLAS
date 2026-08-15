@@ -17,6 +17,7 @@ from atlas.memory.working import WorkingMemory
 from atlas.orchestration.context_builder import ContextBuilder
 from atlas.orchestration.dispatcher import ToolDispatcher
 from atlas.orchestration.events import EventPublisher
+from atlas.orchestration.goal import GoalVerifier, NullVerifier
 from atlas.orchestration.limits import ExecutionLimits
 from atlas.orchestration.managers.retry import RetryManager
 from atlas.orchestration.monitor import ExecutionMonitor
@@ -28,6 +29,7 @@ from atlas.orchestration.reasoning import ReasoningLoop
 from atlas.orchestration.recorder import ExecutionRecorder
 from atlas.orchestration.reflection import NoOpReflection
 from atlas.orchestration.registry import ToolRegistry
+from atlas.orchestration.replanner import Replanner
 from atlas.orchestration.router import Router
 from atlas.orchestration.self_critique import SelfCritique
 from atlas.orchestration.tiering import TierEstimator
@@ -110,11 +112,16 @@ def build_orchestration(
     dispatcher = ToolDispatcher(tool_registry, safety)
     limits = ExecutionLimits(max_steps=15)
 
+    # Phase 1: Replanner and Verifier
+    replanner = Replanner(gateway)
+    verifier = GoalVerifier(gateway) if config.critique.enabled else NullVerifier()
+
     reasoning = ReasoningLoop(
         gateway=gateway, dispatcher=dispatcher, parser=parser,
         validator=validator, prompts=prompts, recorder=recorder,
         monitor=monitor, retry=retry, reflection=reflection,
         events=events, limits=limits, working=working,
+        replanner=replanner, verifier=verifier,
     )
 
     orchestrator = Orchestrator(

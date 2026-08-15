@@ -93,6 +93,9 @@ class TaskResult(BaseModel):
     answer: str | None = None
     steps_taken: int = 0
     error: str | None = None
+    replan_count: int = 0                             # Phase 1
+    verification_passed: bool | None = None           # Phase 1
+    verification_score: float | None = None           # Phase 1
 
 
 class Task(BaseModel):
