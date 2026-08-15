@@ -12,10 +12,12 @@ from atlas.intelligence.gateway import ModelGateway
 from atlas.memory.consolidation import Consolidator
 from atlas.memory.embedder import EmbeddingWorker, OllamaEmbedder
 from atlas.memory.episodic import EpisodicMemory
+from atlas.memory.experience_extractor import ExperienceExtractor  # Phase 2
 from atlas.memory.knowledge_store import KnowledgeStore
 from atlas.memory.pruning import Pruner
 from atlas.memory.retrieval import Retriever
 from atlas.memory.semantic import SemanticMemory
+from atlas.memory.trajectory_store import TrajectoryStore  # Phase 2
 from atlas.memory.user_model import UserModel
 from atlas.memory.vectorstore import ChromaVectorStore
 from atlas.memory.working import WorkingMemory
@@ -33,6 +35,8 @@ class MemoryComponents:
     retriever: Retriever
     consolidator: Consolidator
     pruner: Pruner
+    trajectory_store: TrajectoryStore  # Phase 2
+    experience_extractor: ExperienceExtractor  # Phase 2
 
 
 def build_memory(
@@ -72,6 +76,15 @@ def build_memory(
         db=db, ids=ids, clock=clock,
     )
     pruner = Pruner(db=db, gateway=gateway, ids=ids, clock=clock)
+    
+    # Phase 2: Trajectory store and experience extractor for durable learning
+    trajectory_store = TrajectoryStore(db=db, ids=ids, clock=clock)
+    experience_extractor = ExperienceExtractor(
+        gateway=gateway,
+        trajectory_store=trajectory_store,
+        ids=ids,
+        clock=clock,
+    )
 
     return MemoryComponents(
         vectors=vectors,
@@ -84,4 +97,6 @@ def build_memory(
         retriever=retriever,
         consolidator=consolidator,
         pruner=pruner,
+        trajectory_store=trajectory_store,
+        experience_extractor=experience_extractor,
     )

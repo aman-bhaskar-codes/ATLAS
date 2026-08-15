@@ -170,6 +170,194 @@ def user_model_set(section: str, content: str) -> None:
     _run(go())
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Phase 2: Trajectory Commands
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+@app.command("trajectories")
+def list_trajectories(
+    limit: int = typer.Option(20, "--limit"),
+    failed_only: bool = typer.Option(False, "--failed"),
+) -> None:
+    """List recent task trajectories (Phase 2 learning history)."""
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            if failed_only:
+                trajectories = await atlas.trajectory_store.get_failed_trajectories(limit=limit)
+            else:
+                trajectories = await atlas.trajectory_store.get_recent_trajectories(limit=limit)
+            
+            if not trajectories:
+                console.print("[yellow]No trajectories found[/]")
+                return
+            
+            table = Table("ID", "Task ID", "Goal", "Success", "Steps", "Replans", "Latency")
+            for t in trajectories:
+                success_icon = "[green]✓[/]" if t.success else "[red]✗[/]"
+                table.add_row(
+                    t.id[:8],
+                    t.task_id[:8],
+                    t.goal[:40],
+                    success_icon,
+                    str(t.steps_taken),
+                    str(t.replan_count),
+                    f"{t.latency_ms}ms",
+                )
+            console.print(table)
+            console.print(f"\n[dim]Total: {len(trajectories)} trajectories[/]")
+    _run(go())
+
+
+@app.command("trajectory")
+def show_trajectory(task_id: str) -> None:
+    """Show full trajectory for a task (Phase 2 execution history)."""
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            trajectory = await atlas.trajectory_store.get_trajectory_by_task(task_id)
+            
+            if not trajectory:
+                console.print(f"[red]No trajectory found for task {task_id}[/]")
+                return
+            
+            console.print(f"[bold]Trajectory {trajectory.id}[/]")
+            console.print(f"Task: {trajectory.task_id}")
+            console.print(f"Goal: {trajectory.goal}")
+            console.print(f"Request: {trajectory.request}")
+            console.print(f"Success: {'✓' if trajectory.success else '✗'}")
+            console.print(f"Steps: {trajectory.steps_taken}")
+            console.print(f"Replans: {trajectory.replan_count}")
+            console.print(f"Verification: {trajectory.verification_score or 'N/A'}")
+            console.print(f"Latency: {trajectory.latency_ms}ms")
+            console.print(f"Tokens: {trajectory.tokens_used}")
+            console.print(f"Cost: ${trajectory.cost_usd:.4f}")
+            
+            if trajectory.answer:
+                console.print(f"\n[bold]Answer:[/]\n{trajectory.answer}")
+            elif trajectory.error:
+                console.print(f"\n[bold red]Error:[/]\n{trajectory.error}")
+            
+            # Show action summary
+            if trajectory.actions:
+                console.print(f"\n[bold]Actions ({len(trajectory.actions)}):[/]")
+                for i, action in enumerate(trajectory.actions[:10]):  # First 10 actions
+                    kind = getattr(action, "kind", "unknown")
+                    tool = getattr(action, "tool", None)
+                    if tool:
+                        console.print(f"  {i+1}. {kind} → {tool}")
+                    else:
+                        console.print(f"  {i+1}. {kind}")
+                if len(trajectory.actions) > 10:
+                    console.print(f"  ... and {len(trajectory.actions) - 10} more")
+    _run(go())
+
+
+@app.command("experiences")
+def list_experiences(
+    category: str | None = typer.Option(None, "--category"),
+    min_confidence: float = typer.Option(0.5, "--min-confidence"),
+    limit: int = typer.Option(20, "--limit"),
+) -> None:
+    """List extracted experiences (Phase 2 learned lessons)."""
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            from atlas.memory.trajectory import ExperienceCategory, ExperienceQuery
+            
+            query = ExperienceQuery(
+                category=ExperienceCategory(category) if category else None,
+                min_confidence=min_confidence,
+                limit=limit,
+            )
+            
+            experiences = await atlas.trajectory_store.query_experiences(query)
+            
+            if not experiences:
+                console.print("[yellow]No experiences found[/]")
+                return
+            
+            table = Table("ID", "Category", "Lesson", "Confidence", "Reused", "Success %")
+            for exp in experiences:
+                table.add_row(
+                    exp.id[:8],
+                    exp.category.value,
+                    exp.lesson_text[:50],
+                    f"{exp.confidence:.2f}",
+                    str(exp.reuse_count),
+                    f"{exp.success_rate*100:.0f}%" if exp.reuse_count > 0 else "N/A",
+                )
+            console.print(table)
+            console.print(f"\n[dim]Total: {len(experiences)} experiences[/]")
+    _run(go())
+
+
+@app.command("failures")
+def list_failures(
+    category: str | None = typer.Option(None, "--category"),
+    component: str | None = typer.Option(None, "--component"),
+    limit: int = typer.Option(20, "--limit"),
+) -> None:
+    """List failure records (Phase 2 error taxonomy)."""
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            from atlas.memory.trajectory import FailureCategory
+            
+            failures = await atlas.trajectory_store.get_failure_records(
+                category=FailureCategory(category) if category else None,
+                component=component,
+                limit=limit,
+            )
+            
+            if not failures:
+                console.print("[yellow]No failures found[/]")
+                return
+            
+            table = Table("ID", "Category", "Component", "Recovered", "Message")
+            for f in failures:
+                recovered_icon = "[green]✓[/]" if f.recovered and f.recovery_succeeded else "[red]✗[/]"
+                table.add_row(
+                    f.id[:8],
+                    f.category.value,
+                    f.component,
+                    recovered_icon,
+                    f.error_message[:50],
+                )
+            console.print(table)
+            console.print(f"\n[dim]Total: {len(failures)} failures[/]")
+    _run(go())
+
+
+@app.command("extract-experiences")
+def extract_experiences(
+    limit: int = typer.Option(10, "--limit"),
+    failed_only: bool = typer.Option(False, "--failed-only"),
+) -> None:
+    """Manually trigger experience extraction from recent trajectories."""
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            console.print(f"[yellow]Extracting experiences from {limit} recent trajectories...[/]")
+            
+            stats = await atlas.experience_extractor.extract_from_recent_trajectories(
+                limit=limit,
+                only_successful=not failed_only,
+            )
+            
+            console.print(f"[green]Extraction complete:[/]")
+            console.print(f"  Processed: {stats['processed']}")
+            console.print(f"  Extracted: {stats['extracted']} experiences")
+            console.print(f"  Failed: {stats['failed']}")
+    _run(go())
+
+
+@app.command("user-model")
+def user_model_set(section: str, content: str) -> None:
+    """Edit an always-loaded user-model section."""
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            await atlas.user_model.set_section(section, content)
+            console.print(f"[green]updated[/] {section}")
+    _run(go())
+
+
 @app.command("run-tool")
 def run_tool(
     tool: str, operation: str,

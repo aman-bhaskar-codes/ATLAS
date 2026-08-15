@@ -11,6 +11,11 @@ Phase 1 additions:
   - GoalState tracks desired vs current state and replan budget
   - Replanner produces a revised plan after tool failure or verification miss
   - Verifier checks the final answer against success criteria before returning
+
+Phase 2 additions:
+  - Trajectory capture: records complete execution history (actions, observations)
+  - DecisionTrace: logs model selection, tool choices, replanning decisions
+  - FailureRecord: structured error tracking for taxonomy building
 """
 
 from __future__ import annotations
@@ -50,6 +55,7 @@ from atlas.orchestration.types import (
 from atlas.orchestration.validator import OutputValidator
 
 if TYPE_CHECKING:
+    from atlas.memory.trajectory_store import TrajectoryStore
     from atlas.memory.working import WorkingMemory
 
 _log = get_logger("atlas.orch.reasoning")
@@ -65,6 +71,7 @@ class ReasoningLoop:
         working: "WorkingMemory | None" = None,
         replanner: Replanner | None = None,       # Phase 1: bounded replanning
         verifier: Verifier | None = None,         # Phase 1: answer verification
+        trajectory_store: "TrajectoryStore | None" = None,  # Phase 2: trajectory capture
     ) -> None:
         self._gw = gateway
         self._dispatch = dispatcher
@@ -81,6 +88,7 @@ class ReasoningLoop:
         self._working = working
         self._replanner = replanner
         self._verifier: Verifier = verifier if verifier is not None else NullVerifier()
+        self._trajectory_store = trajectory_store
 
     async def run(
         self, *, task_id: TaskId, correlation_id: CorrelationId, plan: Plan, context: str,
@@ -93,6 +101,10 @@ class ReasoningLoop:
         Phase 1 additions:
           - goal:  if provided, enables verification and replanning
           - caps:  forwarded to Replanner for capability-aware plan revision
+        
+        Phase 2 additions:
+          - Trajectory capture: collects actions, observations, decision traces
+          - Returns trajectory data in TaskResult for orchestrator to save
         """
         # Build a GoalState from the plan when none is provided (backward compat)
         if goal is None:
@@ -102,6 +114,12 @@ class ReasoningLoop:
         history: list[tuple[Thought, Observation | None]] = []
         current_plan = plan
         verification: VerificationResult | None = None
+        
+        # Phase 2: Trajectory capture initialization
+        from atlas.memory.trajectory import ActionRecord, ObservationRecord
+        trajectory_actions: list[ActionRecord] = []
+        trajectory_observations: list[ObservationRecord] = []
+        trajectory_start = time.perf_counter()
 
         while True:
             try:
@@ -122,6 +140,16 @@ class ReasoningLoop:
                     task_id=task_id, correlation_id=correlation_id, state=machine.state.value,
                     kind="reasoning.action", step=counter.steps, action_kind=action.kind, tool=action.tool
                 )
+                
+                # Phase 2: Capture action for trajectory
+                trajectory_actions.append(ActionRecord(
+                    step=action.step,
+                    kind=action.kind,
+                    tool=action.tool,
+                    operation=action.operation,
+                    args=action.args,
+                    final_text=action.final_text,
+                ))
 
                 if action.kind in ("final_answer", "ask_user"):
                     # ── Phase 1: Verify the answer before returning ──────────
@@ -167,6 +195,8 @@ class ReasoningLoop:
                         continue
 
                     machine.transition(TaskState.COMPLETED)
+                    trajectory_latency_ms = int((time.perf_counter() - trajectory_start) * 1000)
+                    
                     return TaskResult(
                         task_id=task_id, ok=True,
                         answer=answer_text,
@@ -174,6 +204,13 @@ class ReasoningLoop:
                         replan_count=goal.replan_count,
                         verification_passed=verification.passed,
                         verification_score=verification.score,
+                        # Phase 2: Trajectory data
+                        actions=tuple(trajectory_actions),
+                        observations=tuple(trajectory_observations),
+                        latency_ms=trajectory_latency_ms,
+                        tokens_used=counter.total_tokens,
+                        model_calls=counter.steps,  # Rough approximation
+                        tool_calls=counter.tools,
                     )
 
                 if action.kind == "noop":
@@ -207,6 +244,14 @@ class ReasoningLoop:
                 )
                 machine.transition(TaskState.OBSERVING)
                 await self._recorder.record_observation(correlation_id, obs)
+                
+                # Phase 2: Capture observation for trajectory
+                trajectory_observations.append(ObservationRecord(
+                    step=obs.step,
+                    ok=obs.ok,
+                    content=str(obs.content)[:1000] if obs.content else None,  # Truncate for storage
+                    error=obs.error,
+                ))
 
                 # Phase 0: Push observation into WorkingMemory
                 if self._working:
@@ -273,20 +318,34 @@ class ReasoningLoop:
             except CancellationError as exc:
                 machine.transition(TaskState.CANCELLING)
                 machine.transition(TaskState.FAILED)
+                trajectory_latency_ms = int((time.perf_counter() - trajectory_start) * 1000)
                 return TaskResult(
                     task_id=task_id, ok=False, error=str(exc),
                     steps_taken=counter.steps,
                     replan_count=goal.replan_count,
+                    actions=tuple(trajectory_actions),
+                    observations=tuple(trajectory_observations),
+                    latency_ms=trajectory_latency_ms,
+                    tokens_used=counter.total_tokens,
+                    model_calls=counter.steps,
+                    tool_calls=counter.tools,
                 )
             except OrchestrationError as exc:
                 await self._events.emit(task_id=task_id, correlation_id=correlation_id,
                                         state=machine.state.value, kind="task.failed",
                                         error=str(exc))
                 machine.transition(TaskState.FAILED)
+                trajectory_latency_ms = int((time.perf_counter() - trajectory_start) * 1000)
                 return TaskResult(
                     task_id=task_id, ok=False, error=str(exc),
                     steps_taken=counter.steps,
                     replan_count=goal.replan_count,
+                    actions=tuple(trajectory_actions),
+                    observations=tuple(trajectory_observations),
+                    latency_ms=trajectory_latency_ms,
+                    tokens_used=counter.total_tokens,
+                    model_calls=counter.steps,
+                    tool_calls=counter.tools,
                 )
 
     async def _reason_once(

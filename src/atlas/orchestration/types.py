@@ -96,6 +96,13 @@ class TaskResult(BaseModel):
     replan_count: int = 0                             # Phase 1
     verification_passed: bool | None = None           # Phase 1
     verification_score: float | None = None           # Phase 1
+    # Phase 2: Trajectory data for Orchestrator to save
+    actions: tuple[Any, ...] = ()                     # ActionRecord list
+    observations: tuple[Any, ...] = ()                # ObservationRecord list
+    latency_ms: int = 0                               # Total execution time
+    tokens_used: int = 0                              # Total tokens
+    model_calls: int = 0                              # LLM invocations
+    tool_calls: int = 0                               # Tool invocations
 
 
 class Task(BaseModel):

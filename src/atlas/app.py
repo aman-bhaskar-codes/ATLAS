@@ -133,6 +133,8 @@ class Atlas:
     consolidator: Consolidator
     pruner: Pruner
     knowledge_store: KnowledgeStore
+    trajectory_store: Any  # Phase 2: TrajectoryStore
+    experience_extractor: Any  # Phase 2: ExperienceExtractor
     bus: MessageBus
     orchestrator: Orchestrator
     cap_registry: CapabilityRegistry
@@ -318,6 +320,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     user_model, working = mem.user_model, mem.working
     knowledge_store = mem.knowledge_store
     retriever, consolidator, pruner = mem.retriever, mem.consolidator, mem.pruner
+    trajectory_store, experience_extractor = mem.trajectory_store, mem.experience_extractor  # Phase 2
 
     # ── Knowledge platform providers ──────────────────────────────── #
     cap_registry.register(CapabilitySpec(
@@ -451,6 +454,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         classifier=classifier, killswitch=killswitch, safety=safety,
         gateway=gateway, retriever=retriever, working=working, semantic=semantic,
         bus=bus, tools=tools, episodic=episodic,
+        trajectory_store=trajectory_store,  # Phase 2
+        experience_extractor=experience_extractor,  # Phase 2
     )
     orchestrator = orch.orchestrator
 
@@ -480,6 +485,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         episodic=episodic, semantic=semantic,
         user_model=user_model, working=working, retriever=retriever,
         consolidator=consolidator, pruner=pruner, knowledge_store=knowledge_store,
+        trajectory_store=trajectory_store, experience_extractor=experience_extractor,  # Phase 2
         bus=bus, orchestrator=orchestrator,
         cap_registry=cap_registry, cap_health=cap_health, cap_providers=cap_providers,
         ext_cap_router=ext_cap_router, cap_dispatcher=cap_dispatcher,

@@ -338,6 +338,134 @@ _MIGRATIONS: tuple[str, ...] = (
     );
     CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_doc ON knowledge_chunks(document_id);
     CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_embedding ON knowledge_chunks(embedding_id);
+    """,
+    # 013 — Phase 2: Trajectory & Experience Store (durable learning foundation)
+    """
+    -- Trajectories: Complete task execution history
+    CREATE TABLE IF NOT EXISTS trajectories (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL UNIQUE,
+        correlation_id TEXT NOT NULL,
+        request TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        plan_steps TEXT NOT NULL,
+        risk_level TEXT NOT NULL,
+        plan_confidence REAL NOT NULL,
+        actions TEXT NOT NULL,
+        observations TEXT NOT NULL,
+        decision_trace_ids TEXT NOT NULL DEFAULT '[]',
+        failure_record_ids TEXT NOT NULL DEFAULT '[]',
+        replan_count INTEGER NOT NULL DEFAULT 0,
+        verification_passed INTEGER,
+        verification_score REAL,
+        success INTEGER NOT NULL,
+        answer TEXT,
+        error TEXT,
+        steps_taken INTEGER NOT NULL,
+        latency_ms INTEGER NOT NULL,
+        tokens_used INTEGER NOT NULL,
+        cost_usd REAL NOT NULL,
+        model_calls INTEGER NOT NULL,
+        tool_calls INTEGER NOT NULL,
+        created_ts TEXT NOT NULL,
+        completed_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_traj_task ON trajectories(task_id);
+    CREATE INDEX IF NOT EXISTS idx_traj_correlation ON trajectories(correlation_id);
+    CREATE INDEX IF NOT EXISTS idx_traj_success ON trajectories(success, completed_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_traj_replan ON trajectories(replan_count, completed_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_traj_completed ON trajectories(completed_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_traj_latency ON trajectories(latency_ms DESC);
+    
+    -- Decision Traces: Records of model/tool/strategy choices
+    CREATE TABLE IF NOT EXISTS decision_traces (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        correlation_id TEXT NOT NULL,
+        ts TEXT NOT NULL,
+        decision_point TEXT NOT NULL,
+        options_considered TEXT NOT NULL,
+        chosen_option TEXT NOT NULL,
+        rationale TEXT NOT NULL,
+        context_json TEXT NOT NULL DEFAULT '{}',
+        outcome TEXT NOT NULL DEFAULT 'unknown',
+        outcome_detail TEXT,
+        confidence REAL NOT NULL DEFAULT 0.5,
+        latency_ms INTEGER,
+        cost_usd REAL NOT NULL DEFAULT 0.0,
+        FOREIGN KEY (task_id) REFERENCES trajectories(task_id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_dt_task ON decision_traces(task_id, ts);
+    CREATE INDEX IF NOT EXISTS idx_dt_point ON decision_traces(decision_point, outcome);
+    CREATE INDEX IF NOT EXISTS idx_dt_outcome ON decision_traces(outcome, ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_dt_option ON decision_traces(chosen_option, outcome);
+    
+    -- Failure Records: Structured error taxonomy for pattern detection
+    CREATE TABLE IF NOT EXISTS failure_records (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        correlation_id TEXT NOT NULL,
+        ts TEXT NOT NULL,
+        category TEXT NOT NULL,
+        step INTEGER NOT NULL,
+        component TEXT NOT NULL,
+        error_message TEXT NOT NULL,
+        context_json TEXT NOT NULL DEFAULT '{}',
+        recovered INTEGER NOT NULL DEFAULT 0,
+        recovery_method TEXT,
+        recovery_succeeded INTEGER NOT NULL DEFAULT 0,
+        similar_failure_ids TEXT NOT NULL DEFAULT '[]',
+        mitigation_suggested TEXT,
+        mitigation_applied INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (task_id) REFERENCES trajectories(task_id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fr_task ON failure_records(task_id, ts);
+    CREATE INDEX IF NOT EXISTS idx_fr_category ON failure_records(category, ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_fr_component ON failure_records(component, category);
+    CREATE INDEX IF NOT EXISTS idx_fr_recovered ON failure_records(recovered, recovery_succeeded);
+    CREATE INDEX IF NOT EXISTS idx_fr_pattern ON failure_records(category, component, recovered);
+    
+    -- Experiences: Extracted lessons from trajectory analysis
+    CREATE TABLE IF NOT EXISTS experiences (
+        id TEXT PRIMARY KEY,
+        trajectory_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        correlation_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        lesson_text TEXT NOT NULL,
+        applicability_context TEXT NOT NULL,
+        confidence REAL NOT NULL DEFAULT 0.5,
+        supporting_actions TEXT NOT NULL DEFAULT '[]',
+        supporting_observations TEXT NOT NULL DEFAULT '[]',
+        counter_examples TEXT NOT NULL DEFAULT '[]',
+        reuse_count INTEGER NOT NULL DEFAULT 0,
+        success_rate REAL NOT NULL DEFAULT 0.0,
+        avg_improvement_ms INTEGER NOT NULL DEFAULT 0,
+        avg_cost_savings_usd REAL NOT NULL DEFAULT 0.0,
+        extracted_ts TEXT NOT NULL,
+        last_applied_ts TEXT,
+        superseded_by TEXT,
+        FOREIGN KEY (trajectory_id) REFERENCES trajectories(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_exp_trajectory ON experiences(trajectory_id);
+    CREATE INDEX IF NOT EXISTS idx_exp_category ON experiences(category, confidence DESC);
+    CREATE INDEX IF NOT EXISTS idx_exp_reuse ON experiences(reuse_count DESC, success_rate DESC);
+    CREATE INDEX IF NOT EXISTS idx_exp_confidence ON experiences(confidence DESC, extracted_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_exp_superseded ON experiences(superseded_by, extracted_ts DESC);
+    
+    -- Experience applications: Track when and how experiences are reused
+    CREATE TABLE IF NOT EXISTS experience_applications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        experience_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        applied_ts TEXT NOT NULL,
+        success INTEGER NOT NULL,
+        improvement_ms INTEGER,
+        cost_savings_usd REAL,
+        FOREIGN KEY (experience_id) REFERENCES experiences(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_ea_experience ON experience_applications(experience_id, applied_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_ea_task ON experience_applications(task_id);
     """
 )
 

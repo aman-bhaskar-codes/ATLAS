@@ -66,6 +66,8 @@ def build_orchestration(
     bus: Any,
     tools: dict[str, Tool],
     episodic: Any,
+    trajectory_store: Any = None,  # Phase 2
+    experience_extractor: Any = None,  # Phase 2
 ) -> OrchestrationComponents:
     """Build orchestration layer: tools, dispatcher, planner, reasoning loop, orchestrator."""
 
@@ -122,12 +124,15 @@ def build_orchestration(
         monitor=monitor, retry=retry, reflection=reflection,
         events=events, limits=limits, working=working,
         replanner=replanner, verifier=verifier,
+        trajectory_store=trajectory_store,  # Phase 2
     )
 
     orchestrator = Orchestrator(
         ids=ids, clock=clock, db=db, router=router, planner=planner,
         context_builder=context_builder, reasoning=reasoning,
         registry=tool_registry, events=events,
+        trajectory_store=trajectory_store,  # Phase 2
+        experience_extractor=experience_extractor,  # Phase 2
     )
 
     return OrchestrationComponents(

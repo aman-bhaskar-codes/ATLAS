@@ -100,6 +100,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Set dependencies for memory routes
     from atlas.interfaces.api import routes_memory
     routes_memory.set_dependencies(memory_ws_manager, atlas.db, atlas)
+    
+    # Phase 2: Connect trajectory store to event bus
+    if hasattr(atlas, 'trajectory_store') and atlas.trajectory_store:
+        atlas.trajectory_store.set_bus(atlas.bus)
 
     # SSE connections subscribe per-task; we store queues in a shared dict.
     # Key: task_id → list of asyncio.Queue instances (one per active SSE client)
@@ -169,6 +173,7 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.routes_trust import router as trust_router
     from atlas.interfaces.api.routes_attachments import router as attachments_router
     from atlas.interfaces.api.routes_events import router as events_ws_router
+    from atlas.interfaces.api.routes_trajectory import router as trajectory_router  # Phase 2
 
     # Each API path now has exactly one owning router — see routes_tasks.py
     # and routes_trust.py module docstrings/comments for the split:
@@ -178,6 +183,7 @@ def create_app() -> FastAPI:
     #                        GET/POST /memory/*, GET /audit
     #   - feedback_router:   POST /feedback, GET /feedback/stats,
     #                        GET /audit/verify, GET/POST /schedules
+    #   - trajectory_router: GET /trajectory/* (Phase 2 learning endpoints)
     # trust_router still declares prefix="/api/v1" internally (see routes_trust.py),
     # so it is mounted with an empty prefix here to avoid doubling it.
     app.include_router(runtime_router, prefix="/api/v1")
@@ -187,6 +193,7 @@ def create_app() -> FastAPI:
     app.include_router(feedback_router, prefix="/api/v1")
     app.include_router(knowledge_router, prefix="")   # already has /api/v1 prefix
     app.include_router(memory_router, prefix="")      # already has /api/v1 prefix and /ws prefix
+    app.include_router(trajectory_router, prefix="")  # Phase 2: already has /api/v1 prefix
     app.include_router(attachments_router, prefix="/api/v1")
     app.include_router(trust_router, prefix="")
     app.include_router(events_router, prefix="/api/v1")
