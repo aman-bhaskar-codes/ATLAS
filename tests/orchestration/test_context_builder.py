@@ -4,10 +4,15 @@ from atlas.orchestration.context_builder import ContextBuilder
 
 
 class FakeRetr:
-    async def retrieve(self, q: str) -> Any:
+    async def retrieve(self, q: str, **kwargs: Any) -> Any:
         class R:
             user_model = "identity: Anti"
             facts: tuple[Any, ...] = ()
+            recent_episodes: tuple[Any, ...] = ()
+            knowledge_chunks: tuple[Any, ...] = ()
+
+            def render(self) -> str:
+                return self.user_model
         return R()
 
 

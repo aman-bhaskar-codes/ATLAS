@@ -223,15 +223,15 @@ class UserModel:
         # Emit update event for WebSocket broadcast
         if self._bus:
             try:
-                from atlas.orchestration.events import MemoryEvent
-                await self._bus.publish("memory", MemoryEvent(
+                from atlas.infra.bus import MemoryBusEvent
+                await self._bus.publish("memory", MemoryBusEvent(
                     correlation_id="system",
                     task_id="system",
                     kind="memory.user_model_updated",
                     memory_type="user_model",
                     count=1,
                     items=[f"Updated section: {section}"],
-                    metadata={"section": section}
+                    metadata={"section": section},
                 ))
             except Exception as exc:
                 _log.warning(

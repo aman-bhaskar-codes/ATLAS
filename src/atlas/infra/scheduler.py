@@ -9,6 +9,7 @@ the main event loop or a background timer).
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 
 from atlas.infra.clock import Clock
@@ -17,6 +18,8 @@ from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
 
 _log = get_logger("atlas.scheduler")
+
+_InProcessJob = Callable[[], Awaitable[None]]
 
 
 def _parse_cron_field(field: str, min_val: int, max_val: int) -> set[int]:
@@ -58,6 +61,21 @@ class CronScheduler:
         self._db = db
         self._ids = ids
         self._clock = clock
+        # In-process jobs: name -> (cron_expression, callable)
+        self._jobs: dict[str, tuple[str, _InProcessJob]] = {}
+
+    def register_job(
+        self, name: str, cron: str, fn: _InProcessJob
+    ) -> None:
+        """Register an in-process recurring job (not persisted to DB).
+
+        The job function is called by tick() when the cron expression matches.
+        This is for internal system maintenance jobs (consolidation, pruning, etc.)
+        that shouldn't appear as user-visible schedules.
+        """
+        self._jobs[name] = (cron, fn)
+        _log.info("scheduler.job_registered", event_type="scheduler",
+                  name=name, cron=cron)
 
     async def add_schedule(
         self, *, description: str, cron_expression: str,
@@ -93,7 +111,8 @@ class CronScheduler:
         """Check all enabled schedules and return task templates for those that are due.
 
         Call this periodically (e.g. every 60 seconds). Returns a list of
-        task_template dicts that should be dispatched.
+        task_template dicts that should be dispatched. Also invokes any
+        registered in-process jobs whose cron expression matches.
         """
         now = self._clock.now()
         cur = await self._db.conn.execute(
@@ -115,4 +134,15 @@ class CronScheduler:
 
         if due:
             await self._db.conn.commit()
+
+        # Run in-process jobs
+        for name, (cron_expr, fn) in self._jobs.items():
+            if cron_matches(cron_expr, now):
+                _log.info("scheduler.job_triggered", event_type="scheduler", name=name)
+                try:
+                    await fn()
+                except Exception as exc:
+                    _log.error("scheduler.job_error", event_type="scheduler",
+                               name=name, error=str(exc))
+
         return due

@@ -11,11 +11,14 @@ consequential actions (Phase 4.5). Post-action reflection evaluates outcomes.
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from atlas.infra.ids import CorrelationId, TaskId
 from atlas.infra.logging import get_logger
 from atlas.infra.types import ModelCapability, ModelRequest, Tier
 from atlas.intelligence.gateway import ModelGateway
+from atlas.memory.types import Episode, EpisodeKind
 from atlas.orchestration.dispatcher import ToolDispatcher
 from atlas.orchestration.errors import CancellationError, OrchestrationError
 from atlas.orchestration.events import EventPublisher
@@ -38,6 +41,9 @@ from atlas.orchestration.types import (
 )
 from atlas.orchestration.validator import OutputValidator
 
+if TYPE_CHECKING:
+    from atlas.memory.working import WorkingMemory
+
 _log = get_logger("atlas.orch.reasoning")
 
 
@@ -48,6 +54,7 @@ class ReasoningLoop:
         recorder: ExecutionRecorder, monitor: ExecutionMonitor,
         retry: RetryManager, reflection: ReflectionHook, events: EventPublisher,
         limits: ExecutionLimits, model_timeout_s: float = 120.0,
+        working: "WorkingMemory | None" = None,
     ) -> None:
         self._gw = gateway
         self._dispatch = dispatcher
@@ -61,6 +68,7 @@ class ReasoningLoop:
         self._events = events
         self._limits = limits
         self._model_timeout_s = model_timeout_s
+        self._working = working
 
     async def run(
         self, *, task_id: TaskId, correlation_id: CorrelationId, plan: Plan, context: str,
@@ -125,6 +133,20 @@ class ReasoningLoop:
                 )
                 machine.transition(TaskState.OBSERVING)
                 await self._recorder.record_observation(correlation_id, obs)
+
+                # Phase 0: Push observation into WorkingMemory so ContextBuilder can read it
+                if self._working:
+                    self._working.add(Episode(
+                        correlation_id=correlation_id,
+                        task_id=task_id,
+                        ts=datetime.now(UTC),
+                        kind=EpisodeKind.OBSERVATION,
+                        role="tool",
+                        content=str(obs.content)[:500] if obs.ok else str(obs.error)[:500],
+                        tool=action.tool,
+                        outcome="success" if obs.ok else "failure",
+                        salience=0.5,
+                    ))
 
                 # REFLECT (OTAR step 4): evaluate action outcome
                 reflection = await self._reflection.reflect(action, obs, context)

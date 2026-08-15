@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     glm_api_key: str = ""
     kimi_api_key: str = ""
     mimo_api_key: str = ""
+    anthropic_api_key: str = ""
+    gemini_api_key: str = ""
     master_key: str = ""
 
     def db_path(self) -> Path:

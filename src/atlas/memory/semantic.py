@@ -21,6 +21,7 @@ from atlas.infra.clock import Clock
 from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
+from atlas.memory.cache import FactCache
 from atlas.memory.embedder import Embedder
 from atlas.memory.types import FactKind, SemanticFact
 from atlas.memory.vectorstore import VectorStore
@@ -42,6 +43,7 @@ class SemanticMemory:
         self._ids = ids
         self._clock = clock
         self._bus: "MessageBus | None" = None
+        self._fact_cache = FactCache()   # Phase 3.8: cached fact listing
 
     def set_bus(self, bus: "MessageBus") -> None:
         """Connect to event bus for real-time fact extraction."""
@@ -52,11 +54,10 @@ class SemanticMemory:
 
     async def _on_task_event(self, event: "Event") -> None:
         """Extract facts in real-time from task events."""
-        from atlas.orchestration.events import OrchestratorEvent
-        
-        if not isinstance(event, OrchestratorEvent):
+        # Duck-type: OrchestratorEvent has task_id, kind, metadata
+        if not (hasattr(event, "task_id") and hasattr(event, "kind")):
             return
-        
+
         # Only extract from completed tasks
         if event.kind != "task.completed":
             return
@@ -107,14 +108,13 @@ class SemanticMemory:
     ) -> list[tuple[str, FactKind, float, float]]:
         """
         Fast rule-based fact extraction (< 5ms).
-        
+
         Returns: List of (text, kind, confidence, salience)
         """
-        from atlas.orchestration.events import OrchestratorEvent
-        
-        if not isinstance(event, OrchestratorEvent):
+        # Duck-type: needs task_id, metadata
+        if not (hasattr(event, "task_id") and hasattr(event, "metadata")):
             return []
-        
+
         facts: list[tuple[str, FactKind, float, float]] = []
         metadata = event.metadata
         
@@ -179,21 +179,28 @@ class SemanticMemory:
         limit: int = 20,
         min_confidence: float = 0.5
     ) -> list[SemanticFact]:
-        """Get recent facts with optional filtering (< 30ms)."""
+        """Get recent facts with optional filtering (< 30 ms DB, < 1 ms cached)."""
+        cache_key = self._fact_cache.make_key(
+            kind.value if kind else None, min_confidence, limit
+        )
+        cached = await self._fact_cache.get(cache_key)
+        if cached is not None:
+            return cached if isinstance(cached, list) else []
+
         conditions = ["superseded_by IS NULL"]
         params: list[str | float | int] = []
-        
+
         if kind:
             conditions.append("kind = ?")
             params.append(kind.value)
-        
+
         if min_confidence > 0:
             conditions.append("confidence >= ?")
             params.append(min_confidence)
-        
+
         where_clause = " AND ".join(conditions)
         params.append(limit)
-        
+
         cur = await self._db.conn.execute(
             f"""
             SELECT * FROM semantic_facts
@@ -201,10 +208,11 @@ class SemanticMemory:
             ORDER BY updated_ts DESC
             LIMIT ?
             """,
-            params
+            params,
         )
-        
-        return [self._row(r) for r in await cur.fetchall()]
+        result = [self._row(r) for r in await cur.fetchall()]
+        await self._fact_cache.set(cache_key, result)
+        return result
 
     async def get_facts_by_confidence(
         self,
@@ -241,6 +249,8 @@ class SemanticMemory:
              json.dumps(list(sources)), now.isoformat(), now.isoformat(), fid),
         )
         await self._db.conn.commit()
+        # Invalidate fact cache on every write
+        await self._fact_cache.invalidate()
         return fid
 
     async def supersede(self, old_id: str, new_text: str, *, confidence: float) -> str:

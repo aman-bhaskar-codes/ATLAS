@@ -8,6 +8,7 @@ an attempt is executed; the fallback engine calls it per candidate.
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 from atlas.infra.logging import get_logger
 from atlas.intelligence.contracts import (
@@ -22,6 +23,9 @@ from atlas.intelligence.observability.telemetry import Telemetry
 from atlas.intelligence.registry.provider_registry import ProviderRegistry
 from atlas.intelligence.runtime.retry import RetryEngine
 
+if TYPE_CHECKING:
+    from atlas.infra.llm_tracker import LLMCallTracker
+
 _log = get_logger("atlas.intel.inference")
 
 
@@ -29,6 +33,7 @@ class InferenceRuntime:
     def __init__(
         self, *, providers: ProviderRegistry, health: HealthMonitor,
         governor: CostGovernor, telemetry: Telemetry, model_timeout_s: float = 120.0,
+        tracker: "LLMCallTracker | None" = None,
     ) -> None:
         self._providers = providers
         self._health = health
@@ -36,6 +41,7 @@ class InferenceRuntime:
         self._telemetry = telemetry
         self._timeout_s = model_timeout_s
         self._retry = RetryEngine()
+        self._tracker = tracker
 
     async def attempt(self, req: InferenceRequest, spec: ModelSpec) -> InferenceResponse:
         provider = self._providers.get(spec.provider)
@@ -71,6 +77,22 @@ class InferenceRuntime:
         if req.task_id and resp.usage.usd:
             self._governor.record_task_spend(req.task_id, resp.usage.usd)
         await self._telemetry.record_success(req, spec, resp.usage, resp.latency_ms)
+
+        # Phase 0: Record every successful inference call for cost analysis
+        if self._tracker is not None:
+            try:
+                await self._tracker.record(
+                    task_id=req.task_id or req.correlation_id,
+                    provider=spec.provider,
+                    model=spec.id,
+                    tokens_in=resp.usage.input_tokens,
+                    tokens_out=resp.usage.output_tokens,
+                    cost_usd=resp.usage.usd,
+                    latency_ms=resp.latency_ms,
+                )
+            except Exception:
+                pass  # tracker is best-effort; never block inference
+
         return resp
 
     async def close(self) -> None:

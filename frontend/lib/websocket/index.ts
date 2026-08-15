@@ -128,3 +128,23 @@ export function useEventBuffer(
 // Re-export for convenience
 export { useWebSocket } from './useWebSocket';
 export type { ConnectionStatus, WebSocketOptions, UseWebSocketReturn } from './useWebSocket';
+
+// ---------------------------------------------------------------------------
+// Memory live stream hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Subscribe to the memory-only live stream (/ws/memory/live).
+ *
+ * Returns the most-recent raw message. For a buffered view with
+ * snapshot support, use `useMemoryLive` from features/memory/useMemoryLive.ts.
+ */
+export function useMemoryEvents(
+  options: WebSocketOptions = {}
+): UseWebSocketReturn<Record<string, unknown>> {
+  const url = useMemo(() => {
+    const baseUrl = process.env.NEXT_PUBLIC_ATLAS_WS_URL || 'ws://localhost:8000';
+    return `${baseUrl}/ws/memory/live`;
+  }, []);
+  return useWebSocket<Record<string, unknown>>(url, { autoReconnect: true, ...options });
+}

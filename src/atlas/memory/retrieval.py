@@ -6,13 +6,16 @@ and just works. WHY a token budget: context is finite and expensive; we pack the
 highest fused-score items until the budget is spent, never 'everything'.
 
 Phase 3: Enhanced with vector-based semantic search for facts, episodes, and knowledge store.
+Phase 3.8: RetrievalCache for sub-1ms repeated queries; invalidation on any memory write.
 """
 
 from __future__ import annotations
 
+import time
 from typing import Any, TYPE_CHECKING
 
 from atlas.infra.logging import get_logger
+from atlas.memory.cache import RetrievalCache
 from atlas.memory.episodic import EpisodicMemory
 from atlas.memory.semantic import SemanticMemory
 from atlas.memory.types import Episode, RetrievedContext, SemanticFact
@@ -31,6 +34,7 @@ class Retriever:
         user_model: UserModel, knowledge_store: "KnowledgeStore | None" = None,
         token_budget: int = 1500,
         events: Any | None = None,  # EventPublisher - Any to avoid circular import
+        cache_ttl: float = 30.0,    # seconds; 0 disables caching
     ) -> None:
         self._sem = semantic
         self._epi = episodic
@@ -38,14 +42,22 @@ class Retriever:
         self._knowledge = knowledge_store
         self._budget = token_budget
         self._events = events
+        self._cache: RetrievalCache | None = (
+            RetrievalCache(ttl=cache_ttl) if cache_ttl > 0 else None
+        )
     
     def set_events(self, events: Any) -> None:
         """Set EventPublisher after construction."""
         self._events = events
-    
+
     def set_knowledge_store(self, knowledge_store: "KnowledgeStore") -> None:
         """Set KnowledgeStore after construction (avoids circular import)."""
         self._knowledge = knowledge_store
+
+    async def invalidate_cache(self) -> None:
+        """Flush the retrieval cache — call after any memory write."""
+        if self._cache:
+            await self._cache.invalidate()
 
     async def retrieve(
         self,
@@ -57,13 +69,23 @@ class Retriever:
     ) -> RetrievedContext:
         """
         Hybrid retrieval with semantic search over facts, episodes, and knowledge store.
-        
-        Performance target: < 200ms total (parallel execution).
-        Token budget: 1500 tokens total, with max 500 tokens for knowledge chunks.
+
+        Performance targets:
+          CACHE HIT:  < 1 ms   (in-memory dict lookup)
+          CACHE MISS: < 200 ms (5 parallel async queries + RRF fusion)
+        Token budget: 1500 tokens total, max 500 for knowledge chunks.
         """
         import asyncio
-        
-        # Run all retrievals in parallel (< 200ms total)
+
+        # ── Cache check ──────────────────────────────────────────────────
+        if self._cache:
+            cache_key = self._cache.make_key(query, task_id)
+            cached = await self._cache.get(cache_key)
+            if cached is not None and isinstance(cached, RetrievedContext):
+                _log.debug("retrieval.cache_hit", event_type="memory", query=query[:50])
+                return cached
+
+        t0 = time.monotonic()
         dense_task = asyncio.create_task(
             self._sem.semantic_search(query, k=15)
         )
@@ -144,13 +166,31 @@ class Retriever:
             query=query[:50]
         )
         
-        return RetrievedContext(
-            user_model=user_model, 
+        result = RetrievedContext(
+            user_model=user_model,
             facts=tuple(facts),
             recent_episodes=tuple(epis),
             knowledge_chunks=tuple(knowledge_chunks),
             token_estimate=used,
         )
+
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        _log.debug(
+            "retrieval.complete",
+            event_type="memory",
+            facts_count=len(facts),
+            episodes_count=len(epis),
+            knowledge_count=len(knowledge_chunks),
+            tokens_used=used,
+            latency_ms=latency_ms,
+            query=query[:50],
+        )
+
+        # ── Cache store ─────────────────────────────────────────────────
+        if self._cache and cache_key:
+            await self._cache.set(cache_key, result)
+
+        return result
 
     def _rrf_facts(self, dense: list[SemanticFact]) -> list[SemanticFact]:
         """Rank facts by RRF + salience boost."""

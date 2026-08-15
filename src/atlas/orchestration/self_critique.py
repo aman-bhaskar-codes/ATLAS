@@ -10,8 +10,10 @@ caught itself.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 from atlas.infra.ids import CorrelationId
 from atlas.infra.logging import get_logger
@@ -22,6 +24,9 @@ from atlas.orchestration.reflection import ReflectionResult
 from atlas.orchestration.tiering import TierEstimator
 from atlas.orchestration.types import Action, Critique, CritiqueVerdict, Observation
 from atlas.orchestration.validator import OutputValidator
+
+if TYPE_CHECKING:
+    from atlas.memory.semantic import SemanticMemory
 
 _log = get_logger("atlas.orch.critique")
 
@@ -58,6 +63,7 @@ class SelfCritique:
         parser: ResponseParser, validator: OutputValidator,
         correlation_id_provider: Callable[[], CorrelationId],
         audit: CritiqueAudit | None = None,
+        memory: "SemanticMemory | None" = None,
     ) -> None:
         self._gw = gateway
         self._estimator = estimator
@@ -65,6 +71,7 @@ class SelfCritique:
         self._validator = validator
         self._corr = correlation_id_provider
         self._audit = audit
+        self._memory = memory
 
     async def critique(self, action: Action, context: str) -> Action:
         corr = self._corr()
@@ -99,6 +106,20 @@ class SelfCritique:
 
         if observation.error:
             learnings.append(f"Action {action.tool}.{action.operation} failed: {observation.error}")
+
+        # Phase 0: Persist learnings from failures into semantic memory
+        if self._memory and not observation.ok and learnings:
+            from atlas.memory.types import FactKind
+            for learning in learnings[:3]:  # cap at 3 per reflection
+                asyncio.create_task(
+                    self._memory.add_fact(
+                        text=learning,
+                        kind=FactKind.SKILL,
+                        confidence=0.75,  # slightly below auto-commit threshold
+                        salience=0.6,
+                        sources=(),
+                    )
+                )
 
         return ReflectionResult(
             succeeded=succeeded,

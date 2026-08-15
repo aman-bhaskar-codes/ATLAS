@@ -53,28 +53,33 @@ class EpisodicMemory:
 
     async def _on_orchestrator_event(self, event: "Event") -> None:
         """Real-time event handler - writes episode instantly (< 10ms)."""
-        from atlas.orchestration.events import OrchestratorEvent
-        
-        if not isinstance(event, OrchestratorEvent):
+        # Duck-type check: OrchestratorEvent has task_id, state, kind, metadata attributes
+        if not (hasattr(event, "task_id") and hasattr(event, "kind") and hasattr(event, "state")):
             return
         
         try:
             # Calculate salience based on event kind (fast, rule-based)
             salience = self._calculate_salience(event)
-            
+
+            # Access OrchestratorEvent-specific fields safely via getattr
+            event_metadata: dict[str, object] = getattr(event, "metadata", {})
+            event_task_id: str | None = getattr(event, "task_id", None)
+            event_kind: str = getattr(event, "kind", "unknown")
+            event_state: str = getattr(event, "state", "unknown")
+
             # Extract episode data
             episode = Episode(
                 correlation_id=event.correlation_id,
-                task_id=event.task_id,
-                step=0,  # TODO: Extract from metadata if available
+                task_id=event_task_id,
+                step=0,
                 ts=self._clock.now(),
-                kind=self._map_event_kind(event.kind),
-                role="agent",  # Most events are agent actions
+                kind=self._map_event_kind(event_kind),
+                role="agent",
                 content=self._extract_content(event),
-                tool=event.metadata.get("tool"),
-                outcome=event.metadata.get("outcome"),
+                tool=str(event_metadata.get("tool")) if event_metadata.get("tool") else None,
+                outcome=str(event_metadata.get("outcome")) if event_metadata.get("outcome") else None,
                 salience=salience,
-                tokens=event.metadata.get("tokens", 0),
+                tokens=int(str(event_metadata.get("tokens", 0) or 0)),
             )
             
             # CRITICAL: Instant write to DB (< 10ms)
@@ -104,14 +109,13 @@ class EpisodicMemory:
 
     def _calculate_salience(self, event: "Event") -> float:
         """Fast, rule-based salience scoring (no LLM call)."""
-        from atlas.orchestration.events import OrchestratorEvent
-        
-        if not isinstance(event, OrchestratorEvent):
+        # Duck-type: OrchestratorEvent fields
+        if not hasattr(event, "kind"):
             return 0.3
-        
+
         kind = event.kind
-        metadata = event.metadata
-        
+        metadata = getattr(event, "metadata", {})
+
         # High salience events (learn from these!)
         if kind == "task.failed":
             return 0.9
@@ -121,17 +125,17 @@ class EpisodicMemory:
             return 0.8
         if kind in ("approval.denied", "safety.blocked"):
             return 0.85
-        
+
         # Medium salience
         if kind in ("tool.completed", "plan.completed"):
             return 0.5
         if kind in ("tool.failed", "validation.failed"):
             return 0.7
-        
+
         # Low salience (informational)
         if kind in ("thought.reasoning", "plan.started"):
             return 0.3
-        
+
         # Default
         return 0.4
 
@@ -145,13 +149,10 @@ class EpisodicMemory:
 
     def _extract_content(self, event: "Event") -> str:
         """Extract meaningful content from event for episode storage."""
-        from atlas.orchestration.events import OrchestratorEvent
-        
-        if not isinstance(event, OrchestratorEvent):
-            return str(event)
-        
-        metadata = event.metadata
-        
+        metadata = getattr(event, "metadata", {})
+        state = getattr(event, "state", "unknown")
+        kind = getattr(event, "kind", "unknown")
+
         # Prefer summary, then content, then reasoning
         if "summary" in metadata:
             return str(metadata["summary"])
@@ -161,9 +162,9 @@ class EpisodicMemory:
             return str(metadata["reasoning"])
         if "message" in metadata:
             return str(metadata["message"])
-        
+
         # Fallback: event kind as content
-        return f"{event.kind} (state: {event.state})"
+        return f"{kind} (state: {state})"
 
     async def record(self, ep: Episode) -> int:
         """Write episode to DB instantly (< 10ms). Returns episode ID."""
@@ -177,17 +178,18 @@ class EpisodicMemory:
         await self._db.conn.commit()
         episode_id = int(cur.lastrowid) if cur.lastrowid is not None else -1
         
-        # Emit memory event for WebSocket broadcast
+        # Emit memory event for WebSocket broadcast — use MemoryBusEvent from infra
+        # so atlas.memory does not import atlas.orchestration (layer boundary)
         if self._bus and episode_id > 0:
-            from atlas.orchestration.events import MemoryEvent
-            asyncio.create_task(self._bus.publish("memory", MemoryEvent(
+            from atlas.infra.bus import MemoryBusEvent
+            asyncio.create_task(self._bus.publish("memory", MemoryBusEvent(
                 correlation_id=ep.correlation_id,
                 task_id=ep.task_id or "unknown",
                 kind="memory.stored",
                 memory_type="episodic",
                 count=1,
                 items=[f"Episode {episode_id}: {ep.kind.value}"],
-                metadata={"salience": ep.salience}
+                metadata={"salience": ep.salience},
             )))
         
         return episode_id

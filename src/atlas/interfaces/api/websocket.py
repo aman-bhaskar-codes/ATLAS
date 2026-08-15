@@ -176,3 +176,59 @@ class EventBroadcaster:
             except asyncio.CancelledError:
                 pass
         self._tasks.clear()
+
+
+class MemoryBroadcaster:
+    """Subscribes ONLY to the 'memory' bus topic and broadcasts MemoryEvents
+    to the dedicated memory ConnectionManager.
+
+    WHY separate from EventBroadcaster: the global broadcaster fans out ALL
+    topics. Memory clients only want MemoryEvent objects. A dedicated manager
+    keeps the fan-out scoped and adds the '_topic' field automatically so the
+    frontend can distinguish memory events from other event types.
+    """
+
+    def __init__(self, bus: MessageBus, manager: ConnectionManager) -> None:
+        self._bus = bus
+        self._manager = manager
+        self._tasks: list[asyncio.Task[None]] = []
+
+    def start(self) -> None:
+        """Subscribe to the 'memory' topic and start keepalive."""
+        self._bus.subscribe("memory", self._broadcast_handler)
+        self._tasks.append(asyncio.create_task(self._keepalive_loop()))
+        _log.info("ws.memory_broadcaster_started", event_type="websocket")
+
+    async def _broadcast_handler(self, event: Event) -> None:
+        """Annotate the raw event dict with _topic, then fan out."""
+        payload = event.model_dump()
+        payload["_topic"] = "memory"   # so clients can identify message origin
+        dead_clients: list[str] = []
+
+        async with self._manager._lock:
+            clients = list(self._manager._active.items())
+
+        for client_id, websocket in clients:
+            try:
+                await websocket.send_json(payload)
+            except Exception as exc:
+                _log.warning("ws.memory_broadcast_failed", event_type="websocket",
+                             client_id=client_id, error=str(exc))
+                dead_clients.append(client_id)
+
+        for cid in dead_clients:
+            await self._manager.disconnect(cid)
+
+    async def _keepalive_loop(self) -> None:
+        while True:
+            await asyncio.sleep(30)
+            await self._manager.ping_all()
+
+    async def stop(self) -> None:
+        for task in self._tasks:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self._tasks.clear()

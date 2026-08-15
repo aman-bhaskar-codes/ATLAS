@@ -81,11 +81,15 @@ class EmbeddingWorker:
             _log.info("embedding_worker.started", event_type="memory")
     
     async def stop(self) -> None:
-        """Stop the worker and process remaining queue."""
+        """Stop the worker gracefully."""
         self._running = False
         if self._task:
-            await self._task
-            self._task = None
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+        self._task = None
         _log.info("embedding_worker.stopped", event_type="memory")
     
     async def embed_episode(self, episode_id: int, content: str) -> None:

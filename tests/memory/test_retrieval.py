@@ -18,6 +18,9 @@ class FakeEpi:
         return [Episode(correlation_id="c", ts=datetime(2026, 1, 1, tzinfo=UTC),
                         kind=EpisodeKind.MESSAGE, content="opened VS Code")]
 
+    async def semantic_search(self, query: str, limit: int, min_salience: float = 0.0) -> list[Episode]:
+        return []
+
 
 class FakeUM:
     async def render(self) -> str:

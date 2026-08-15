@@ -355,7 +355,17 @@ class Database:
             self._conn = None
         self._conn = await aiosqlite.connect(self._path)
         self._conn.row_factory = aiosqlite.Row
+        # Phase 3.8: Performance PRAGMAs
+        # WAL mode: concurrent readers don't block writers (critical for real-time memory)
         await self._conn.execute("PRAGMA journal_mode=WAL")
+        # 64 MB page cache — keeps hot index pages in RAM, avoids repeat disk reads
+        await self._conn.execute("PRAGMA cache_size=-65536")
+        # Memory-mapped I/O: 256 MB — OS handles prefetch, zero-copy reads
+        await self._conn.execute("PRAGMA mmap_size=268435456")
+        # synchronous=NORMAL: safe with WAL (no full fsync on each write)
+        await self._conn.execute("PRAGMA synchronous=NORMAL")
+        # temp_store=MEMORY: sort/group-by scratch space stays in RAM
+        await self._conn.execute("PRAGMA temp_store=MEMORY")
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._conn.execute(
             "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"

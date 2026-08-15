@@ -607,5 +607,278 @@ def knowledge(
     _run(go())
 
 
+# ---------------------------------------------------------------------------
+# Task 3.9 — Live Memory Commands
+# ---------------------------------------------------------------------------
+
+memory_app = typer.Typer(help="Inspect and monitor live memory (Phase 3)")
+app.add_typer(memory_app, name="memory")
+
+
+@memory_app.command("stats")
+def memory_stats_cmd() -> None:
+    """Show aggregate counts across all memory layers."""
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            import asyncio
+
+            ep_cur  = await atlas.db.conn.execute("SELECT COUNT(*) FROM episodes")
+            fct_cur = await atlas.db.conn.execute(
+                "SELECT COUNT(*) FROM semantic_facts WHERE superseded_by IS NULL"
+            )
+            doc_cur = await atlas.db.conn.execute("SELECT COUNT(*) FROM knowledge_documents")
+            chk_cur = await atlas.db.conn.execute("SELECT COUNT(*) FROM knowledge_chunks")
+
+            ep_row  = await ep_cur.fetchone()
+            fct_row = await fct_cur.fetchone()
+            doc_row = await doc_cur.fetchone()
+            chk_row = await chk_cur.fetchone()
+
+            prefs = await atlas.user_model.get_all_preferences()
+            cache_size = atlas.retriever._cache.size if atlas.retriever._cache else 0
+
+            table = Table("Layer", "Count", "Details")
+            table.add_row("Episodic",      str(ep_row[0] if ep_row else 0),   "[dim]task events, corrections[/]")
+            table.add_row("Semantic facts", str(fct_row[0] if fct_row else 0), "[dim]active (non-superseded)[/]")
+            table.add_row("Knowledge docs", str(doc_row[0] if doc_row else 0), f"[dim]{chk_row[0] if chk_row else 0} chunks[/]")
+            table.add_row("Preferences",   str(len(prefs)),                   "[dim]in user model[/]")
+            table.add_row("Retrieval cache", str(cache_size),                 "[dim]hot entries[/]")
+            console.print(table)
+
+    _run(go())
+
+
+@memory_app.command("episodes")
+def memory_episodes(
+    limit:       int   = typer.Option(20, help="Number of episodes to show"),
+    task_id:     str   = typer.Option("", help="Filter by task ID"),
+    min_salience: float = typer.Option(0.0, help="Minimum salience 0-1"),
+    kind:        str   = typer.Option("", help="Filter by kind (e.g. action, correction)"),
+) -> None:
+    """List recent episodic memory entries."""
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            from atlas.memory.types import EpisodeKind
+            episodes = await atlas.episodic.search_similar(
+                task_id=task_id or None,
+                kind=EpisodeKind(kind) if kind else None,
+                min_salience=min_salience,
+                limit=limit,
+            )
+            if not episodes:
+                console.print("[yellow]No episodes found.[/]")
+                return
+
+            table = Table("ID", "Kind", "Salience", "Task", "Content", "Time")
+            for ep in episodes:
+                sal_color = "gold1" if ep.salience >= 0.7 else ("yellow" if ep.salience >= 0.4 else "dim")
+                table.add_row(
+                    str(ep.id or "?"),
+                    ep.kind.value,
+                    f"[{sal_color}]{ep.salience:.2f}[/]",
+                    (ep.task_id or "")[:12],
+                    ep.content[:60] + ("…" if len(ep.content) > 60 else ""),
+                    ep.ts.strftime("%H:%M:%S"),
+                )
+            console.print(table)
+            console.print(f"[dim]{len(episodes)} episodes[/]")
+
+    _run(go())
+
+
+@memory_app.command("facts")
+def memory_facts(
+    limit:      int   = typer.Option(30, help="Number of facts to show"),
+    kind:       str   = typer.Option("", help="Filter by FactKind"),
+    min_conf:   float = typer.Option(0.0, help="Minimum confidence 0-1"),
+    no_cache:   bool  = typer.Option(False, "--no-cache", help="Bypass fact cache"),
+) -> None:
+    """List semantic facts from long-term memory."""
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            from atlas.memory.types import FactKind
+
+            if no_cache:
+                await atlas.semantic._fact_cache.invalidate()
+
+            facts = await atlas.semantic.get_recent_facts(
+                kind=FactKind(kind) if kind else None,
+                min_confidence=min_conf,
+                limit=limit,
+            )
+            if not facts:
+                console.print("[yellow]No facts found.[/]")
+                return
+
+            table = Table("ID", "Kind", "Confidence", "Salience", "Text")
+            for f in facts:
+                conf_color = "green" if f.confidence >= 0.8 else ("yellow" if f.confidence >= 0.5 else "red")
+                table.add_row(
+                    f.id[:8],
+                    f.kind.value,
+                    f"[{conf_color}]{f.confidence:.2f}[/]",
+                    f"{f.salience:.2f}",
+                    f.text[:80] + ("…" if len(f.text) > 80 else ""),
+                )
+            console.print(table)
+            console.print(f"[dim]{len(facts)} facts[/]")
+
+    _run(go())
+
+
+@memory_app.command("search")
+def memory_search_cmd(
+    query:  str = typer.Argument(..., help="Semantic search query"),
+    limit:  int = typer.Option(5, help="Max results"),
+    layers: str = typer.Option("all", help="all | facts | episodes | knowledge"),
+) -> None:
+    """Semantic search across memory layers. Shows what ATLAS would retrieve."""
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            import time
+            t0 = time.monotonic()
+
+            if layers in ("all", "facts"):
+                console.print(f"\n[bold cyan]Semantic Facts[/] for [italic]{query}[/]")
+                hits = await atlas.semantic.semantic_search(query, k=limit)
+                if hits:
+                    for f in hits:
+                        conf_color = "green" if f.confidence >= 0.8 else "yellow"
+                        console.print(
+                            f"  [{conf_color}]{f.confidence:.2f}[/] "
+                            f"[dim][{f.kind.value}][/] {f.text[:100]}"
+                        )
+                else:
+                    console.print("  [dim]No matches[/]")
+
+            if layers in ("all", "episodes"):
+                console.print(f"\n[bold cyan]Episodes[/] for [italic]{query}[/]")
+                eps = await atlas.episodic.semantic_search(query, limit=limit)
+                if eps:
+                    for ep in eps:
+                        console.print(
+                            f"  [dim]{ep.ts.strftime('%H:%M:%S')}[/] "
+                            f"[{ep.kind.value}] {ep.content[:100]}"
+                        )
+                else:
+                    console.print("  [dim]No matches[/]")
+
+            if layers in ("all", "knowledge"):
+                console.print(f"\n[bold cyan]Knowledge[/] for [italic]{query}[/]")
+                chunks = await atlas.knowledge_store.search(query, limit=limit)
+                if chunks:
+                    for c in chunks:
+                        score = c.get("score", 0.0)
+                        title = c.get("document_title", "?")
+                        content = c.get("content", "")[:100]
+                        console.print(f"  [{score:.2f}] [bold]{title}[/] {content}")
+                else:
+                    console.print("  [dim]No knowledge chunks indexed[/]")
+
+            elapsed = int((time.monotonic() - t0) * 1000)
+            console.print(f"\n[dim]Retrieved in {elapsed} ms[/]")
+
+    _run(go())
+
+
+@memory_app.command("watch")
+def memory_watch(
+    host: str = typer.Option("localhost:8000", help="API server host:port"),
+) -> None:
+    """Watch live memory events via WebSocket (/ws/memory/live).
+
+    Shows every memory write, retrieval, and update in real time.
+    Press Ctrl+C to stop.
+    """
+    from websockets.sync.client import connect
+    from websockets.exceptions import WebSocketException
+    import json
+
+    uri = f"ws://{host}/ws/memory/live"
+
+    KIND_COLORS: dict[str, str] = {
+        "memory.stored":              "blue",
+        "memory.retrieved":           "cyan",
+        "memory.fact_added":          "green",
+        "memory.user_model_updated":  "magenta",
+        "memory.knowledge_indexed":   "yellow",
+        "memory.consolidated":        "gold1",
+        "memory.pruned":              "dim",
+    }
+    LAYER_ICONS: dict[str, str] = {
+        "episodic":   "📖",
+        "semantic":   "🧠",
+        "user_model": "👤",
+        "knowledge":  "📚",
+        "working":    "⚡",
+    }
+
+    try:
+        console.print(f"[dim]Connecting to {uri}…[/]")
+        with connect(uri, close_timeout=2) as ws:
+            console.print("[green]✓ Connected[/] — watching memory events (Ctrl+C to stop)\n")
+            for raw in ws:
+                msg = json.loads(raw)
+                mtype = msg.get("type")
+
+                if mtype == "ping":
+                    ws.send("pong")
+                    continue
+
+                if mtype == "snapshot":
+                    console.print(
+                        f"[dim]snapshot[/]  episodes={msg.get('episode_count', '?')}  "
+                        f"facts={msg.get('fact_count', '?')}  "
+                        f"docs={msg.get('document_count', '?')}  "
+                        f"prefs={msg.get('preference_count', '?')}"
+                    )
+                    continue
+
+                if mtype == "replay_complete":
+                    continue
+
+                kind        = msg.get("kind", "unknown")
+                mem_type    = msg.get("memory_type", "")
+                items       = msg.get("items", [])
+                task_id_raw = msg.get("task_id", "")
+                color       = KIND_COLORS.get(kind, "white")
+                icon        = LAYER_ICONS.get(mem_type, "•")
+
+                console.print(
+                    f"{icon} [{color}]{kind}[/]  "
+                    f"[dim]{mem_type}[/]  "
+                    f"{items[0][:70] if items else ''}  "
+                    f"[dim]{task_id_raw[:8] if task_id_raw not in ('system', '') else 'sys'}[/]"
+                )
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]⏸ Stopped watching[/]")
+    except WebSocketException as exc:
+        console.print(f"[red]✗ WebSocket error:[/] {exc}")
+        raise typer.Exit(1)
+    except Exception as exc:
+        console.print(f"[red]✗ Error:[/] {exc}")
+        raise typer.Exit(1)
+
+
+@memory_app.command("flush-cache")
+def memory_flush_cache() -> None:
+    """Flush the in-process retrieval + fact caches.
+
+    Useful after manually editing the DB or during debugging.
+    """
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            await atlas.retriever.invalidate_cache()
+            await atlas.semantic._fact_cache.invalidate()
+            console.print("[green]✓ Caches flushed[/]")
+
+    _run(go())
+
+
 if __name__ == "__main__":
     app()

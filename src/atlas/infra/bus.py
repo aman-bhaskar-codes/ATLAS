@@ -11,11 +11,11 @@ import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from atlas.infra.db import Database
-
 from atlas.infra.errors import BusError
 from atlas.infra.logging import get_logger
 
@@ -27,6 +27,27 @@ class Event(BaseModel):
 
     model_config = {"frozen": True}
     correlation_id: str
+
+
+# ---------------------------------------------------------------------------
+# Memory events — defined here (infra layer) so atlas.memory can import them
+# without violating the layer boundary. atlas.orchestration.events re-exports.
+# ---------------------------------------------------------------------------
+
+class MemoryBusEvent(Event):
+    """Published to the 'memory' topic on any memory write or retrieval.
+
+    WHY in infra.bus: atlas.memory cannot import atlas.orchestration (layer
+    boundary). Defining the event here lets memory modules publish typed events
+    while importing only from atlas.infra.
+    """
+    task_id: str
+    kind: str        # memory.stored | memory.retrieved | memory.consolidated | ...
+    memory_type: str  # episodic | semantic | working | user_model | knowledge
+    count: int = 0
+    query: str | None = None
+    items: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 Handler = Callable[[Event], Awaitable[None]]
@@ -93,6 +114,8 @@ class MessageBus:
     async def _process_queue(self) -> None:
         while not self._closed:
             try:
+                if self._closed:
+                    break
                 cur = await self._db.conn.execute("SELECT * FROM event_queue ORDER BY id ASC LIMIT 50")
                 rows = await cur.fetchall()
                 
@@ -143,5 +166,9 @@ class MessageBus:
         self._closed = True
         self._wake_event.set()
         if self._task:
-            await self._task
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
         self._subs.clear()
