@@ -153,6 +153,10 @@ class Atlas:
     scheduler: CronScheduler | None = None
     llm_tracker: LLMCallTracker | None = None
     workflows: WorkflowStore | None = None
+    skill_store: Any = None  # Batch 4
+    strategy_store: Any = None  # Batch 4
+    world_state: Any = None  # Batch 4
+    skill_promoter: Any = None  # Batch 4
 
     async def start(self) -> None:
         # lifecycle.start() calls db.start() and bus.start() via the service registry
@@ -366,6 +370,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     knowledge_store = mem.knowledge_store
     retriever, consolidator, pruner = mem.retriever, mem.consolidator, mem.pruner
     trajectory_store, experience_extractor = mem.trajectory_store, mem.experience_extractor  # Phase 2
+    skill_store, strategy_store = mem.skill_store, mem.strategy_store  # Batch 4
+    world_state, skill_promoter = mem.world_state, mem.skill_promoter  # Batch 4
 
     # ── Knowledge platform providers ──────────────────────────────── #
     cap_registry.register(
@@ -557,6 +563,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         episodic=episodic,
         trajectory_store=trajectory_store,  # Phase 2
         experience_extractor=experience_extractor,  # Phase 2
+        skill_store=skill_store,  # Batch 4
+        world_state=world_state,  # Batch 4
     )
     orchestrator = orch.orchestrator
 
@@ -572,7 +580,14 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
             stats = await consolidator.run()
             _log.info("consolidation.scheduled_run", event_type="lifecycle", stats=str(stats))
         except Exception as exc:
-            _log.error("consolidation.scheduled_error", event_type="lifecycle", error=str(exc))
+            _log.error("consolidation.scheduled_error", event_type="lifecycle", error=repr(exc))
+        # Batch 4: promote proven experiences into candidate skills nightly.
+        try:
+            created = await skill_promoter.promote_from_experiences()
+            if created:
+                _log.info("skill.promotion_run", event_type="lifecycle", created=len(created))
+        except Exception as exc:
+            _log.error("skill.promotion_error", event_type="lifecycle", error=repr(exc))
 
     cron_scheduler.register_job(name="memory_consolidation", cron="0 2 * * *", fn=_consolidate_job)
 
@@ -626,4 +641,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         scheduler=cron_scheduler,
         llm_tracker=llm_tracker,
         workflows=workflow_store,
+        skill_store=skill_store,  # Batch 4
+        strategy_store=strategy_store,  # Batch 4
+        world_state=world_state,  # Batch 4
+        skill_promoter=skill_promoter,  # Batch 4
     )

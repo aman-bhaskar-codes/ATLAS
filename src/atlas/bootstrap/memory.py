@@ -17,10 +17,14 @@ from atlas.memory.knowledge_store import KnowledgeStore
 from atlas.memory.pruning import Pruner
 from atlas.memory.retrieval import Retriever
 from atlas.memory.semantic import SemanticMemory
+from atlas.memory.skills import SkillStore  # Batch 4
+from atlas.memory.skills_promotion import SkillPromoter  # Batch 4
+from atlas.memory.strategies import StrategyStore  # Batch 4
 from atlas.memory.trajectory_store import TrajectoryStore  # Phase 2
 from atlas.memory.user_model import UserModel
 from atlas.memory.vectorstore import ChromaVectorStore
 from atlas.memory.working import WorkingMemory
+from atlas.memory.world_state import WorldStateStore  # Batch 4
 
 
 @dataclass
@@ -37,6 +41,10 @@ class MemoryComponents:
     pruner: Pruner
     trajectory_store: TrajectoryStore  # Phase 2
     experience_extractor: ExperienceExtractor  # Phase 2
+    skill_store: SkillStore  # Batch 4
+    strategy_store: StrategyStore  # Batch 4
+    world_state: WorldStateStore  # Batch 4
+    skill_promoter: SkillPromoter  # Batch 4
 
 
 def build_memory(
@@ -96,6 +104,16 @@ def build_memory(
         clock=clock,
     )
 
+    # Batch 4: skills, strategies, world state, experience promotion
+    skill_store = SkillStore(db, ids, clock)
+    strategy_store = StrategyStore(db, ids, clock)
+    world_state = WorldStateStore(db, clock)
+    skill_promoter = SkillPromoter(
+        trajectory_store=trajectory_store,
+        skill_store=skill_store,
+        ids=ids,
+    )
+
     return MemoryComponents(
         vectors=vectors,
         embedding_worker=embedding_worker,
@@ -109,4 +127,8 @@ def build_memory(
         pruner=pruner,
         trajectory_store=trajectory_store,
         experience_extractor=experience_extractor,
+        skill_store=skill_store,
+        strategy_store=strategy_store,
+        world_state=world_state,
+        skill_promoter=skill_promoter,
     )

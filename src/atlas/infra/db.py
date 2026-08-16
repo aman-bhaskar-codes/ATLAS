@@ -485,6 +485,58 @@ _MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_eval_golden ON evaluation_results(golden_id, created_ts DESC);
     CREATE INDEX IF NOT EXISTS idx_eval_run ON evaluation_results(run_id);
     """,
+    """
+    -- Skills: versioned, evidence-scored reusable procedures promoted from
+    -- repeated successful experiences. Never auto-modifies behavior beyond
+    -- prompt context; promotion requires evidence thresholds.
+    CREATE TABLE IF NOT EXISTS skills (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        procedure_steps TEXT NOT NULL DEFAULT '[]',     -- JSON array of steps
+        version INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'candidate',       -- candidate | active | disabled
+        success_rate REAL NOT NULL DEFAULT 0.0,
+        usage_count INTEGER NOT NULL DEFAULT 0,
+        confidence REAL NOT NULL DEFAULT 0.5,
+        preferred_tools TEXT NOT NULL DEFAULT '[]',     -- JSON array
+        known_failure_modes TEXT NOT NULL DEFAULT '[]', -- JSON array
+        source_experience_ids TEXT NOT NULL DEFAULT '[]',
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL,
+        superseded_by TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_skills_name ON skills(name, version DESC);
+    CREATE INDEX IF NOT EXISTS idx_skills_status ON skills(status, confidence DESC);
+
+    -- Strategies: governed task-approach preferences. Promotion to 'active'
+    -- requires offline evaluation evidence; safety policy is never derived
+    -- from strategies.
+    CREATE TABLE IF NOT EXISTS strategies (
+        id TEXT PRIMARY KEY,
+        task_type_pattern TEXT NOT NULL,
+        approach TEXT NOT NULL,
+        model_preference TEXT,
+        tool_preference TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'candidate',       -- candidate | active | retired
+        success_rate REAL NOT NULL DEFAULT 0.0,
+        evidence_count INTEGER NOT NULL DEFAULT 0,
+        eval_score REAL,
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_strategies_pattern ON strategies(task_type_pattern);
+
+    -- World state: lightweight entity tracking so the agent stops
+    -- rediscovering its environment every task.
+    CREATE TABLE IF NOT EXISTS world_state (
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        attributes TEXT NOT NULL DEFAULT '{}',           -- JSON object
+        updated_ts TEXT NOT NULL,
+        PRIMARY KEY (entity_type, entity_id)
+    );
+    """,
 )
 
 

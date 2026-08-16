@@ -72,6 +72,8 @@ def build_orchestration(
     episodic: Any,
     trajectory_store: Any = None,  # Phase 2
     experience_extractor: Any = None,  # Phase 2
+    skill_store: Any = None,  # Batch 4
+    world_state: Any = None,  # Batch 4
 ) -> OrchestrationComponents:
     """Build orchestration layer: tools, dispatcher, planner, reasoning loop, orchestrator."""
 
@@ -180,6 +182,8 @@ def build_orchestration(
         events=events,
         trajectory_store=trajectory_store,  # Phase 2
         experience_extractor=experience_extractor,  # Phase 2
+        skill_store=skill_store,  # Batch 4
+        world_state=world_state,  # Batch 4
     )
 
     return OrchestrationComponents(

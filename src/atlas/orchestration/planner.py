@@ -41,12 +41,20 @@ class Planner:
         context: str,
         caps: Capabilities,
         correlation_id: CorrelationId,
+        prior_knowledge: str = "",
     ) -> Plan:
+        """Generate a plan.
+
+        prior_knowledge: lessons/skills/strategies retrieved from memory so the
+        planner builds on proven approaches instead of rediscovering them.
+        Advisory only — retrieved knowledge never relaxes constraints.
+        """
+        knowledge_block = f"\n\nPRIOR KNOWLEDGE (advisory):\n{prior_knowledge}\n" if prior_knowledge else ""
         resp = await self._gw.complete(
             ModelRequest(
                 correlation_id=correlation_id,
                 system=_PLAN_SYSTEM,
-                prompt=f"CONTEXT:\n{context}\n\nREQUEST:\n{request}",
+                prompt=f"CONTEXT:\n{context}{knowledge_block}\n\nREQUEST:\n{request}",
                 required_capabilities=frozenset(
                     {
                         ModelCapability.PLANNING,

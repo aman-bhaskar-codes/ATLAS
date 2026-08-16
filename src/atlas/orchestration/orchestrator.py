@@ -61,6 +61,8 @@ class Orchestrator:
         events: EventPublisher,
         trajectory_store: TrajectoryStore | None = None,  # Phase 2
         experience_extractor: ExperienceExtractor | None = None,  # Phase 2
+        skill_store: Any = None,  # Batch 4: experience-informed planning
+        world_state: Any = None,  # Batch 4: environment facts
     ) -> None:
         self._ids = ids
         self._clock = clock
@@ -74,6 +76,8 @@ class Orchestrator:
         self._events = events
         self._trajectory_store = trajectory_store
         self._experience_extractor = experience_extractor
+        self._skill_store = skill_store
+        self._world_state = world_state
         self._cancels: dict[str, CancellationToken] = {}
 
     def cancel(self, task_id: str) -> None:
@@ -129,7 +133,14 @@ class Orchestrator:
             await self._events.emit(
                 task_id=task.id, correlation_id=task.correlation_id, state=machine.state.value, kind="planning.started"
             )
-            plan = await self._planner.plan(task.request, context, caps, task.correlation_id)
+            prior_knowledge = await self._build_prior_knowledge()
+            plan = await self._planner.plan(
+                task.request,
+                context,
+                caps,
+                task.correlation_id,
+                prior_knowledge=prior_knowledge,
+            )
             await self._events.emit(
                 task_id=task.id,
                 correlation_id=task.correlation_id,
@@ -183,6 +194,36 @@ class Orchestrator:
                 state=machine.state.value,
                 updated_ts=self._clock.now(),
             )
+
+    async def _build_prior_knowledge(self) -> str:
+        """Retrieve proven lessons, active skills, and environment facts.
+
+        Best-effort: retrieval failures degrade to empty knowledge, never
+        fail the task. Content is advisory context for the planner only.
+        """
+        parts: list[str] = []
+        try:
+            if self._skill_store is not None:
+                for skill in await self._skill_store.active_skills(limit=5):
+                    parts.append(skill.to_prompt_fragment())
+            if self._trajectory_store is not None:
+                from atlas.memory.trajectory import ExperienceQuery
+
+                experiences = await self._trajectory_store.query_experiences(
+                    ExperienceQuery(min_confidence=0.65, min_reuse_count=1, limit=5)
+                )
+                for exp in experiences:
+                    parts.append(
+                        f"Lesson ({exp.category.value}, confidence {exp.confidence:.2f}): "
+                        f"{exp.lesson_text} [applies when: {exp.applicability_context}]"
+                    )
+            if self._world_state is not None:
+                fragment = await self._world_state.to_prompt_fragment(limit=8)
+                if fragment:
+                    parts.append(fragment)
+        except Exception as exc:
+            _log.warning("planner.prior_knowledge_failed", event_type="orchestration", error=repr(exc))
+        return "\n\n".join(parts)[:4000]
 
     async def _save_trajectory(
         self,
