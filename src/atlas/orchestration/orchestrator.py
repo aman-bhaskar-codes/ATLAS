@@ -63,6 +63,7 @@ class Orchestrator:
         experience_extractor: ExperienceExtractor | None = None,  # Phase 2
         skill_store: Any = None,  # Batch 4: experience-informed planning
         world_state: Any = None,  # Batch 4: environment facts
+        dag_executor: Any = None,  # Batch 5: parallel plan execution
     ) -> None:
         self._ids = ids
         self._clock = clock
@@ -78,6 +79,7 @@ class Orchestrator:
         self._experience_extractor = experience_extractor
         self._skill_store = skill_store
         self._world_state = world_state
+        self._dag_executor = dag_executor
         self._cancels: dict[str, CancellationToken] = {}
 
     def cancel(self, task_id: str) -> None:
@@ -158,6 +160,22 @@ class Orchestrator:
                 current_state="planning_complete",
                 confidence=plan.confidence,
             )
+
+            # Batch 5: fully-specified plans (every step has tool+operation)
+            # execute as a dependency DAG in parallel batches — still through
+            # the dispatcher/SafetyEngine per step. Exploratory plans keep the
+            # model-driven OTAR loop.
+            if self._dag_executor is not None and plan.steps and all(s.tool and s.operation for s in plan.steps):
+                dag_results = await self._dag_executor.execute(plan, task.correlation_id)
+                if dag_results:
+                    context += "\n\nExecuted plan observations:\n" + "\n".join(
+                        f"- step {idx}: {'ok' if obs.ok else 'FAILED'} {str(obs.content or obs.error or '')[:200]}"
+                        for idx, obs in sorted(dag_results.items())
+                    )
+                    goal.update_progress(
+                        len(dag_results) / max(1, len(plan.steps)),
+                        "dag_execution_complete",
+                    )
 
             result = await self._reasoning.run(
                 task_id=task.id,

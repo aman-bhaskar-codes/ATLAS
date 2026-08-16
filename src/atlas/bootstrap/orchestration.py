@@ -16,6 +16,8 @@ from atlas.memory.retrieval import Retriever
 from atlas.memory.semantic import SemanticMemory
 from atlas.memory.working import WorkingMemory
 from atlas.orchestration.context_builder import ContextBuilder
+from atlas.orchestration.context_engine import ContextCompactor
+from atlas.orchestration.dag_executor import DagExecutor
 from atlas.orchestration.dispatcher import ToolDispatcher
 from atlas.orchestration.events import EventPublisher
 from atlas.orchestration.goal import GoalVerifier, NullVerifier
@@ -167,6 +169,7 @@ def build_orchestration(
         replanner=replanner,
         verifier=verifier,
         trajectory_store=trajectory_store,  # Phase 2
+        compactor=ContextCompactor(),  # Batch 5
     )
 
     orchestrator = Orchestrator(
@@ -184,6 +187,7 @@ def build_orchestration(
         experience_extractor=experience_extractor,  # Phase 2
         skill_store=skill_store,  # Batch 4
         world_state=world_state,  # Batch 4
+        dag_executor=DagExecutor(dispatcher),  # Batch 5
     )
 
     return OrchestrationComponents(

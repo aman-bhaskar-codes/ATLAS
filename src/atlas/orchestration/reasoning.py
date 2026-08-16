@@ -29,6 +29,7 @@ from atlas.infra.logging import get_logger
 from atlas.infra.types import ModelCapability, ModelRequest, Tier
 from atlas.intelligence.gateway import ModelGateway
 from atlas.memory.types import Episode, EpisodeKind
+from atlas.orchestration.context_engine import ContextCompactor
 from atlas.orchestration.dispatcher import ToolDispatcher
 from atlas.orchestration.errors import CancellationError, OrchestrationError
 from atlas.orchestration.events import EventPublisher
@@ -81,6 +82,7 @@ class ReasoningLoop:
         replanner: Replanner | None = None,  # Phase 1: bounded replanning
         verifier: Verifier | None = None,  # Phase 1: answer verification
         trajectory_store: TrajectoryStore | None = None,  # Phase 2: trajectory capture
+        compactor: ContextCompactor | None = None,  # Batch 5: bounded context
     ) -> None:
         self._gw = gateway
         self._dispatch = dispatcher
@@ -98,6 +100,7 @@ class ReasoningLoop:
         self._replanner = replanner
         self._verifier: Verifier = verifier if verifier is not None else NullVerifier()
         self._trajectory_store = trajectory_store
+        self._compactor = compactor or ContextCompactor()
 
     async def run(
         self,
