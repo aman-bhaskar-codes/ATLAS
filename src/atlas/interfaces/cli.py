@@ -53,6 +53,99 @@ async def build_atlas() -> AsyncGenerator[Atlas]:
 
 
 @app.command()
+def worker(
+    poll_interval_s: float = typer.Option(0.5, "--poll-interval", help="queue poll interval (s)"),
+) -> None:
+    """Run a task worker consuming the durable queue (Phase 9). Ctrl-C to stop."""
+
+    async def go() -> int:
+        from atlas.infra.backends import SQLiteConnection
+        from atlas.orchestration.worker import TaskWorker
+
+        async with build_atlas() as atlas:
+            task_worker = TaskWorker(
+                orchestrator=atlas.orchestrator,
+                conn=SQLiteConnection(atlas.db.conn),
+                poll_interval_s=poll_interval_s,
+            )
+            stop = asyncio.Event()
+
+            def _sigint() -> None:
+                stop.set()
+
+            import signal
+
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                try:
+                    loop.add_signal_handler(sig, _sigint)
+                except NotImplementedError:
+                    pass
+            await task_worker.run_forever()
+            return 0
+
+    raise typer.Exit(_run(go()))
+
+
+@app.command("enqueue")
+def enqueue(
+    content: str = typer.Argument(..., help="task content"),
+    correlation_id: str = typer.Option("", "--corr"),
+    source: str = typer.Option("api", "--source"),
+) -> None:
+    """Enqueue a task on the durable queue for worker pickup (Phase 9)."""
+
+    async def go() -> int:
+        from atlas.infra.backends import SQLiteConnection
+        from atlas.infra.queue import DurableTaskQueue
+
+        async with build_atlas() as atlas:
+            q = DurableTaskQueue(SQLiteConnection(atlas.db.conn), "cli")
+            job_id = await q.enqueue(
+                {
+                    "correlation_id": correlation_id or atlas.ids.correlation_id(),
+                    "source": source,
+                    "content": content,
+                }
+            )
+            console.print(f"[green]queued[/] job #{job_id}")
+            return 0
+
+    raise typer.Exit(_run(go()))
+
+
+@app.command("resume")
+def resume(task_id: str) -> None:
+    """Assess/perform crash resume for an interrupted task (Phase 9).
+
+    Only tasks whose plan is fully idempotent can resume; others are reported
+    with the reason so the user can re-issue instead.
+    """
+
+    async def go() -> int:
+        from atlas.orchestration.resume import try_resume
+
+        async with build_atlas() as atlas:
+            if atlas.checkpoints is None:
+                console.print("[red]checkpoint store unavailable[/]")
+                return 1
+            decision, plan = await try_resume(
+                task_id=task_id,
+                checkpoints=atlas.checkpoints,
+                registry=atlas.orchestrator._registry,
+            )
+            if not decision.allowed:
+                console.print(f"[red]resume refused[/]: {decision.reason}")
+                return 1
+            assert plan is not None
+            console.print(f"[green]resume allowed[/]: {decision.reason}")
+            console.print(f"restored plan: {plan.goal} ({len(plan.steps)} steps)")
+            return 0
+
+    raise typer.Exit(_run(go()))
+
+
+@app.command()
 def doctor(verify_manifest: bool = typer.Option(False, "--verify-manifest")) -> None:
     async def go() -> int:
         async with build_atlas() as atlas:

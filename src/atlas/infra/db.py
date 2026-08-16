@@ -557,6 +557,24 @@ _MIGRATIONS: tuple[str, ...] = (
     ALTER TABLE tasks ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
     ALTER TABLE trajectories ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
     """,
+    """
+    -- Phase 9: durable task queue for worker-process execution. Claiming is a
+    -- single conditional UPDATE (atomic per row), which is correct under both
+    -- SQLite WAL (single writer) and PostgreSQL (row-level locks).
+    CREATE TABLE IF NOT EXISTS task_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        payload TEXT NOT NULL,               -- JSON InboundEvent
+        tenant_id TEXT NOT NULL DEFAULT 'local',
+        state TEXT NOT NULL DEFAULT 'pending',  -- pending | claimed | done | failed | dead
+        attempts INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 3,
+        claimed_by TEXT,
+        claimed_ts TEXT,
+        created_ts TEXT NOT NULL,
+        completed_ts TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tq_state ON task_queue(state, created_ts);
+    """,
 )
 
 
