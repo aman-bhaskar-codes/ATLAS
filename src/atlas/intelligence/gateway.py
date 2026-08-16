@@ -84,6 +84,7 @@ class ModelGateway:
             constraints=constraints,
             max_tokens=mr.max_tokens,
             temperature=mr.temperature,
+            tools=mr.tools,
         )
         resp = await self.infer(req)
         target = ModelTarget.CLOUD if resp.usage.usd > 0 else ModelTarget.LOCAL_FAST
@@ -91,6 +92,7 @@ class ModelGateway:
             text=resp.text,
             target=target,
             model=resp.model_id,
+            tool_calls=resp.tool_calls,
             cost=TokenCost(
                 input_tokens=resp.usage.input_tokens, output_tokens=resp.usage.output_tokens, usd=resp.usage.usd
             ),

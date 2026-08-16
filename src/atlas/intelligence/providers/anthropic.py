@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from atlas.infra.types import ProviderToolCall, ToolCallSpec
 from atlas.intelligence.contracts import Message, Role, StreamChunk, Usage
 from atlas.intelligence.errors import ProviderError, RateLimitError
 from atlas.intelligence.providers.base import ProviderCompletion
@@ -23,7 +24,13 @@ class AnthropicProvider:
         self._base = "https://api.anthropic.com/v1"
 
     def _payload(
-        self, model: str, messages: Sequence[Message], max_tokens: int, temperature: float, stream: bool
+        self,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
+        stream: bool,
+        tools: Sequence[ToolCallSpec] = (),
     ) -> dict[str, Any]:
         # Anthropic extracts system messages to a top-level parameter
         system_msg = next((m.content for m in messages if m.role == Role.SYSTEM), "")
@@ -38,6 +45,15 @@ class AnthropicProvider:
         }
         if system_msg:
             payload["system"] = system_msg
+        if tools:
+            payload["tools"] = [
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.parameters or {"type": "object", "properties": {}},
+                }
+                for t in tools
+            ]
         return payload
 
     async def complete(
@@ -49,12 +65,13 @@ class AnthropicProvider:
         temperature: float,
         usd_in: float,
         usd_out: float,
+        tools: Sequence[ToolCallSpec] = (),
     ) -> ProviderCompletion:
         try:
             r = await self._client.post(
                 f"{self._base}/messages",
                 headers={"x-api-key": self._key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                json=self._payload(model, messages, max_tokens, temperature, False),
+                json=self._payload(model, messages, max_tokens, temperature, False, tools),
             )
             if r.status_code == 429:
                 raise RateLimitError(f"{self.name} rate limited")
@@ -65,11 +82,21 @@ class AnthropicProvider:
             raise ProviderError(f"{self.name} transport: {exc}") from exc
 
         data = r.json()
-        text = data["content"][0]["text"]
+        blocks = data.get("content") or []
+        text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+        tool_calls = tuple(
+            ProviderToolCall(
+                id=str(b.get("id", "")),
+                name=str(b.get("name", "")),
+                arguments=dict(b.get("input") or {}),
+            )
+            for b in blocks
+            if b.get("type") == "tool_use"
+        )
         u = data.get("usage", {})
         it, ot = int(u.get("input_tokens", 0)), int(u.get("output_tokens", 0))
         usd = it / 1e6 * usd_in + ot / 1e6 * usd_out
-        return ProviderCompletion(str(text), Usage(input_tokens=it, output_tokens=ot, usd=usd))
+        return ProviderCompletion(str(text), Usage(input_tokens=it, output_tokens=ot, usd=usd), tool_calls)
 
     async def stream(
         self,

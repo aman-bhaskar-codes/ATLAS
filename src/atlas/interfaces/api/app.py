@@ -202,12 +202,6 @@ def create_app() -> FastAPI:
     #   - trajectory_router: GET /trajectory/* (Phase 2 learning endpoints)
     # trust_router still declares prefix="/api/v1" internally (see routes_trust.py),
     # so it is mounted with an empty prefix here to avoid doubling it.
-    # Add a simple health check that works even before lifespan completes
-    @app.get("/health")
-    async def health_check() -> dict[str, str]:
-        """Basic health check - always responds if server is running."""
-        return {"status": "ok", "service": "atlas-api"}
-
     app.include_router(runtime_router, prefix="/api/v1")
     app.include_router(tasks_router, prefix="/api/v1")
     app.include_router(approvals_router, prefix="/api/v1")

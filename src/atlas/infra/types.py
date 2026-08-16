@@ -92,6 +92,27 @@ class ModelTarget(IntEnum):
     CLOUD = 2
 
 
+class ToolCallSpec(_Frozen):
+    """A tool advertised to the model (provider-native function calling).
+
+    `parameters` is a JSON-schema object; providers serialize it into their own
+    wire format and ATLAS normalizes the model's choices back into
+    ProviderToolCall so orchestration never sees vendor schemas.
+    """
+
+    name: str
+    description: str = ""
+    parameters: dict[str, object] = Field(default_factory=dict)
+
+
+class ProviderToolCall(_Frozen):
+    """A tool invocation chosen by the model, in ATLAS-normalized form."""
+
+    id: str = ""
+    name: str
+    arguments: dict[str, object] = Field(default_factory=dict)
+
+
 class ModelRequest(_Frozen):
     correlation_id: CorrelationId
     prompt: str
@@ -103,6 +124,7 @@ class ModelRequest(_Frozen):
     thinking: bool | None = None
     max_tokens: int = 1024
     temperature: float = 0.2
+    tools: tuple[ToolCallSpec, ...] = ()  # empty = no native function calling
 
 
 class TokenCost(_Frozen):
@@ -118,6 +140,7 @@ class ModelResponse(_Frozen):
     cost: TokenCost = TokenCost()
     latency_ms: int = 0
     truncated: bool = False
+    tool_calls: tuple[ProviderToolCall, ...] = ()  # non-empty = model chose tools
 
 
 class AuditRecord(_Frozen):

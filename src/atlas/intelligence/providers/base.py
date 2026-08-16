@@ -10,13 +10,20 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Sequence
 from typing import Protocol
 
+from atlas.infra.types import ProviderToolCall, ToolCallSpec
 from atlas.intelligence.contracts import Message, StreamChunk, Usage
 
 
 class ProviderCompletion:
-    def __init__(self, text: str, usage: Usage) -> None:
+    def __init__(
+        self,
+        text: str,
+        usage: Usage,
+        tool_calls: tuple[ProviderToolCall, ...] = (),
+    ) -> None:
         self.text = text
         self.usage = usage
+        self.tool_calls = tool_calls
 
 
 class Provider(Protocol):
@@ -32,6 +39,7 @@ class Provider(Protocol):
         temperature: float,
         usd_in: float,
         usd_out: float,
+        tools: Sequence[ToolCallSpec] = (),
     ) -> ProviderCompletion: ...
 
     def stream(

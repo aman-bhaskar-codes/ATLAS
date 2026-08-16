@@ -29,11 +29,12 @@ from atlas.orchestration.prompt_builder import PromptBuilder
 from atlas.orchestration.reasoning import ReasoningLoop
 from atlas.orchestration.recorder import ExecutionRecorder
 from atlas.orchestration.reflection import NoOpReflection
-from atlas.orchestration.registry import ToolRegistry
+from atlas.orchestration.registry import ToolMetadata, ToolRegistry
 from atlas.orchestration.replanner import Replanner
 from atlas.orchestration.router import Router
 from atlas.orchestration.self_critique import SelfCritique
 from atlas.orchestration.tiering import TierEstimator
+from atlas.orchestration.tool_routing import ToolHealthTracker, ToolRouter
 from atlas.orchestration.types import Action, Critique
 from atlas.orchestration.validator import OutputValidator
 from atlas.safety.audit import AuditLog
@@ -46,6 +47,8 @@ from atlas.tools.base import Tool
 @dataclass
 class OrchestrationComponents:
     tool_registry: ToolRegistry
+    tool_health: ToolHealthTracker
+    tool_router: ToolRouter
     events: EventPublisher
     orchestrator: Orchestrator
 
@@ -73,8 +76,27 @@ def build_orchestration(
     """Build orchestration layer: tools, dispatcher, planner, reasoning loop, orchestrator."""
 
     tool_registry = ToolRegistry()
+    _operations = ("read", "write", "delete", "side_effect", "read_only")
+    _metadata_map = {
+        "filesystem": ToolMetadata(
+            name="filesystem",
+            operations=_operations,
+            description="Read and write files within allowed paths.",
+            estimated_latency_ms=50,
+            idempotent=False,
+            side_effects=True,
+        ),
+        "shell": ToolMetadata(
+            name="shell",
+            operations=_operations,
+            description="Run allowlisted commands in a sandbox.",
+            estimated_latency_ms=1500,
+            idempotent=False,
+            side_effects=True,
+        ),
+    }
     for t in tools.values():
-        tool_registry.register(t, ("read", "write", "delete", "side_effect", "read_only"))
+        tool_registry.register(t, _operations, _metadata_map.get(t.name))
 
     events = EventPublisher(bus)
     safety.set_events(events)
@@ -118,7 +140,9 @@ def build_orchestration(
     else:
         reflection = NoOpReflection()
 
-    dispatcher = ToolDispatcher(tool_registry, safety)
+    tool_health = ToolHealthTracker()
+    tool_router = ToolRouter(tool_registry, tool_health)
+    dispatcher = ToolDispatcher(tool_registry, safety, health=tool_health)
     limits = ExecutionLimits(max_steps=15)
 
     # Phase 1: Replanner and Verifier
@@ -160,6 +184,8 @@ def build_orchestration(
 
     return OrchestrationComponents(
         tool_registry=tool_registry,
+        tool_health=tool_health,
+        tool_router=tool_router,
         events=events,
         orchestrator=orchestrator,
     )

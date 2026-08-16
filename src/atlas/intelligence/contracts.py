@@ -13,6 +13,7 @@ from enum import StrEnum
 from pydantic import BaseModel
 
 from atlas.infra.ids import CorrelationId
+from atlas.infra.types import ProviderToolCall, ToolCallSpec
 from atlas.intelligence.capabilities import CapabilitySet
 
 
@@ -81,6 +82,7 @@ class InferenceRequest(BaseModel):
     temperature: float = 0.2
     stream: bool = False
     task_id: str | None = None
+    tools: Sequence[ToolCallSpec] = ()  # provider-native function calling
 
 
 class InferenceResponse(BaseModel):
@@ -93,6 +95,7 @@ class InferenceResponse(BaseModel):
     attempts: int = 1
     fell_back: bool = False
     truncated: bool = False
+    tool_calls: tuple[ProviderToolCall, ...] = ()
 
 
 class StreamChunk(BaseModel):

@@ -14,6 +14,7 @@ from typing import Any
 
 import httpx
 
+from atlas.infra.types import ProviderToolCall, ToolCallSpec
 from atlas.intelligence.contracts import Message, StreamChunk, Usage
 from atlas.intelligence.errors import ProviderError, RateLimitError
 from atlas.intelligence.providers.base import ProviderCompletion
@@ -44,16 +45,36 @@ class OpenAICompatibleProvider:
         return model
 
     def _payload(
-        self, model: str, messages: Sequence[Message], max_tokens: int, temperature: float, stream: bool
+        self,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
+        stream: bool,
+        tools: Sequence[ToolCallSpec] = (),
     ) -> dict[str, Any]:
         mapped = self._map_model(model)
-        return {
+        payload: dict[str, Any] = {
             "model": mapped,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": stream,
             "messages": [{"role": m.role.value, "content": m.content} for m in messages],
         }
+        if tools:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters or {"type": "object", "properties": {}},
+                    },
+                }
+                for t in tools
+            ]
+            payload["tool_choice"] = "auto"
+        return payload
 
     async def complete(
         self,
@@ -64,12 +85,13 @@ class OpenAICompatibleProvider:
         temperature: float,
         usd_in: float,
         usd_out: float,
+        tools: Sequence[ToolCallSpec] = (),
     ) -> ProviderCompletion:
         try:
             r = await self._client.post(
                 f"{self._base}/chat/completions",
                 headers={"Authorization": f"Bearer {self._key}"},
-                json=self._payload(model, messages, max_tokens, temperature, False),
+                json=self._payload(model, messages, max_tokens, temperature, False, tools),
             )
             if r.status_code == 429:
                 raise RateLimitError(f"{self.name} rate limited")
@@ -91,7 +113,27 @@ class OpenAICompatibleProvider:
         u = data.get("usage", {})
         it, ot = int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0))
         usd = it / 1e6 * usd_in + ot / 1e6 * usd_out
-        return ProviderCompletion(str(text), Usage(input_tokens=it, output_tokens=ot, usd=usd))
+        tool_calls = self._parse_tool_calls(data)
+        return ProviderCompletion(str(text), Usage(input_tokens=it, output_tokens=ot, usd=usd), tool_calls)
+
+    @staticmethod
+    def _parse_tool_calls(data: dict[str, Any]) -> tuple[ProviderToolCall, ...]:
+        """Normalize OpenAI-format tool_calls into ATLAS form. Invalid
+        arguments JSON is skipped (logged) — never crashes the completion."""
+        raw_calls = (data.get("choices") or [{}])[0].get("message", {}).get("tool_calls") or []
+        calls: list[ProviderToolCall] = []
+        for tc in raw_calls:
+            try:
+                fn = tc["function"]
+                args = json.loads(fn.get("arguments") or "{}")
+                if not isinstance(args, dict):
+                    continue
+                calls.append(ProviderToolCall(id=str(tc.get("id", "")), name=str(fn["name"]), arguments=args))
+            except (KeyError, json.JSONDecodeError, TypeError) as exc:
+                import logging
+
+                logging.getLogger("atlas.intel.provider").warning("skipping unparsable tool_call: %r", exc)
+        return tuple(calls)
 
     async def stream(
         self,

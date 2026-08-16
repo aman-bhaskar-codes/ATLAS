@@ -12,14 +12,21 @@ from atlas.infra.ids import CorrelationId
 from atlas.infra.types import ToolRequest
 from atlas.orchestration.errors import ToolExecutionError
 from atlas.orchestration.registry import ToolRegistry
+from atlas.orchestration.tool_routing import ToolHealthTracker
 from atlas.orchestration.types import Action, Observation
 from atlas.safety.engine import DeniedError, HaltedError, SafetyEngine
 
 
 class ToolDispatcher:
-    def __init__(self, registry: ToolRegistry, safety: SafetyEngine) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        safety: SafetyEngine,
+        health: ToolHealthTracker | None = None,
+    ) -> None:
         self._registry = registry
         self._safety = safety
+        self._health = health
 
     async def dispatch(self, action: Action, correlation_id: CorrelationId) -> Observation:
         if action.tool is None or action.operation is None:
@@ -27,6 +34,9 @@ class ToolDispatcher:
         tool = self._registry.get(action.tool)
         if tool is None:
             return Observation(step=action.step, ok=False, error=f"unknown tool {action.tool!r}")
+        import time as _time
+
+        _started = _time.perf_counter()
         # Merge the action's operation into args so that tool.execute() can read it.
         # The Safety Engine uses action.operation for tier lookup; tools read args["operation"].
         merged_args = {"operation": action.operation, **action.args}
@@ -49,4 +59,10 @@ class ToolDispatcher:
             )
         except Exception as exc:
             raise ToolExecutionError(f"{action.tool}.{action.operation} failed: {exc}") from exc
+        if self._health is not None:
+            self._health.record(
+                action.tool,
+                ok=result.ok,
+                latency_ms=int((_time.perf_counter() - _started) * 1000),
+            )
         return Observation(step=action.step, ok=result.ok, content=result.output, error=result.error)

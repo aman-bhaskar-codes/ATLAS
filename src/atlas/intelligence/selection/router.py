@@ -17,6 +17,8 @@ class CapabilityRouter:
         caps = set(req.required_capabilities)
         if req.stream:
             caps.add(Capability.STREAMING)
+        if req.tools:
+            caps.add(Capability.TOOL_CALLING)
         if req.constraints.min_context and req.constraints.min_context > 32000:
             caps.add(Capability.LONG_CONTEXT)
         if not caps:

@@ -66,6 +66,7 @@ class InferenceRuntime:
                 temperature=req.temperature,
                 usd_in=spec.usd_per_1m_input,
                 usd_out=spec.usd_per_1m_output,
+                tools=req.tools,
             )
             latency = int((time.perf_counter() - start) * 1000)
             return InferenceResponse(
@@ -74,6 +75,7 @@ class InferenceRuntime:
                 provider=spec.provider,
                 usage=comp.usage,
                 latency_ms=latency,
+                tool_calls=comp.tool_calls,
             )
 
         try:

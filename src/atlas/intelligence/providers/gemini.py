@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from atlas.infra.types import ToolCallSpec
 from atlas.intelligence.contracts import Message, Role, StreamChunk, Usage
 from atlas.intelligence.errors import ProviderError, RateLimitError
 from atlas.intelligence.providers.base import ProviderCompletion
@@ -51,7 +52,14 @@ class GeminiProvider:
         temperature: float,
         usd_in: float,
         usd_out: float,
+        tools: Sequence[ToolCallSpec] = (),
     ) -> ProviderCompletion:
+        if tools:
+            import logging
+
+            logging.getLogger("atlas.intel.provider").warning(
+                "gemini adapter does not yet map tools; continuing text-only"
+            )
         try:
             r = await self._client.post(
                 f"{self._base}/{model}:generateContent",
