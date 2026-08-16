@@ -537,6 +537,26 @@ _MIGRATIONS: tuple[str, ...] = (
         PRIMARY KEY (entity_type, entity_id)
     );
     """,
+    """
+    -- Batch 7: durable execution checkpoints. Saved after every reasoning
+    -- step so an interrupted task's progress survives restarts. Resume is
+    -- opt-in (side-effect safety); crash recovery at minimum marks orphaned
+    -- running tasks instead of leaving them 'reasoning' forever.
+    CREATE TABLE IF NOT EXISTS execution_checkpoints (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        tenant_id TEXT NOT NULL DEFAULT 'local',
+        step INT NOT NULL,
+        state_json TEXT NOT NULL,          -- goal, plan, history summary
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ckpt_task ON execution_checkpoints(task_id, created_ts DESC);
+
+    -- Tenant awareness seed: every tenant-scoped table gains tenant_id with
+    -- a safe single-user default. Existing rows backfill to 'local'.
+    ALTER TABLE tasks ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
+    ALTER TABLE trajectories ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
+    """,
 )
 
 

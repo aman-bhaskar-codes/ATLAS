@@ -159,6 +159,7 @@ class Atlas:
     skill_promoter: Any = None  # Batch 4
     tool_router: Any = None  # Batch 6: operator surface
     tool_health: Any = None  # Batch 6
+    checkpoints: Any = None  # Batch 7
 
     async def start(self) -> None:
         # lifecycle.start() calls db.start() and bus.start() via the service registry
@@ -170,6 +171,16 @@ class Atlas:
         self.knowledge_store.set_bus(self.bus)
         await self.bus.start()
         await self.embedding_worker.start()
+        # Batch 7: fail-clean recovery for tasks orphaned by a previous crash.
+        from atlas.orchestration.recovery import recover_interrupted_tasks
+
+        if self.checkpoints is not None:
+            await recover_interrupted_tasks(
+                self.db,
+                self.checkpoints,
+                self.clock,
+                live_task_ids=frozenset(),
+            )
 
     async def close(self) -> None:
         await self.embedding_worker.stop()
@@ -570,6 +581,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     )
     orchestrator = orch.orchestrator
     tool_router, tool_health = orch.tool_router, orch.tool_health  # Batch 6
+    checkpoints = orch.checkpoints  # Batch 7
 
     # ── Feedback, Scheduler, Workflows ───────────────────────────── #
     feedback_store = FeedbackStore(db=db, ids=ids, clock=clock)
@@ -650,4 +662,5 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         skill_promoter=skill_promoter,  # Batch 4
         tool_router=tool_router,  # Batch 6
         tool_health=tool_health,  # Batch 6
+        checkpoints=checkpoints,  # Batch 7
     )

@@ -15,6 +15,7 @@ from atlas.intelligence.gateway import ModelGateway
 from atlas.memory.retrieval import Retriever
 from atlas.memory.semantic import SemanticMemory
 from atlas.memory.working import WorkingMemory
+from atlas.orchestration.checkpoint import CheckpointStore, SQLiteCheckpointBackend
 from atlas.orchestration.context_builder import ContextBuilder
 from atlas.orchestration.context_engine import ContextCompactor
 from atlas.orchestration.dag_executor import DagExecutor
@@ -53,6 +54,7 @@ class OrchestrationComponents:
     tool_router: ToolRouter
     events: EventPublisher
     orchestrator: Orchestrator
+    checkpoints: CheckpointStore
 
 
 def build_orchestration(
@@ -144,6 +146,7 @@ def build_orchestration(
     else:
         reflection = NoOpReflection()
 
+    checkpoint_store = CheckpointStore(SQLiteCheckpointBackend(db, ids), clock)  # Batch 7
     tool_health = ToolHealthTracker()
     tool_router = ToolRouter(tool_registry, tool_health)
     dispatcher = ToolDispatcher(tool_registry, safety, health=tool_health)
@@ -170,6 +173,7 @@ def build_orchestration(
         verifier=verifier,
         trajectory_store=trajectory_store,  # Phase 2
         compactor=ContextCompactor(),  # Batch 5
+        checkpoint_store=checkpoint_store,  # Batch 7
     )
 
     orchestrator = Orchestrator(
@@ -196,4 +200,5 @@ def build_orchestration(
         tool_router=tool_router,
         events=events,
         orchestrator=orchestrator,
+        checkpoints=checkpoint_store,
     )

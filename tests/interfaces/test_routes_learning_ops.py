@@ -48,9 +48,9 @@ def _make_app(db: Database, **extra: object) -> TestClient:
             raise NotImplementedError
 
     registry.register(
-        _T(), ("read", "write"),
-        ToolMetadata(name="filesystem", description="files", idempotent=False,
-                     side_effects=True),
+        _T(),
+        ("read", "write"),
+        ToolMetadata(name="filesystem", description="files", idempotent=False, side_effects=True),
     )
     health = ToolHealthTracker()
     health.record("filesystem", ok=True, latency_ms=25)
@@ -60,8 +60,11 @@ def _make_app(db: Database, **extra: object) -> TestClient:
     app.include_router(learning_router, prefix="/api/v1")
     app.include_router(ops_router, prefix="/api/v1")
     app.state.atlas = SimpleNamespace(
-        db=db, skill_store=skill_store, strategy_store=strategy_store,
-        world_state=world_state, tool_router=tool_router,
+        db=db,
+        skill_store=skill_store,
+        strategy_store=strategy_store,
+        world_state=world_state,
+        tool_router=tool_router,
         **extra,
     )
     return TestClient(app)
@@ -70,10 +73,16 @@ def _make_app(db: Database, **extra: object) -> TestClient:
 class TestLearningRoutes:
     @pytest.mark.asyncio
     async def test_skills_roundtrip(self, db: Database) -> None:
-        await SkillStore(db, UuidGenerator(), SystemClock()).save(Skill(
-            id="sk-1", name="n", description="d", status="active",
-            confidence=0.9, procedure_steps=("s1",),
-        ))
+        await SkillStore(db, UuidGenerator(), SystemClock()).save(
+            Skill(
+                id="sk-1",
+                name="n",
+                description="d",
+                status="active",
+                confidence=0.9,
+                procedure_steps=("s1",),
+            )
+        )
         client = _make_app(db)
         resp = client.get("/api/v1/learning/skills")
         assert resp.status_code == 200
@@ -89,9 +98,14 @@ class TestLearningRoutes:
 
     @pytest.mark.asyncio
     async def test_disable_skill(self, db: Database) -> None:
-        await SkillStore(db, UuidGenerator(), SystemClock()).save(Skill(
-            id="sk-2", name="n", description="d", status="active",
-        ))
+        await SkillStore(db, UuidGenerator(), SystemClock()).save(
+            Skill(
+                id="sk-2",
+                name="n",
+                description="d",
+                status="active",
+            )
+        )
         client = _make_app(db)
         resp = client.post("/api/v1/learning/skills/sk-2/disable")
         assert resp.status_code == 200
@@ -99,10 +113,14 @@ class TestLearningRoutes:
 
     @pytest.mark.asyncio
     async def test_strategies_and_world(self, db: Database) -> None:
-        await StrategyStore(db, UuidGenerator(), SystemClock()).save(Strategy(
-            id="st-1", task_type_pattern="research.*", approach="official first",
-            status="active",
-        ))
+        await StrategyStore(db, UuidGenerator(), SystemClock()).save(
+            Strategy(
+                id="st-1",
+                task_type_pattern="research.*",
+                approach="official first",
+                status="active",
+            )
+        )
         ws = WorldStateStore(db, SystemClock())
         await ws.upsert("service", "ollama", {"healthy": True})
         client = _make_app(db)

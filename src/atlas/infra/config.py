@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
     master_key: str = ""
+    api_keys: str = ""  # comma-separated; 'ro:' prefix = readonly key (Batch 7)
 
     def db_path(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)

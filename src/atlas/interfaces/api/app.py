@@ -177,6 +177,16 @@ def create_app() -> FastAPI:
     # Global exception handler — maps known Atlas exceptions to stable codes
     app.add_exception_handler(Exception, atlas_exception_handler)
 
+    # Batch 7: transport-level identity. No keys configured => local open mode.
+    from atlas.infra.config import load_settings as _load_settings
+    from atlas.interfaces.api.auth import parse_api_keys
+
+    try:
+        _settings = _load_settings()
+        app.state.api_keys = parse_api_keys(getattr(_settings, "api_keys", None))
+    except Exception:
+        app.state.api_keys = {}
+
     # Register routers (imported here to keep the factory free of circular deps)
     from atlas.interfaces.api.events import router as events_router
     from atlas.interfaces.api.routes_approvals import router as approvals_router

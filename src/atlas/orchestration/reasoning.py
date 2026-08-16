@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from atlas.infra.ids import CorrelationId, TaskId
 from atlas.infra.logging import get_logger
@@ -83,6 +83,7 @@ class ReasoningLoop:
         verifier: Verifier | None = None,  # Phase 1: answer verification
         trajectory_store: TrajectoryStore | None = None,  # Phase 2: trajectory capture
         compactor: ContextCompactor | None = None,  # Batch 5: bounded context
+        checkpoint_store: Any = None,  # Batch 7: durable progress
     ) -> None:
         self._gw = gateway
         self._dispatch = dispatcher
@@ -101,6 +102,7 @@ class ReasoningLoop:
         self._verifier: Verifier = verifier if verifier is not None else NullVerifier()
         self._trajectory_store = trajectory_store
         self._compactor = compactor or ContextCompactor()
+        self._checkpoints = checkpoint_store
 
     async def run(
         self,
@@ -371,10 +373,34 @@ class ReasoningLoop:
 
                 history.append((thought, obs))
 
+                # Batch 7: durable progress — survive crashes mid-task.
+                if self._checkpoints is not None:
+                    try:
+                        import dataclasses
+
+                        from atlas.orchestration.checkpoint import ExecutionCheckpoint
+
+                        await self._checkpoints.save(
+                            ExecutionCheckpoint(
+                                task_id=str(task_id),
+                                step=counter.steps,
+                                goal=dataclasses.asdict(goal),
+                                plan=current_plan.model_dump(),
+                                history_summary=self._compactor.render(history[-4:])[:1500],
+                                created_ts=datetime.now(UTC),
+                            )
+                        )
+                    except Exception as exc:
+                        _log.warning(
+                            "checkpoint.save_failed", event_type="orchestration", task_id=str(task_id), error=repr(exc)
+                        )
+
             except CancellationError as exc:
                 machine.transition(TaskState.CANCELLING)
                 machine.transition(TaskState.FAILED)
                 trajectory_latency_ms = int((time.perf_counter() - trajectory_start) * 1000)
+                if self._checkpoints is not None:
+                    await self._checkpoints.prune(str(task_id))
                 return TaskResult(
                     task_id=task_id,
                     ok=False,
@@ -398,6 +424,8 @@ class ReasoningLoop:
                 )
                 machine.transition(TaskState.FAILED)
                 trajectory_latency_ms = int((time.perf_counter() - trajectory_start) * 1000)
+                if self._checkpoints is not None:
+                    await self._checkpoints.prune(str(task_id))
                 return TaskResult(
                     task_id=task_id,
                     ok=False,
