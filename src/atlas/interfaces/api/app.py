@@ -22,7 +22,7 @@ from contextlib import asynccontextmanager
 from importlib.metadata import version
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from atlas.app import build
@@ -180,12 +180,21 @@ def create_app() -> FastAPI:
     # Batch 7: transport-level identity. No keys configured => local open mode.
     from atlas.infra.config import load_settings as _load_settings
     from atlas.interfaces.api.auth import parse_api_keys
+    from atlas.interfaces.api.rate_limit import TokenBucketLimiter, rate_limit
 
     try:
         _settings = _load_settings()
         app.state.api_keys = parse_api_keys(getattr(_settings, "api_keys", None))
     except Exception:
         app.state.api_keys = {}
+    app.state.rate_limiter = TokenBucketLimiter(capacity=120, refill_per_minute=60)
+
+    @app.middleware("http")
+    async def _rate_limit_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+        throttled = await rate_limit(request)
+        if throttled is not None:
+            return throttled
+        return await call_next(request)
 
     # Register routers (imported here to keep the factory free of circular deps)
     from atlas.interfaces.api.events import router as events_router

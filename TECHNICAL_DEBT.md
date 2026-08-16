@@ -1,17 +1,18 @@
 # ATLAS Technical Debt Register
 
-> Prioritized from the 2026-08-15 audit. Each item notes owner batch in the execution plan.
+> Prioritized from the 2026-08-15 audit; updated 2026-08-16 after Batches 1-8.
+> CLOSED items keep their row for history with a ✅ marker.
 
 ## P0 — Correctness / durability
 
 | # | Debt | Location | Plan |
 |---|---|---|---|
-| 1 | Orchestrator writes raw SQL directly (`db.conn.execute`); no `ExecutionStore` abstraction | `orchestration/orchestrator.py` | Batch 1 |
-| 2 | Cancellation state is an in-memory dict — lost on crash; cancel of unknown task silently no-ops | `orchestrator.py:67` | Batch 1 |
-| 3 | `Planner._to_plan()` and `Replanner._to_plan()` are duplicated copies | `planner.py`, `replanner.py` | Batch 1 |
+| 1 | ✅ CLOSED (Batch 1): ExecutionStore/CancellationStore protocols + SQLite implementations |
+| 2 | ✅ CLOSED (Batch 1/7): durable cancellation + fail-clean crash recovery |
+| 3 | ✅ CLOSED (Batch 1): shared `plan_parsing.py` |
 | 4 | `idempotency_keys` table queried by `api/idempotency.py` but not created in `_MIGRATIONS` | `infra/db.py` | Batch 1 verification |
 | 5 | MessageBus batch dispatch is not crash-safe mid-batch; no DLQ for bus events (deserialize failures dropped) | `infra/bus.py` | Batch 7 |
-| 6 | No execution checkpoints — long tasks cannot resume after restart | `orchestration/` | Batch 7 |
+| 6 | ✅ CLOSED (Batch 7): checkpoints saved per-step; fail-clean recovery (auto-resume pending idempotency keys — see below) |
 
 ## P1 — Architecture hygiene
 
@@ -20,7 +21,7 @@
 | 7 | `ModelGateway.health()` reads `runtime._providers` / `runtime._health` privates | `intelligence/gateway.py:41` | Batch 3 |
 | 8 | `Any`-typed event/store parameters to dodge circular imports (`set_events`, bootstrap bus) | multiple | Batch 3 |
 | 9 | `app.py` still constructs capability platforms inline (~200 lines) — needs `bootstrap/capabilities.py` | `app.py:229-448` | Batch 6 |
-| 10 | `Trajectory.cost_usd` always 0.0 with TODO; `model_calls` approximated by step count | `orchestrator.py:195,212` | Batch 2 |
+| 10 | `Trajectory.cost_usd` still 0.0 (LLMCallTracker has the data; wire-through pending) | — |
 | 11 | Trajectory `decision_traces`/`failure_records` always empty tuples with TODOs (models + store exist, capture not wired) | `orchestrator.py:184-185` | Batch 2 |
 | 12 | `scripts/` directory is empty | repo root | Batch 6 |
 
@@ -28,20 +29,20 @@
 
 | # | Gap | Plan |
 |---|---|---|
-| 13 | Provider-native function calling (`tools=`/`tool_choice`); ReAct JSON parsing only | Batch 3 |
-| 14 | Tool metadata (cost, latency, idempotency, side effects, rollback) | Batch 3 |
-| 15 | Tool health scoring / intelligent tool routing | Batch 3 |
-| 16 | Skill library, strategy memory, world state | Batch 4 |
-| 17 | Experience-informed planning (planner ignores extracted experiences) | Batch 4 |
-| 18 | Evaluation plane: golden tasks, evaluators, LLM judge, regression gates | Batch 2 |
-| 19 | DAG parallel execution in OTAR loop (`depends_on` exists but unused) | Batch 5 |
-| 20 | `ContextBudget`/`ContextRanker`/`ContextCompactor` abstractions | Batch 5 |
-| 21 | Performance benchmarks with p50/p95/p99 tracking | Batch 5 |
-| 22 | Frontend: 7 missing pages (skills, experiences, settings, analytics, schedules, tools, models); hand-mirrored Zod contracts | Batch 6 |
-| 23 | API endpoint authn/authz (currently localhost-only by deployment) | Batch 7 |
-| 24 | Tenant-aware IDs on persisted objects | Batch 7 |
-| 25 | PostgreSQL storage backend; repository abstraction | Batch 8 |
-| 26 | Feature flag system | Batch 6 |
+| 13 | ✅ CLOSED (Batch 3): native calling threaded end-to-end; ReAct remains the default runtime path — switching the ReasoningLoop to native-first needs eval-gated rollout |
+| 14 | ✅ CLOSED (Batch 3) |
+| 15 | ✅ CLOSED (Batch 3) |
+| 16 | ✅ CLOSED (Batch 4) |
+| 17 | ✅ CLOSED (Batch 4) |
+| 18 | ✅ CLOSED (Batch 2) |
+| 19 | ✅ CLOSED (Batch 5) |
+| 20 | ✅ CLOSED (Batch 5) |
+| 21 | ✅ CLOSED (Batch 5): tests/performance + benchmarks/run.py |
+| 22 | ✅ Pages CLOSED (Batch 6); generated TS types still open |
+| 23 | ✅ CLOSED (Batch 7): bearer keys + readonly role + rate limits (Batch 8) |
+| 24 | ✅ Seed CLOSED (Batch 7): tenant_id on tasks/trajectories/checkpoints; full tenancy needs identity (SCALE_PATH.md) |
+| 25 | Deferred by design (SCALE_PATH.md): protocol seams exist; extraction on measured need |
+| 26 | OPEN: feature flags still missing (models.yaml `enabled` + critique.enabled cover partial cases) |
 | 27 | MCP provider is a stub (`_NullMCPClient`) | deferred |
 
 ## P3 — Minor

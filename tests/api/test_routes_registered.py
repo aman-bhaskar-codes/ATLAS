@@ -42,32 +42,23 @@ async def test_all_routes_registered():
 
 
 @pytest.mark.asyncio
-async def test_memory_stats_endpoint():
-    """Test memory stats endpoint returns data."""
+async def test_learning_and_ops_routes_registered():
+    """Batch 6 routes are registered (behavior covered by tests/interfaces)."""
     app = create_app()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        # This will fail if dependencies aren't set up properly
-        response = await client.get("/api/v1/memory/stats")
+        response = await client.get("/api/openapi.json")
+        assert response.status_code == 200
+        paths = response.json().get("paths", {})
 
-        # Could be 500 if deps not set, or 200 if working
-        print(f"Status: {response.status_code}")
-        print(f"Body: {response.text}")
-
-        # For now, just check it doesn't 404
-        assert response.status_code != 404, "Memory stats route returned 404 - not registered"
-
-
-@pytest.mark.asyncio
-async def test_trajectory_stats_endpoint():
-    """Test trajectory stats endpoint returns data."""
-    app = create_app()
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/v1/trajectory/stats")
-
-        print(f"Status: {response.status_code}")
-        print(f"Body: {response.text}")
-
-        # For now, just check it doesn't 404
-        assert response.status_code != 404, "Trajectory stats route returned 404 - not registered"
+        for path in (
+            "/api/v1/learning/skills",
+            "/api/v1/learning/strategies",
+            "/api/v1/learning/world",
+            "/api/v1/learning/analytics",
+            "/api/v1/ops/tools",
+            "/api/v1/ops/models",
+            "/api/v1/ops/providers",
+            "/api/v1/ops/schedules",
+        ):
+            assert path in paths, f"{path} missing"
