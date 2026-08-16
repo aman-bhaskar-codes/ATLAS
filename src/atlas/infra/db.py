@@ -467,6 +467,24 @@ _MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_ea_experience ON experience_applications(experience_id, applied_ts DESC);
     CREATE INDEX IF NOT EXISTS idx_ea_task ON experience_applications(task_id);
     """,
+    """
+    -- Evaluation results: outcomes of golden-task / trajectory evaluations.
+    -- One row per (golden task, run); regression gates compare across runs.
+    CREATE TABLE IF NOT EXISTS evaluation_results (
+        id TEXT PRIMARY KEY,
+        golden_id TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        evaluator TEXT NOT NULL,             -- deterministic | llm_judge | ...
+        passed INTEGER NOT NULL,
+        score REAL NOT NULL,
+        detail TEXT,                          -- JSON: criteria results, judge rationale
+        answer TEXT,
+        latency_ms INTEGER,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_eval_golden ON evaluation_results(golden_id, created_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_eval_run ON evaluation_results(run_id);
+    """,
 )
 
 

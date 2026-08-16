@@ -7,14 +7,16 @@ from typing import Any, cast
 import httpx
 import websockets
 
+
 class AtlasClient:
     def __init__(self, base_url: str = "http://127.0.0.1:8000") -> None:
         self.base_url = base_url.rstrip("/")
         self.ws_url = self.base_url.replace("http://", "ws://").replace("https://", "wss://")
-        
+
     async def create_task(self, request: str, source: str = "api") -> dict[str, Any]:
         """Start a new task and return the task_id."""
         import uuid
+
         idempotency_key = str(uuid.uuid4())
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -24,7 +26,7 @@ class AtlasClient:
             )
             resp.raise_for_status()
             return cast(dict[str, Any], resp.json())
-            
+
     async def get_task(self, task_id: str) -> dict[str, Any]:
         async with httpx.AsyncClient() as client:
             resp = await client.get(f"{self.base_url}/api/v1/tasks/{task_id}")
@@ -48,20 +50,20 @@ class AtlasClient:
                 try:
                     data = await ws.recv()
                     event = json.loads(data) if isinstance(data, str) else cast(dict[str, Any], data)
-                    
+
                     # Handle ping/pong
                     if isinstance(event, dict) and event.get("type") == "ping":
                         await ws.send("pong")
                         continue
-                    
+
                     # Skip replay_complete markers
                     if isinstance(event, dict) and event.get("type") == "replay_complete":
                         continue
-                    
+
                     yield cast(dict[str, Any], event)
                 except websockets.ConnectionClosed:
                     break
-                    
+
     async def stream_global_events(self) -> AsyncGenerator[dict[str, Any]]:
         """Stream all global events via WebSocket (Phase 1 endpoint)."""
         uri = f"{self.ws_url}/ws/events"
@@ -70,12 +72,12 @@ class AtlasClient:
                 try:
                     data = await ws.recv()
                     event = json.loads(data) if isinstance(data, str) else cast(dict[str, Any], data)
-                    
+
                     # Handle ping/pong
                     if isinstance(event, dict) and event.get("type") == "ping":
                         await ws.send("pong")
                         continue
-                    
+
                     yield cast(dict[str, Any], event)
                 except websockets.ConnectionClosed:
                     break
@@ -87,7 +89,7 @@ class AtlasClient:
         from_ts: str | None = None,
         to_ts: str | None = None,
         limit: int = 100,
-        offset: int = 0
+        offset: int = 0,
     ) -> dict[str, Any]:
         """Search historical events with filters."""
         params: dict[str, Any] = {}
@@ -101,12 +103,8 @@ class AtlasClient:
             params["to_ts"] = to_ts
         params["limit"] = limit
         params["offset"] = offset
-        
+
         async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{self.base_url}/api/v1/events/search",
-                params=params,
-                timeout=10.0
-            )
+            resp = await client.get(f"{self.base_url}/api/v1/events/search", params=params, timeout=10.0)
             resp.raise_for_status()
             return cast(dict[str, Any], resp.json())
