@@ -34,7 +34,7 @@ export function usePendingApprovals() {
   return useQuery({
     queryKey: ['trust', 'approvals', 'pending'],
     queryFn: async () => {
-      const data = await trustApi.pendingApprovals();
+      const data = (await trustApi.pendingApprovals()) as unknown[];
       return data.map((item: unknown) => ApprovalViewSchema.parse(item));
     },
     refetchInterval: 3000,
@@ -56,7 +56,7 @@ export function useMemorySearch(query: string, limit: number = 30) {
     queryKey: ['trust', 'memory', 'search', query, limit],
     queryFn: async () => {
       if (!query) return [];
-      const data = await trustApi.searchMemory(query, limit);
+      const data = (await trustApi.searchMemory(query, limit)) as unknown[];
       return data.map((item: unknown) => MemoryFactViewSchema.parse(item));
     },
     enabled: !!query,

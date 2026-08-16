@@ -39,8 +39,8 @@ class ModelRegistry:
     def get(self, model_id: str) -> ModelSpec | None:
         return self._specs.get(model_id)
 
-    def all(self) -> list[ModelSpec]:
-        return [s for s in self._specs.values() if s.enabled]
+    def all(self, include_disabled: bool = False) -> list[ModelSpec]:
+        return [s for s in self._specs.values() if include_disabled or s.enabled]
 
     def update_reliability(self, model_id: str, score: float) -> None:
         spec = self._specs.get(model_id)

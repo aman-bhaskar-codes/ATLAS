@@ -185,7 +185,9 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.routes_events import router as events_ws_router
     from atlas.interfaces.api.routes_feedback import router as feedback_router
     from atlas.interfaces.api.routes_knowledge import router as knowledge_router
+    from atlas.interfaces.api.routes_learning import router as learning_router  # Batch 6
     from atlas.interfaces.api.routes_memory import router as memory_router
+    from atlas.interfaces.api.routes_ops import router as ops_router  # Batch 6
     from atlas.interfaces.api.routes_runtime import router as runtime_router
     from atlas.interfaces.api.routes_tasks import router as tasks_router
     from atlas.interfaces.api.routes_trajectory import router as trajectory_router  # Phase 2
@@ -214,5 +216,7 @@ def create_app() -> FastAPI:
     app.include_router(trust_router, prefix="")
     app.include_router(events_router, prefix="/api/v1")
     app.include_router(events_ws_router, prefix="")  # WebSocket routes include /ws/ prefix
+    app.include_router(learning_router, prefix="/api/v1")  # Batch 6
+    app.include_router(ops_router, prefix="/api/v1")  # Batch 6
 
     return app

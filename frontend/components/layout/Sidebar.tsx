@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Orbit, Activity, ListChecks, ShieldCheck, Brain, Waypoints, ScrollText } from "lucide-react";
+import { Orbit, Activity, ListChecks, ShieldCheck, Brain, Waypoints, ScrollText, GraduationCap, Lightbulb, BarChart3, Wrench, Cpu, CalendarClock, Settings2 } from "lucide-react";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -33,6 +33,23 @@ export function Sidebar() {
       links: [
         { href: "/memory", label: "Memory", icon: Brain },
         { href: "/capabilities", label: "Capabilities", icon: Waypoints },
+      ]
+    },
+    {
+      title: "LEARNING",
+      links: [
+        { href: "/skills", label: "Skills", icon: GraduationCap },
+        { href: "/experiences", label: "Experiences", icon: Lightbulb },
+        { href: "/analytics", label: "Analytics", icon: BarChart3 },
+      ]
+    },
+    {
+      title: "SYSTEM",
+      links: [
+        { href: "/tools", label: "Tools", icon: Wrench },
+        { href: "/models", label: "Models", icon: Cpu },
+        { href: "/schedules", label: "Schedules", icon: CalendarClock },
+        { href: "/settings", label: "Settings", icon: Settings2 },
       ]
     }
   ];

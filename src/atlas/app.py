@@ -157,6 +157,8 @@ class Atlas:
     strategy_store: Any = None  # Batch 4
     world_state: Any = None  # Batch 4
     skill_promoter: Any = None  # Batch 4
+    tool_router: Any = None  # Batch 6: operator surface
+    tool_health: Any = None  # Batch 6
 
     async def start(self) -> None:
         # lifecycle.start() calls db.start() and bus.start() via the service registry
@@ -567,6 +569,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         world_state=world_state,  # Batch 4
     )
     orchestrator = orch.orchestrator
+    tool_router, tool_health = orch.tool_router, orch.tool_health  # Batch 6
 
     # ── Feedback, Scheduler, Workflows ───────────────────────────── #
     feedback_store = FeedbackStore(db=db, ids=ids, clock=clock)
@@ -645,4 +648,6 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         strategy_store=strategy_store,  # Batch 4
         world_state=world_state,  # Batch 4
         skill_promoter=skill_promoter,  # Batch 4
+        tool_router=tool_router,  # Batch 6
+        tool_health=tool_health,  # Batch 6
     )

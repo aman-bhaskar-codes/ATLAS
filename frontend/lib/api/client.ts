@@ -143,3 +143,76 @@ export const trustApi = {
     return requestJSON(`/audit?${params}`);
   }
 };
+
+// --- Learning & Ops endpoints (Batch 6) — typed via runtime validation ---
+export interface AtlasSkill {
+  id: string; name: string; description: string; version: number; status: string;
+  success_rate: number; usage_count: number; confidence: number;
+  preferred_tools: string[]; known_failure_modes: string[]; procedure_steps: string[];
+  updated_ts: string;
+}
+export interface AtlasStrategy {
+  id: string; task_type_pattern: string; approach: string; model_preference: string | null;
+  tool_preference: string[]; status: string; success_rate: number; evidence_count: number;
+  eval_score: number | null; updated_ts: string;
+}
+export interface AtlasWorldEntity {
+  entity_type: string; entity_id: string; attributes: Record<string, unknown>; updated_ts: string;
+}
+export interface AtlasEvalResult {
+  golden_id: string; run_id: string; evaluator: string; passed: boolean; score: number; created_ts: string;
+}
+export interface AtlasLearningAnalytics {
+  trajectory_success_rate: number | null; total_trajectories: number;
+  total_experiences: number; active_skills: number; candidate_skills: number;
+  active_strategies: number; recent_verification_pass_rate: number | null; generated_at: string;
+}
+export interface AtlasTool {
+  name: string; operations: string[]; description: string;
+  estimated_latency_ms: number | null; estimated_cost_usd: number | null;
+  idempotent: boolean | null; side_effects: boolean | null; supports_rollback: boolean | null;
+  health: number; latency_ewma_ms: number;
+}
+export interface AtlasModel {
+  id: string; provider: string; context_length: number;
+  usd_per_1m_input: number; usd_per_1m_output: number; latency_estimate_ms: number;
+  capabilities: string[]; supports_streaming: boolean; supports_tool_calling: boolean;
+  quality_score: number; enabled: boolean;
+}
+export interface AtlasProvider { name: string; is_local: boolean; available: boolean }
+export interface AtlasSchedule { id: string; name: string; cron: string; enabled: boolean }
+
+export interface AtlasExperience {
+  id: string; category: string; lesson_text: string; applicability_context: string;
+  confidence: number; reuse_count: number; success_rate: number; extracted_ts: string;
+}
+
+export const learningApi = {
+  skills: (status?: string) =>
+    requestJSON(`/learning/skills${status ? `?status=${status}` : ""}`) as Promise<AtlasSkill[]>,
+  disableSkill: (skillId: string) =>
+    requestJSON(`/learning/skills/${encodeURIComponent(skillId)}/disable`, { method: "POST" }) as Promise<AtlasSkill>,
+  strategies: (activeOnly = false) =>
+    requestJSON(`/learning/strategies?active_only=${activeOnly}`) as Promise<AtlasStrategy[]>,
+  world: (entityType?: string) =>
+    requestJSON(`/learning/world${entityType ? `?entity_type=${encodeURIComponent(entityType)}` : ""}`) as Promise<AtlasWorldEntity[]>,
+  evaluations: (limit = 50) =>
+    requestJSON(`/learning/evaluation/recent?limit=${limit}`) as Promise<AtlasEvalResult[]>,
+  analytics: () =>
+    requestJSON(`/learning/analytics`) as Promise<AtlasLearningAnalytics>,
+};
+
+export const opsApi = {
+  tools: () => requestJSON(`/ops/tools`) as Promise<AtlasTool[]>,
+  models: (includeDisabled = false) =>
+    requestJSON(`/ops/models?include_disabled=${includeDisabled}`) as Promise<AtlasModel[]>,
+  providers: () => requestJSON(`/ops/providers`) as Promise<AtlasProvider[]>,
+  schedules: () => requestJSON(`/ops/schedules`) as Promise<AtlasSchedule[]>,
+  toggleSchedule: (id: string) =>
+    requestJSON(`/ops/schedules/${encodeURIComponent(id)}/toggle`, { method: "POST" }) as Promise<AtlasSchedule>,
+};
+
+export const trajectoryApi = {
+  experiences: (limit = 50) =>
+    requestJSON(`/api/v1/trajectory/experiences?limit=${limit}`) as Promise<AtlasExperience[]>,
+};
