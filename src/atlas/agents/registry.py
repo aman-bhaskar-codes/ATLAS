@@ -27,21 +27,17 @@ class AgentRegistry:
     def register(self, config: AgentConfig, factory: AgentFactory) -> None:
         """Register a specialist agent type with its config and factory."""
         if config.agent_type in self._configs:
-            _log.warning("agents.duplicate_register", event_type="agents",
-                         agent_type=config.agent_type)
+            _log.warning("agents.duplicate_register", event_type="agents", agent_type=config.agent_type)
         self._configs[config.agent_type] = config
         self._factories[config.agent_type] = factory
-        _log.info("agents.registered", event_type="agents",
-                   agent_type=config.agent_type,
-                   tools=list(config.allowed_tools))
+        _log.info(
+            "agents.registered", event_type="agents", agent_type=config.agent_type, tools=list(config.allowed_tools)
+        )
 
     def get(self, agent_type: str) -> BaseAgent:
         """Instantiate an agent by type. Raises KeyError if not registered."""
         if agent_type not in self._configs:
-            raise KeyError(
-                f"Agent type {agent_type!r} not registered. "
-                f"Available: {list(self._configs.keys())}"
-            )
+            raise KeyError(f"Agent type {agent_type!r} not registered. Available: {list(self._configs.keys())}")
         config = self._configs[agent_type]
         factory = self._factories[agent_type]
         return factory(config)

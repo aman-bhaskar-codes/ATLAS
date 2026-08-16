@@ -11,6 +11,7 @@ Key mapping:
   - phoneNumbers[].value → PhoneNumber
   - organizations[0].name/title → org/title
 """
+
 from __future__ import annotations
 
 import httpx
@@ -27,8 +28,7 @@ class GooglePeopleProvider:
     name = "google_people"
     requires_auth = True
 
-    def __init__(self, identity: IdentityPlatform, credential_id: str,
-                 timeout_s: float = 30.0) -> None:
+    def __init__(self, identity: IdentityPlatform, credential_id: str, timeout_s: float = 30.0) -> None:
         self._identity = identity
         self._credential_id = credential_id
         self._client = httpx.AsyncClient(timeout=timeout_s)
@@ -56,17 +56,16 @@ class GooglePeopleProvider:
     async def search(self, query: str, *, limit: int) -> list[Contact]:
         h = await self._headers()
         r = await self._client.get(
-            f"{_API}/people:searchContacts", headers=h,
-            params={"query": query, "readMask": _READ_MASK, "pageSize": limit})
+            f"{_API}/people:searchContacts",
+            headers=h,
+            params={"query": query, "readMask": _READ_MASK, "pageSize": limit},
+        )
         r.raise_for_status()
-        return [self._to_contact(p["person"]) for p in r.json().get("results", [])
-                if "person" in p]
+        return [self._to_contact(p["person"]) for p in r.json().get("results", []) if "person" in p]
 
     async def get(self, contact_id: str) -> Contact:
         h = await self._headers()
-        r = await self._client.get(
-            f"{_API}/{contact_id}", headers=h,
-            params={"personFields": _READ_MASK})
+        r = await self._client.get(f"{_API}/{contact_id}", headers=h, params={"personFields": _READ_MASK})
         r.raise_for_status()
         return self._to_contact(r.json())
 
@@ -82,8 +81,7 @@ class GooglePeopleProvider:
             }
             if page_token:
                 params["pageToken"] = page_token
-            r = await self._client.get(
-                f"{_API}/people/me/connections", headers=h, params=params)
+            r = await self._client.get(f"{_API}/people/me/connections", headers=h, params=params)
             r.raise_for_status()
             data = r.json()
             contacts.extend(self._to_contact(p) for p in data.get("connections", []))
@@ -96,8 +94,7 @@ class GooglePeopleProvider:
         h = await self._headers()
         body = self._to_body(draft)
         try:
-            r = await self._client.post(f"{_API}/people:createContact",
-                                        headers=h, json=body)
+            r = await self._client.post(f"{_API}/people:createContact", headers=h, json=body)
             r.raise_for_status()
         except httpx.HTTPError as exc:
             raise ProviderExecutionError(f"people create failed: {exc}") from exc
@@ -112,7 +109,10 @@ class GooglePeopleProvider:
         try:
             r = await self._client.patch(
                 f"{_API}/{draft.contact_id}:updateContact",
-                headers=h, params={"updatePersonFields": update_mask}, json=body)
+                headers=h,
+                params={"updatePersonFields": update_mask},
+                json=body,
+            )
             r.raise_for_status()
         except httpx.HTTPError as exc:
             raise ProviderExecutionError(f"people update failed: {exc}") from exc
@@ -129,7 +129,7 @@ class GooglePeopleProvider:
             name = str(names[0].get("displayName", "")) if isinstance(names[0], dict) else ""
 
         emails: list[EmailRef] = []
-        for ea in (person.get("emailAddresses") or []):  # type: ignore
+        for ea in person.get("emailAddresses") or []:  # type: ignore
             if not isinstance(ea, dict):
                 continue
             val = str(ea.get("value", ""))
@@ -137,11 +137,12 @@ class GooglePeopleProvider:
                 continue
             meta = ea.get("metadata") or {}
             is_primary = bool(isinstance(meta, dict) and meta.get("primary"))
-            emails.append(EmailRef(address=val, primary=is_primary,
-                                   label=ContactLabel.WORK if is_primary else ContactLabel.OTHER))
+            emails.append(
+                EmailRef(address=val, primary=is_primary, label=ContactLabel.WORK if is_primary else ContactLabel.OTHER)
+            )
 
         phones: list[PhoneNumber] = []
-        for ph in (person.get("phoneNumbers") or []):  # type: ignore
+        for ph in person.get("phoneNumbers") or []:  # type: ignore
             if not isinstance(ph, dict):
                 continue
             val = str(ph.get("value", ""))

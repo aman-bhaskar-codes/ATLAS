@@ -17,7 +17,7 @@ class TokenBucket:
         elapsed = now - self._last_ts
         self._tokens = min(float(self._capacity), self._tokens + elapsed * self._fill_rate)
         self._last_ts = now
-        
+
         if self._tokens < 1.0:
             time.sleep((1.0 - self._tokens) / self._fill_rate)
             self._tokens = 0.0

@@ -37,16 +37,25 @@ def build_safety(
     classifier = TierClassifier(manifest, config.safety.default_tier_on_error)
     policy = PolicyEngine((KillSwitchPolicy(killswitch),))
     safety = SafetyEngine(
-        classifier=classifier, policy=policy, audit=audit,
-        killswitch=killswitch, clock=clock, cfg=config.safety,
+        classifier=classifier,
+        policy=policy,
+        audit=audit,
+        killswitch=killswitch,
+        clock=clock,
+        cfg=config.safety,
     )
 
     async def cap_audit(**kw: Any) -> None:
-        await audit.record(AuditRecord(
-            correlation_id=kw["correlation_id"], ts=clock.now(),
-            actor=kw["actor"], action=kw["action"],
-            tool=kw.get("tool"), outcome=kw.get("outcome"),
-            payload=kw.get("payload"),
-        ))
+        await audit.record(
+            AuditRecord(
+                correlation_id=kw["correlation_id"],
+                ts=clock.now(),
+                actor=kw["actor"],
+                action=kw["action"],
+                tool=kw.get("tool"),
+                outcome=kw.get("outcome"),
+                payload=kw.get("payload"),
+            )
+        )
 
     return SafetyComponents(classifier=classifier, safety=safety, cap_audit=cap_audit)

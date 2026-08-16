@@ -14,7 +14,7 @@ class EpisodeKind(StrEnum):
     MESSAGE = "message"
     ACTION = "action"
     OBSERVATION = "observation"
-    CORRECTION = "correction"   # user overrode/undid the agent — highest signal
+    CORRECTION = "correction"  # user overrode/undid the agent — highest signal
 
 
 class Episode(BaseModel):
@@ -58,6 +58,7 @@ class SemanticFact(BaseModel):
 class RetrievedContext(BaseModel):
     """What the planner receives. user_model is ALWAYS present; facts/episodes
     are relevance-retrieved and token-bounded."""
+
     model_config = {"frozen": True}
     user_model: str
     facts: tuple[SemanticFact, ...] = ()

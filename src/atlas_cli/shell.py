@@ -13,7 +13,7 @@ console = Console()
 client = AtlasClient()
 
 async def interactive_shell() -> None:
-    session = PromptSession(history=InMemoryHistory())
+    session: PromptSession = PromptSession(history=InMemoryHistory())
     console.print("[bold cyan]ATLAS Shell[/] (type 'exit' or 'quit' to exit)")
     
     while True:

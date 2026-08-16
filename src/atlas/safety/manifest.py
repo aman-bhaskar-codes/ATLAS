@@ -74,15 +74,17 @@ def verify_manifest(
     reg_pairs = {(t, o) for t, ops in registered.items() for o in ops}
 
     missing = [
-        f"{t}.{o}" for t, ops in registered.items() for o in ops
+        f"{t}.{o}"
+        for t, ops in registered.items()
+        for o in ops
         if (t, o) not in covered and not _wildcard_covers(covered, t, o)
     ]
     orphan = [
-        f"{r.tool}.{r.operation}" for r in manifest.rules
-        if r.tool != "*" and (r.tool, r.operation) not in reg_pairs
+        f"{r.tool}.{r.operation}" for r in manifest.rules if r.tool != "*" and (r.tool, r.operation) not in reg_pairs
     ]
     bad_constraints = [
-        f"{r.tool}.{r.operation}->{r.constraint}" for r in manifest.rules
+        f"{r.tool}.{r.operation}->{r.constraint}"
+        for r in manifest.rules
         if r.constraint is not None and r.constraint not in known_constraints
     ]
     policy_matchers = [entry.match for entry in manifest.hard_block]
@@ -92,6 +94,9 @@ def verify_manifest(
     # orphans are a warning (rule for a not-yet-built tool); the rest fail.
     ok = not (missing or bad_constraints or matcher_gaps)
     return ManifestReport(
-        ok=ok, missing_rules=missing, orphan_rules=orphan,
-        unmatched_constraints=bad_constraints, matcher_gaps=matcher_gaps,
+        ok=ok,
+        missing_rules=missing,
+        orphan_rules=orphan,
+        unmatched_constraints=bad_constraints,
+        matcher_gaps=matcher_gaps,
     )

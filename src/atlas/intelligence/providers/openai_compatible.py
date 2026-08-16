@@ -48,15 +48,22 @@ class OpenAICompatibleProvider:
     ) -> dict[str, Any]:
         mapped = self._map_model(model)
         return {
-            "model": mapped, "max_tokens": max_tokens, "temperature": temperature,
+            "model": mapped,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
             "stream": stream,
             "messages": [{"role": m.role.value, "content": m.content} for m in messages],
         }
 
     async def complete(
-        self, *, model: str, messages: Sequence[Message],
-        max_tokens: int, temperature: float,
-        usd_in: float, usd_out: float,
+        self,
+        *,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
+        usd_in: float,
+        usd_out: float,
     ) -> ProviderCompletion:
         try:
             r = await self._client.post(
@@ -71,11 +78,12 @@ class OpenAICompatibleProvider:
             raise ProviderError(f"{self.name} http {exc.response.status_code}") from exc
         except httpx.HTTPError as exc:
             raise ProviderError(f"{self.name} transport: {exc}") from exc
-            
+
         data = r.json()
         text = data["choices"][0]["message"].get("content")
         if text is None:
             import logging
+
             logging.getLogger("atlas.intel.provider").warning(
                 f"{self.name} returned content=None. Raw response: {data}"
             )
@@ -86,12 +94,17 @@ class OpenAICompatibleProvider:
         return ProviderCompletion(str(text), Usage(input_tokens=it, output_tokens=ot, usd=usd))
 
     async def stream(
-        self, *, model: str, messages: Sequence[Message],
-        max_tokens: int, temperature: float,
+        self,
+        *,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
     ) -> AsyncIterator[StreamChunk]:
         try:
             async with self._client.stream(
-                "POST", f"{self._base}/chat/completions",
+                "POST",
+                f"{self._base}/chat/completions",
                 headers={"Authorization": f"Bearer {self._key}"},
                 json=self._payload(model, messages, max_tokens, temperature, True),
             ) as r:

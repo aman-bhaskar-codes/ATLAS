@@ -7,8 +7,11 @@ from atlas.infra.types import Tier
 
 def test_register_and_get() -> None:
     reg = CapabilityRegistry()
-    reg.register(CapabilitySpec(capability=Capability.KNOWLEDGE, safety_tool="knowledge",
-                                operations=("search",), default_tier=Tier.NOTIFY))
+    reg.register(
+        CapabilitySpec(
+            capability=Capability.KNOWLEDGE, safety_tool="knowledge", operations=("search",), default_tier=Tier.NOTIFY
+        )
+    )
     assert reg.get(Capability.KNOWLEDGE).safety_tool == "knowledge"
 
 
@@ -19,6 +22,5 @@ def test_unknown_raises() -> None:
 
 def test_registered_tools_shape() -> None:
     reg = CapabilityRegistry()
-    reg.register(CapabilitySpec(capability=Capability.EMAIL, safety_tool="email",
-                                operations=("read", "send")))
+    reg.register(CapabilitySpec(capability=Capability.EMAIL, safety_tool="email", operations=("read", "send")))
     assert reg.registered_tools() == {"email": ["read", "send"]}

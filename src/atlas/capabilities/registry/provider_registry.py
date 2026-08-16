@@ -33,14 +33,11 @@ class ProviderRegistry:
         providers = self._by_capability.get(capability, [])
         healthy = [p for p in providers if self._health.is_available(p.name)]
         if not healthy:
-            raise NoProviderAvailable(
-                f"no healthy provider for capability {capability.value!r}")
+            raise NoProviderAvailable(f"no healthy provider for capability {capability.value!r}")
         return sorted(
             healthy,
-            key=lambda p: (self._prefs.get((capability, p.name), 100),
-                           -self._health.reliability(p.name)),
+            key=lambda p: (self._prefs.get((capability, p.name), 100), -self._health.reliability(p.name)),
         )
 
     def all_providers(self) -> list[Provider]:
         return [p for ps in self._by_capability.values() for p in ps]
-

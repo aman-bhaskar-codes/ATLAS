@@ -16,17 +16,17 @@ class ChannelResolver:
     def resolve(self, n: Notification, *, multi: bool) -> tuple[str, ...]:
         """Resolve channels. If notification specifies explicitly, respect them.
         Otherwise, gather eligible channels based on priority floor."""
-        
+
         if n.channels:
-            # Validate explicit channels against priority floor? 
+            # Validate explicit channels against priority floor?
             # Usually explicit overrides priority floor.
             valid = [ch for ch in n.channels if self._registry.channel(ch)]
             return tuple(valid)
-            
+
         # Fallback to all eligible channels
         eligible = []
         for ch in self._registry.all_channels():
             if n.priority >= ch.priority_floor:
                 eligible.append(ch.name)
-                
+
         return tuple(eligible)

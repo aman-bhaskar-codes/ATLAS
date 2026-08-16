@@ -29,13 +29,13 @@ import hashlib
 import time
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Generic TTL entry
 # ---------------------------------------------------------------------------
 
+
 class _Entry:
-    __slots__ = ("value", "expires_at")
+    __slots__ = ("expires_at", "value")
 
     def __init__(self, value: Any, ttl: float) -> None:
         self.value = value
@@ -49,6 +49,7 @@ class _Entry:
 # Retrieval cache  (< 1 ms on HIT)
 # ---------------------------------------------------------------------------
 
+
 class RetrievalCache:
     """Cache full RetrievedContext by (query, task_id).
 
@@ -59,8 +60,8 @@ class RetrievalCache:
     - Any memory write event triggers a full flush — correctness > hit-rate.
     """
 
-    DEFAULT_TTL = 30.0   # seconds
-    MAX_ENTRIES = 512    # prevent unbounded growth
+    DEFAULT_TTL = 30.0  # seconds
+    MAX_ENTRIES = 512  # prevent unbounded growth
 
     def __init__(self, ttl: float = DEFAULT_TTL) -> None:
         self._ttl = ttl
@@ -71,7 +72,7 @@ class RetrievalCache:
 
     def make_key(self, query: str, task_id: str | None) -> str:
         raw = f"{query}|{task_id or ''}"
-        return hashlib.md5(raw.encode()).hexdigest()  # noqa: S324 (non-crypto use)
+        return hashlib.md5(raw.encode()).hexdigest()
 
     async def get(self, key: str) -> Any | None:
         async with self._lock:
@@ -116,11 +117,12 @@ class RetrievalCache:
 # Fact list cache  (< 1 ms on HIT)
 # ---------------------------------------------------------------------------
 
+
 class FactCache:
     """Cache SemanticFact lists by (kind, min_confidence).
 
     Much simpler than RetrievalCache because the keyspace is small (at most
-    N_kinds × N_confidence_tiers ≈ 50 entries) and invalidation is coarse.
+    N_kinds x N_confidence_tiers ≈ 50 entries) and invalidation is coarse.
     """
 
     DEFAULT_TTL = 60.0
@@ -167,6 +169,7 @@ class FactCache:
 # ---------------------------------------------------------------------------
 # Stats cache  (< 1 ms on HIT)
 # ---------------------------------------------------------------------------
+
 
 class StatsCache:
     """Single-entry cache for aggregate memory counts.

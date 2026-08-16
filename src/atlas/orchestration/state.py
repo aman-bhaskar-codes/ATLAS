@@ -37,33 +37,69 @@ _TERMINAL = frozenset({TaskState.FAILED, TaskState.COMPLETED, TaskState.ARCHIVED
 _LEGAL: dict[TaskState, frozenset[TaskState]] = {
     TaskState.CREATED: frozenset({TaskState.READY, TaskState.CANCELLING}),
     TaskState.READY: frozenset({TaskState.BUILDING_CONTEXT, TaskState.CANCELLING}),
-    TaskState.BUILDING_CONTEXT: frozenset({
-        TaskState.PLANNING, TaskState.FAILED, TaskState.CANCELLING,
-    }),
-    TaskState.PLANNING: frozenset({
-        TaskState.REASONING, TaskState.FAILED, TaskState.CANCELLING,
-    }),
-    TaskState.REASONING: frozenset({
-        TaskState.WAITING_TOOL, TaskState.WAITING_CONFIRMATION,
-        TaskState.VALIDATING, TaskState.FAILED, TaskState.CANCELLING,
-    }),
-    TaskState.WAITING_CONFIRMATION: frozenset({
-        TaskState.EXECUTING, TaskState.REASONING, TaskState.FAILED, TaskState.CANCELLING,
-    }),
-    TaskState.WAITING_TOOL: frozenset({
-        TaskState.EXECUTING, TaskState.FAILED, TaskState.CANCELLING,
-    }),
-    TaskState.EXECUTING: frozenset({
-        TaskState.OBSERVING, TaskState.FAILED, TaskState.CANCELLING,
-    }),
-    TaskState.OBSERVING: frozenset({
-        TaskState.REASONING, TaskState.VALIDATING, TaskState.RETRYING,
-        TaskState.FAILED, TaskState.CANCELLING,
-    }),
-    TaskState.VALIDATING: frozenset({
-        TaskState.COMPLETED, TaskState.REASONING, TaskState.RETRYING,
-        TaskState.FAILED, TaskState.CANCELLING,
-    }),
+    TaskState.BUILDING_CONTEXT: frozenset(
+        {
+            TaskState.PLANNING,
+            TaskState.FAILED,
+            TaskState.CANCELLING,
+        }
+    ),
+    TaskState.PLANNING: frozenset(
+        {
+            TaskState.REASONING,
+            TaskState.FAILED,
+            TaskState.CANCELLING,
+        }
+    ),
+    TaskState.REASONING: frozenset(
+        {
+            TaskState.WAITING_TOOL,
+            TaskState.WAITING_CONFIRMATION,
+            TaskState.VALIDATING,
+            TaskState.FAILED,
+            TaskState.CANCELLING,
+        }
+    ),
+    TaskState.WAITING_CONFIRMATION: frozenset(
+        {
+            TaskState.EXECUTING,
+            TaskState.REASONING,
+            TaskState.FAILED,
+            TaskState.CANCELLING,
+        }
+    ),
+    TaskState.WAITING_TOOL: frozenset(
+        {
+            TaskState.EXECUTING,
+            TaskState.FAILED,
+            TaskState.CANCELLING,
+        }
+    ),
+    TaskState.EXECUTING: frozenset(
+        {
+            TaskState.OBSERVING,
+            TaskState.FAILED,
+            TaskState.CANCELLING,
+        }
+    ),
+    TaskState.OBSERVING: frozenset(
+        {
+            TaskState.REASONING,
+            TaskState.VALIDATING,
+            TaskState.RETRYING,
+            TaskState.FAILED,
+            TaskState.CANCELLING,
+        }
+    ),
+    TaskState.VALIDATING: frozenset(
+        {
+            TaskState.COMPLETED,
+            TaskState.REASONING,
+            TaskState.RETRYING,
+            TaskState.FAILED,
+            TaskState.CANCELLING,
+        }
+    ),
     TaskState.RETRYING: frozenset({TaskState.REASONING, TaskState.FAILED, TaskState.CANCELLING}),
     TaskState.CANCELLING: frozenset({TaskState.FAILED}),
     TaskState.COMPLETED: frozenset({TaskState.ARCHIVED}),
@@ -93,9 +129,7 @@ class TaskStateMachine:
 
     def transition(self, target: TaskState) -> TaskState:
         if not self.can(target):
-            raise IllegalTransitionError(
-                f"illegal transition {self._state.value} -> {target.value}"
-            )
+            raise IllegalTransitionError(f"illegal transition {self._state.value} -> {target.value}")
         self._state = target
         self._history.append(target)
         return target

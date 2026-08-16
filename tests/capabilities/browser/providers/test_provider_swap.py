@@ -13,27 +13,28 @@ class FakeIdGenerator:
     def generate(self, prefix: str = "") -> str:
         return f"{prefix}-123"
 
+
 @pytest.mark.asyncio
 async def test_provider_swap_to_cdp() -> None:
     registry = ProviderRegistry()
     cdp = CDPProvider()
-    
+
     # Register cdp with highest preference
     registry.register(cdp, preference=100)
-    
+
     pool = BrowserPool(registry)
     ids = FakeIdGenerator()
     session_manager = SessionManager(pool=pool, ids=ids)  # type: ignore
-    
+
     session = await session_manager.acquire(profile="test", incognito=True)
-    
+
     provider = pool.get_provider(session.id)
     assert provider.name == "cdp"
-    
-    # We don't necessarily need to perform a full navigation in the test, 
+
+    # We don't necessarily need to perform a full navigation in the test,
     # but the provider should have successfully launched (and thus connected via CDP).  # type: ignore
     assert provider._browser is not None  # type: ignore
-    
+
     await session_manager.release(session.id)
     await provider._cleanup()  # type: ignore
     assert provider._browser is None  # type: ignore

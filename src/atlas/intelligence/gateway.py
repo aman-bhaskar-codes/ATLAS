@@ -11,18 +11,22 @@ from __future__ import annotations
 
 from typing import Any
 
+from atlas.intelligence.cache import SemanticCache
 from atlas.intelligence.contracts import InferenceRequest, InferenceResponse
 from atlas.intelligence.runtime.fallback import FallbackEngine
 from atlas.intelligence.runtime.inference import InferenceRuntime
 from atlas.intelligence.selection.router import CapabilityRouter
 from atlas.intelligence.selection.selector import ModelSelector
-from atlas.intelligence.cache import SemanticCache
 
 
 class ModelGateway:
     def __init__(
-        self, *, router: CapabilityRouter, selector: ModelSelector,
-        fallback: FallbackEngine, runtime: InferenceRuntime,
+        self,
+        *,
+        router: CapabilityRouter,
+        selector: ModelSelector,
+        fallback: FallbackEngine,
+        runtime: InferenceRuntime,
         cache: SemanticCache | None = None,
     ) -> None:
         self._router = router
@@ -50,10 +54,10 @@ class ModelGateway:
         required = self._router.required(req)
         ranked = self._selector.select(required, req.constraints)
         resp = await self._fallback.run(ranked, lambda spec: self._runtime.attempt(req, spec))
-        
+
         if self._cache and not resp.fell_back:
             await self._cache.put(req, resp)
-            
+
         return resp
 
     # --- Phase 1-4 compatibility: accept the old ModelRequest shape ---
@@ -63,7 +67,7 @@ class ModelGateway:
         WHY: zero churn upstream while the platform underneath is replaced."""
         from atlas.infra.types import ModelResponse, ModelTarget, TokenCost
         from atlas.intelligence.contracts import Constraints, Message, Role
-        
+
         mr = model_request  # ModelRequest
         caps = mr.required_capabilities
         if not caps:
@@ -75,14 +79,20 @@ class ModelGateway:
         messages.append(Message(role=Role.USER, content=mr.prompt))
         req = InferenceRequest(
             correlation_id=mr.correlation_id,
-            messages=messages, required_capabilities=caps, constraints=constraints,
-            max_tokens=mr.max_tokens, temperature=mr.temperature,
+            messages=messages,
+            required_capabilities=caps,
+            constraints=constraints,
+            max_tokens=mr.max_tokens,
+            temperature=mr.temperature,
         )
         resp = await self.infer(req)
         target = ModelTarget.CLOUD if resp.usage.usd > 0 else ModelTarget.LOCAL_FAST
         return ModelResponse(
-            text=resp.text, target=target, model=resp.model_id,
-            cost=TokenCost(input_tokens=resp.usage.input_tokens,
-                           output_tokens=resp.usage.output_tokens, usd=resp.usage.usd),
+            text=resp.text,
+            target=target,
+            model=resp.model_id,
+            cost=TokenCost(
+                input_tokens=resp.usage.input_tokens, output_tokens=resp.usage.output_tokens, usd=resp.usage.usd
+            ),
             latency_ms=resp.latency_ms,
         )

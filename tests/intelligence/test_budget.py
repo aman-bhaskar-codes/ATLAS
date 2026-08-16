@@ -11,6 +11,7 @@ from atlas.intelligence.governance.cost_governor import CostGovernor
 
 class FakeSpend:
     """Controllable fake SpendSource — returns whatever we set."""
+
     def __init__(
         self,
         today: float = 0.0,

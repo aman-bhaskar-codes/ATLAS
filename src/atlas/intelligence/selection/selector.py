@@ -46,9 +46,8 @@ class ModelSelector:
         # normalized blend; weights are explicit and tunable.
         quality = m.quality_score
         reliability = m.reliability_score
-        cost_pen = 1.0 / (1.0 + m.usd_per_1m_output)      # cheaper = higher
+        cost_pen = 1.0 / (1.0 + m.usd_per_1m_output)  # cheaper = higher
         latency_pen = 1.0 / (1.0 + m.latency_estimate_ms / 1000.0)
         local_bonus = 0.15 if (c.prefer_local and m.usd_per_1m_output == 0) else 0.0
         health = self._health.reliability(m.provider)
-        return (0.35 * quality + 0.20 * reliability + 0.15 * cost_pen
-                + 0.10 * latency_pen + 0.20 * health + local_bonus)
+        return 0.35 * quality + 0.20 * reliability + 0.15 * cost_pen + 0.10 * latency_pen + 0.20 * health + local_bonus

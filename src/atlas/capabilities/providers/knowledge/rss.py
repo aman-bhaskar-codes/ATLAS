@@ -58,23 +58,28 @@ class RSSProvider:
                 # cheap relevance filter; the ranker/summarizer does the heavy lift
                 if q and q not in (title + summary).lower() and not _term_overlap(q, title + summary):
                     continue
-                items.append(KnowledgeItem(
-                    title=title, snippet=summary[:500],
-                    url=getattr(entry, "link", None),
-                    published=_parse_date(entry),
-                    provenance=Provenance(provider=self.name, source_kind=SourceKind.OFFICIAL,
-                                          uri=getattr(entry, "link", None),
-                                          retrieved_ts=datetime.now(UTC))))
-        items.sort(key=lambda i: i.published or datetime.min.replace(tzinfo=UTC),
-                   reverse=True)
+                items.append(
+                    KnowledgeItem(
+                        title=title,
+                        snippet=summary[:500],
+                        url=getattr(entry, "link", None),
+                        published=_parse_date(entry),
+                        provenance=Provenance(
+                            provider=self.name,
+                            source_kind=SourceKind.OFFICIAL,
+                            uri=getattr(entry, "link", None),
+                            retrieved_ts=datetime.now(UTC),
+                        ),
+                    )
+                )
+        items.sort(key=lambda i: i.published or datetime.min.replace(tzinfo=UTC), reverse=True)
         return items[:limit]
 
     async def execute(self, request: CapabilityRequest) -> Any:
-        return await self.search(str(request.args.get("query", "")),
-                                 limit=int(request.args.get("limit", 6)))
+        return await self.search(str(request.args.get("query", "")), limit=int(request.args.get("limit", 6)))
 
     def normalize(self, raw: Any) -> Any:
-        return raw   # search() already returns domain models
+        return raw  # search() already returns domain models
 
     def retry_policy(self) -> RetryPolicy:
         return RetryPolicy(max_attempts=2, base_backoff_s=0.5)
@@ -90,6 +95,7 @@ def _term_overlap(q: str, text: str) -> bool:
 
 def _parse_date(entry: Any) -> datetime | None:
     import time
+
     st = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
     if st is None:
         return None

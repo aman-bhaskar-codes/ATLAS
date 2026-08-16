@@ -5,6 +5,7 @@ on all methods, proving the contract is satisfiable by CalDAV without requiring
 the caldav/icalendar libraries in this phase. A future implementation replaces the
 bodies; the protocol surface is the invariant.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -19,6 +20,7 @@ from atlas.capabilities.domain.calendar import (
 class CalDAVProvider:
     """CalDAV stub — full provider protocol surface, bodies deferred.
     Replace bodies with caldav/icalendar logic when the CalDAV account is tested."""
+
     name = "caldav"
     requires_auth = True
 
@@ -35,8 +37,7 @@ class CalDAVProvider:
     async def health(self) -> bool:
         return False  # not yet connected
 
-    async def list_events(self, calendar_id: str, *, start: datetime,
-                          end: datetime, limit: int) -> list[CalendarEvent]:
+    async def list_events(self, calendar_id: str, *, start: datetime, end: datetime, limit: int) -> list[CalendarEvent]:
         raise NotImplementedError("CalDAV adapter not implemented")
 
     async def search(self, query: str, *, limit: int) -> list[CalendarEvent]:
@@ -45,10 +46,8 @@ class CalDAVProvider:
     async def get_event(self, calendar_id: str, event_id: str) -> CalendarEvent:
         raise NotImplementedError("CalDAV adapter not implemented")
 
-    async def free_busy(self, calendar_id: str, *, start: datetime,
-                        end: datetime) -> Availability:
-        return Availability(calendar_id=calendar_id, window_start=start,
-                            window_end=end, busy=())
+    async def free_busy(self, calendar_id: str, *, start: datetime, end: datetime) -> Availability:
+        return Availability(calendar_id=calendar_id, window_start=start, window_end=end, busy=())
 
     async def create_event(self, draft: EventDraft) -> str:
         raise NotImplementedError("CalDAV adapter not implemented")

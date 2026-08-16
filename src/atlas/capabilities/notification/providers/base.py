@@ -16,15 +16,16 @@ from atlas.capabilities.notification.domain.models import Channel
 class RenderedMessage(Protocol):
     title: str
     body: str
-    actions: tuple[tuple[str, str], ...]   # (label, callback_url) for approvals
+    actions: tuple[tuple[str, str], ...]  # (label, callback_url) for approvals
 
 
 class NotificationProvider(Protocol):
     name: str
-    supports_actions: bool     # can it render Approve/Deny buttons?
+    supports_actions: bool  # can it render Approve/Deny buttons?
 
     async def initialize(self) -> None: ...
     async def health(self) -> bool: ...
-    async def send(self, channel: Channel, title: str, body: str,
-                   *, actions: tuple[tuple[str, str], ...] = ()) -> bool: ...
+    async def send(
+        self, channel: Channel, title: str, body: str, *, actions: tuple[tuple[str, str], ...] = ()
+    ) -> bool: ...
     async def shutdown(self) -> None: ...

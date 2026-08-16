@@ -28,7 +28,9 @@ async def test_planner_requests_planning_and_json_generation() -> None:
     )
 
     assert plan.goal == "test"
-    assert gateway.requests[0].required_capabilities == frozenset({
-        ModelCapability.PLANNING,
-        ModelCapability.JSON_GENERATION,
-    })
+    assert gateway.requests[0].required_capabilities == frozenset(
+        {
+            ModelCapability.PLANNING,
+            ModelCapability.JSON_GENERATION,
+        }
+    )

@@ -10,21 +10,25 @@ from atlas.infra.types import SideEffect, ToolResult
 class FakeClock:
     def __init__(self, now: Any) -> None:
         self._now = now
+
     def now(self) -> Any:
         return self._now
 
 
 class FakeIdGen:
-    def task_id(self) -> str: return "tid-1"
-    def correlation_id(self) -> str: return "cid-1"
-    def execution_id(self) -> str: return "eid-1"
+    def task_id(self) -> str:
+        return "tid-1"
 
+    def correlation_id(self) -> str:
+        return "cid-1"
 
-
+    def execution_id(self) -> str:
+        return "eid-1"
 
 
 class FakeTool:
     name = "fake.tool"
+
     def __init__(self, ok: bool = True, output: Any = "did it") -> None:
         self._ok = ok
         self._output = output
@@ -36,7 +40,8 @@ class FakeTool:
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         self.calls.append(args)
         return ToolResult(
-            ok=self._ok, output=self._output,
+            ok=self._ok,
+            output=self._output,
             side_effects=(SideEffect(kind="fake", target="none"),),
         )
 
@@ -54,5 +59,6 @@ class FakeConfirmer:
 class FakeKillSwitch:
     def __init__(self, active: bool = False) -> None:
         self._active = active
+
     def is_active(self) -> bool:
         return self._active

@@ -20,16 +20,16 @@ from atlas.memory.types import RetrievedContext
 from atlas.memory.user_model import UserModel
 from atlas.memory.vectorstore import ChromaVectorStore
 
-
 # ---------------------------------------------------------------------------
 # Shared fake embedder
 # ---------------------------------------------------------------------------
+
 
 class _FakeEmbedder:
     DIM = 384
 
     async def embed(self, text: str) -> list[float]:
-        h = hash(text) % (10 ** 6)
+        h = hash(text) % (10**6)
         base = [float(h % (i + 2)) for i in range(self.DIM)]
         norm = (sum(x * x for x in base) ** 0.5) or 1.0
         return [x / norm for x in base]
@@ -38,6 +38,7 @@ class _FakeEmbedder:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _build(tmp: Path) -> tuple[Database, ChromaVectorStore, _FakeEmbedder]:
     db = Database(tmp / "test.db")
@@ -50,6 +51,7 @@ def _build(tmp: Path) -> tuple[Database, ChromaVectorStore, _FakeEmbedder]:
 # Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_knowledge_store_retrieval_integration(tmp_path: Path) -> None:
     """Ingested documents appear in RetrievedContext.knowledge_chunks."""
@@ -57,16 +59,20 @@ async def test_knowledge_store_retrieval_integration(tmp_path: Path) -> None:
     await db.start()
 
     clock = SystemClock()
-    ids   = UuidGenerator()
+    ids = UuidGenerator()
 
     store = KnowledgeStore(db=db, vector_store=vs, embedder=emb, ids=ids, clock=clock)  # type: ignore[arg-type]
 
-    episodic   = EpisodicMemory(db=db, clock=clock)
-    semantic   = SemanticMemory(db=db, vectors=vs, embedder=emb, ids=ids, clock=clock)  # type: ignore[arg-type]
+    episodic = EpisodicMemory(db=db, clock=clock)
+    semantic = SemanticMemory(db=db, vectors=vs, embedder=emb, ids=ids, clock=clock)  # type: ignore[arg-type]
     user_model = UserModel(db=db, clock=clock)
-    retriever  = Retriever(
-        semantic=semantic, episodic=episodic, user_model=user_model,
-        knowledge_store=store, token_budget=2000, cache_ttl=0.0,  # no cache for test
+    retriever = Retriever(
+        semantic=semantic,
+        episodic=episodic,
+        user_model=user_model,
+        knowledge_store=store,
+        token_budget=2000,
+        cache_ttl=0.0,  # no cache for test
     )
 
     # Create and ingest a small test document
@@ -99,15 +105,18 @@ async def test_retrieval_without_knowledge_store(tmp_path: Path) -> None:
     await db.start()
 
     clock = SystemClock()
-    ids   = UuidGenerator()
+    ids = UuidGenerator()
 
-    episodic   = EpisodicMemory(db=db, clock=clock)
-    semantic   = SemanticMemory(db=db, vectors=vs, embedder=emb, ids=ids, clock=clock)  # type: ignore[arg-type]
+    episodic = EpisodicMemory(db=db, clock=clock)
+    semantic = SemanticMemory(db=db, vectors=vs, embedder=emb, ids=ids, clock=clock)  # type: ignore[arg-type]
     user_model = UserModel(db=db, clock=clock)
 
     retriever = Retriever(
-        semantic=semantic, episodic=episodic, user_model=user_model,
-        knowledge_store=None, cache_ttl=0.0,
+        semantic=semantic,
+        episodic=episodic,
+        user_model=user_model,
+        knowledge_store=None,
+        cache_ttl=0.0,
     )
 
     ctx = await retriever.retrieve("test query")
@@ -125,18 +134,22 @@ async def test_token_budget_partitioning(tmp_path: Path) -> None:
     await db.start()
 
     clock = SystemClock()
-    ids   = UuidGenerator()
+    ids = UuidGenerator()
 
     store = KnowledgeStore(db=db, vector_store=vs, embedder=emb, ids=ids, clock=clock)  # type: ignore[arg-type]
 
-    episodic   = EpisodicMemory(db=db, clock=clock)
-    semantic   = SemanticMemory(db=db, vectors=vs, embedder=emb, ids=ids, clock=clock)  # type: ignore[arg-type]
+    episodic = EpisodicMemory(db=db, clock=clock)
+    semantic = SemanticMemory(db=db, vectors=vs, embedder=emb, ids=ids, clock=clock)  # type: ignore[arg-type]
     user_model = UserModel(db=db, clock=clock)
 
     budget = 600
     retriever = Retriever(
-        semantic=semantic, episodic=episodic, user_model=user_model,
-        knowledge_store=store, token_budget=budget, cache_ttl=0.0,
+        semantic=semantic,
+        episodic=episodic,
+        user_model=user_model,
+        knowledge_store=store,
+        token_budget=budget,
+        cache_ttl=0.0,
     )
 
     # Large document to stress the budget

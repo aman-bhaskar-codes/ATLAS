@@ -20,11 +20,16 @@ class DeliveryTracker:
             "INSERT OR IGNORE INTO notif_history("
             "id, correlation_id, kind, priority, channels, delivered, final_provider, receipt, created_ts) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
-            (n.id, n.correlation_id, n.kind.value, int(n.priority),
-             json.dumps(list(n.channels)),
-             int(receipt.delivered),
-             receipt.provider,
-             receipt.model_dump_json(),
-             n.created_ts.isoformat())
+            (
+                n.id,
+                n.correlation_id,
+                n.kind.value,
+                int(n.priority),
+                json.dumps(list(n.channels)),
+                int(receipt.delivered),
+                receipt.provider,
+                receipt.model_dump_json(),
+                n.created_ts.isoformat(),
+            ),
         )
         await self._db.conn.commit()

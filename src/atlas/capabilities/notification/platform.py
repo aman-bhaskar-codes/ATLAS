@@ -21,8 +21,14 @@ from atlas.capabilities.notification.router import NotificationRouter
 
 
 class NotificationPlatform:
-    def __init__(self, *, router: NotificationRouter, dispatcher: NotificationDispatcher,
-                 queue: NotificationQueue, approvals: ApprovalRequestManager) -> None:
+    def __init__(
+        self,
+        *,
+        router: NotificationRouter,
+        dispatcher: NotificationDispatcher,
+        queue: NotificationQueue,
+        approvals: ApprovalRequestManager,
+    ) -> None:
         self._router = router
         self._dispatcher = dispatcher
         self._queue = queue
@@ -31,11 +37,9 @@ class NotificationPlatform:
     async def notify(self, n: Notification) -> DeliveryReceipt | None:
         decision = self._router.route(n)
         if not decision.interrupt_now:
-            await self._queue.enqueue(n, digest=True)   # batched into digest
+            await self._queue.enqueue(n, digest=True)  # batched into digest
             return None
-        return await self._dispatcher.deliver(
-            n, decision.channels, multi=decision.multi_channel, retry=decision.retry)
+        return await self._dispatcher.deliver(n, decision.channels, multi=decision.multi_channel, retry=decision.retry)
 
-    async def request_approval(self, req: ApprovalRequest,
-                               channels: tuple[str, ...]) -> ApprovalDecision:
+    async def request_approval(self, req: ApprovalRequest, channels: tuple[str, ...]) -> ApprovalDecision:
         return await self._approvals.request(req, channels)

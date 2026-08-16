@@ -23,10 +23,16 @@ class LLMCallTracker:
         self._clock = clock
 
     async def record(
-        self, *, task_id: str | None = None, step_index: int | None = None,
-        provider: str, model: str,
-        tokens_in: int, tokens_out: int,
-        cost_usd: float, latency_ms: int,
+        self,
+        *,
+        task_id: str | None = None,
+        step_index: int | None = None,
+        provider: str,
+        model: str,
+        tokens_in: int,
+        tokens_out: int,
+        cost_usd: float,
+        latency_ms: int,
         cached: bool = False,
     ) -> str:
         """Record a single LLM call."""
@@ -35,9 +41,19 @@ class LLMCallTracker:
             "INSERT INTO llm_calls(id, task_id, step_index, provider, model, "
             "tokens_in, tokens_out, cost_usd, latency_ms, cached, created_ts) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (call_id, task_id, step_index, provider, model,
-             tokens_in, tokens_out, cost_usd, latency_ms, int(cached),
-             self._clock.now().isoformat()),
+            (
+                call_id,
+                task_id,
+                step_index,
+                provider,
+                model,
+                tokens_in,
+                tokens_out,
+                cost_usd,
+                latency_ms,
+                int(cached),
+                self._clock.now().isoformat(),
+            ),
         )
         await self._db.conn.commit()
         return call_id
@@ -58,24 +74,21 @@ class LLMCallTracker:
             "SELECT COUNT(*) as calls, "
             "SUM(tokens_in) as total_in, SUM(tokens_out) as total_out, "
             "SUM(cost_usd) as total_cost "
-            "FROM llm_calls WHERE task_id=?", (task_id,)
+            "FROM llm_calls WHERE task_id=?",
+            (task_id,),
         )
         row = await cur.fetchone()
         return dict(row) if row else {"calls": 0, "total_in": 0, "total_out": 0, "total_cost": 0.0}
 
     async def recent(self, limit: int = 50) -> list[dict[str, object]]:
         """Most recent LLM calls."""
-        cur = await self._db.conn.execute(
-            "SELECT * FROM llm_calls ORDER BY created_ts DESC LIMIT ?", (limit,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM llm_calls ORDER BY created_ts DESC LIMIT ?", (limit,))
         rows = list(await cur.fetchall())
         return [dict(r) for r in reversed(rows)]
 
     async def cache_hit_rate(self) -> float:
         """Percentage of calls that hit the cache."""
-        cur = await self._db.conn.execute(
-            "SELECT COUNT(*) as total, SUM(cached) as hits FROM llm_calls"
-        )
+        cur = await self._db.conn.execute("SELECT COUNT(*) as total, SUM(cached) as hits FROM llm_calls")
         row = await cur.fetchone()
         if not row or int(row["total"]) == 0:
             return 0.0

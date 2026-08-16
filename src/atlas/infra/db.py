@@ -466,7 +466,7 @@ _MIGRATIONS: tuple[str, ...] = (
     );
     CREATE INDEX IF NOT EXISTS idx_ea_experience ON experience_applications(experience_id, applied_ts DESC);
     CREATE INDEX IF NOT EXISTS idx_ea_task ON experience_applications(task_id);
-    """
+    """,
 )
 
 
@@ -477,8 +477,7 @@ class Database:
 
     async def start(self) -> None:
         if self._conn is not None:
-            _log.warning("db.start_duplicate", event_type="db",
-                         detail="closing existing connection before re-start")
+            _log.warning("db.start_duplicate", event_type="db", detail="closing existing connection before re-start")
             await self._conn.close()
             self._conn = None
         self._conn = await aiosqlite.connect(self._path)
@@ -495,9 +494,7 @@ class Database:
         # temp_store=MEMORY: sort/group-by scratch space stays in RAM
         await self._conn.execute("PRAGMA temp_store=MEMORY")
         await self._conn.execute("PRAGMA foreign_keys=ON")
-        await self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
-        )
+        await self._conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
         await self._apply_migrations()
         await self._conn.commit()
         _log.info("db.ready", event_type="db", path=str(self._path), version=len(_MIGRATIONS))

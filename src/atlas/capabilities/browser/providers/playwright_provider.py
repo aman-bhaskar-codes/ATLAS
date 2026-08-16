@@ -1,4 +1,5 @@
 """PlaywrightProvider adapts the playwright async API to the BrowserProvider protocol."""
+
 from __future__ import annotations
 
 import logging
@@ -157,6 +158,7 @@ class PlaywrightProvider:
     def _resolve_locator(self, page: Any, locator: Locator) -> Any:
         """Convert domain Locator to a playwright Locator object."""
         from atlas.capabilities.browser.domain.locator import LocatorKind
+
         kind, value = locator.kind, locator.value
         if kind == LocatorKind.CSS:
             return page.locator(value)
@@ -193,9 +195,7 @@ class PlaywrightProvider:
         page = self._get_page(session_id, tab_id)
         await self._resolve_locator(page, locator).first.click()
 
-    async def type_text(
-        self, session_id: str, tab_id: str, locator: Locator, text: str
-    ) -> None:
+    async def type_text(self, session_id: str, tab_id: str, locator: Locator, text: str) -> None:
         page = self._get_page(session_id, tab_id)
         await self._resolve_locator(page, locator).first.fill(text)
 
@@ -250,9 +250,7 @@ class PlaywrightProvider:
     async def drain_network_events(self, session_id: str, tab_id: str) -> list[Any]:
         return []
 
-    async def await_download(
-        self, session_id: str, tab_id: str
-    ) -> tuple[str, str]:
+    async def await_download(self, session_id: str, tab_id: str) -> tuple[str, str]:
         raise NotImplementedError
 
     # ------------------------------------------------------------------ #

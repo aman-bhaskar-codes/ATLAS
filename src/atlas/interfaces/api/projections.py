@@ -1,4 +1,5 @@
 """Safe projections. Internal records are never returned directly."""
+
 from __future__ import annotations
 
 import json
@@ -58,7 +59,7 @@ def project_task(record: dict[str, Any]) -> TaskView:
         approval_count=int(payload.get("approval_count", 0)),
         artifact_count=int(payload.get("artifact_count", 0)),
         memory_write_count=int(payload.get("memory_write_count", 0)),
-        retryability=cast(Literal['safe', 'unsafe', 'unknown'], payload.get("retryability", "unknown")),
+        retryability=cast(Literal["safe", "unsafe", "unknown"], payload.get("retryability", "unknown")),
     )
 
 
@@ -76,9 +77,8 @@ def project_audit(record: dict[str, Any]) -> AuditEventView:
         task_id=record.get("task_id"),
         correlation_id=record.get("correlation_id"),
         execution_id=record.get("execution_id"),
-        redaction=cast(Literal['none', 'partial', 'full'], record.get("redaction", "partial")),
-        safe_payload_summary=str(record["safe_payload_summary"])
-        if record.get("safe_payload_summary") else None,
+        redaction=cast(Literal["none", "partial", "full"], record.get("redaction", "partial")),
+        safe_payload_summary=str(record["safe_payload_summary"]) if record.get("safe_payload_summary") else None,
     )
 
 

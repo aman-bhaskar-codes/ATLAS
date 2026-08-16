@@ -31,18 +31,19 @@ class QuietHoursEngine:
     def in_quiet_hours(self) -> bool:
         for w in self._windows:
             now = self._clock.now().astimezone(ZoneInfo(w.tz)).time()
-            inside = (w.start <= now < w.end) if w.start <= w.end \
-                else (now >= w.start or now < w.end)   # window crosses midnight
+            inside = (
+                (w.start <= now < w.end) if w.start <= w.end else (now >= w.start or now < w.end)
+            )  # window crosses midnight
             if inside:
                 return True
         return False
 
     def should_interrupt(self, n: Notification) -> bool:
         """True = deliver now; False = batch into digest."""
-        if n.priority >= NotificationPriority.HIGH:      # Tier 2/3: ALWAYS interrupt
+        if n.priority >= NotificationPriority.HIGH:  # Tier 2/3: ALWAYS interrupt
             return True
         if not self.in_quiet_hours():
             return True
         if n.priority == NotificationPriority.NORMAL and n.urgent:  # Tier 1 urgent escapes
             return True
-        return False                                     # Tier 0, or non-urgent Tier 1 -> digest
+        return False  # Tier 0, or non-urgent Tier 1 -> digest

@@ -14,7 +14,9 @@ class FakeBackend:
 
 
 _STATE = ScreenState(
-    source=PerceptionSource.AX_TREE, app_name="Mail", window_title="Inbox",
+    source=PerceptionSource.AX_TREE,
+    app_name="Mail",
+    window_title="Inbox",
     elements=(UIElement(role="button", label="Send", ax_path="window[0]/button[1]:Send"),),
 )
 

@@ -1,4 +1,5 @@
 """Extraction engine normalizes pages into WebPage/Article."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -18,47 +19,42 @@ class ExtractionEngine:
 
     async def extract_web_page(self, handle: PageHandle, cid: CorrelationId) -> WebPage:
         provider, provider_session_id, tab_id = self._pages.get_provider(handle)
-        
+
         url = await provider.eval_readonly(provider_session_id, tab_id, "window.location.href") or "about:blank"
         title = await provider.eval_readonly(provider_session_id, tab_id, "document.title") or ""
         await provider.content_html(provider_session_id, tab_id)
-        
+
         prov = Provenance(
             provider=provider.name,
             source_kind=SourceKind.WEB,
             uri=url,
             retrieved_ts=datetime.now(UTC),
         )
-        
+
         return WebPage(
             url=url,
             metadata=PageMetadata(title=title),
             text="Extracted text placeholder",
             markdown="Extracted markdown placeholder",
-            provenance=prov
+            provenance=prov,
         )
 
     async def extract_article(self, handle: PageHandle, cid: CorrelationId) -> Article:
         # Calls reader-mode extraction logic over the DOM.
         provider, provider_session_id, tab_id = self._pages.get_provider(handle)
-        
+
         url = await provider.eval_readonly(provider_session_id, tab_id, "window.location.href") or "about:blank"
         title = await provider.eval_readonly(provider_session_id, tab_id, "document.title") or ""
         html = await provider.content_html(provider_session_id, tab_id)
-        
+
         prov = Provenance(
             provider=provider.name,
             source_kind=SourceKind.WEB,
             uri=url,
             retrieved_ts=datetime.now(UTC),
         )
-        
+
         text = self._reader.extract_article_text(html, title)
         markdown = self._reader.extract_markdown(html, title)
-        
-        return Article(
-            title=title,
-            text=text,
-            markdown=markdown,
-            provenance=prov
-        )
+
+        return Article(title=title, text=text, markdown=markdown, provenance=prov)

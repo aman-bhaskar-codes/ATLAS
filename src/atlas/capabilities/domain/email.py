@@ -27,7 +27,7 @@ class Attachment(BaseModel):
     filename: str
     mime_type: str
     size_bytes: int
-    content_id: str | None = None          # for referencing stored bytes (File Gateway, 6.8)
+    content_id: str | None = None  # for referencing stored bytes (File Gateway, 6.8)
 
 
 class EmailMessage(BaseModel):
@@ -56,6 +56,7 @@ class Thread(BaseModel):
 class EmailDraft(BaseModel):
     """The intended outbound. This is what the preview renders and the user
     approves. reply_to_id/thread_id set for replies/forwards."""
+
     model_config = {"frozen": True}
     to: tuple[EmailAddress, ...]
     cc: tuple[EmailAddress, ...] = ()
@@ -74,4 +75,4 @@ class Contact(BaseModel):
     model_config = {"frozen": True}
     address: EmailStr
     name: str | None = None
-    known: bool = False                     # in the user's known-contacts set
+    known: bool = False  # in the user's known-contacts set

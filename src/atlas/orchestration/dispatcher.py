@@ -26,14 +26,15 @@ class ToolDispatcher:
             return Observation(step=action.step, ok=False, error="action missing tool/operation")
         tool = self._registry.get(action.tool)
         if tool is None:
-            return Observation(step=action.step, ok=False,
-                               error=f"unknown tool {action.tool!r}")
+            return Observation(step=action.step, ok=False, error=f"unknown tool {action.tool!r}")
         # Merge the action's operation into args so that tool.execute() can read it.
         # The Safety Engine uses action.operation for tier lookup; tools read args["operation"].
         merged_args = {"operation": action.operation, **action.args}
         req = ToolRequest(
-            correlation_id=correlation_id, tool=action.tool,
-            operation=action.operation, args=merged_args,
+            correlation_id=correlation_id,
+            tool=action.tool,
+            operation=action.operation,
+            args=merged_args,
         )
         try:
             result = await self._safety.guard(req, tool)
@@ -42,12 +43,10 @@ class ToolDispatcher:
         except DeniedError as exc:
             # a denial is information the model should see, not a crash
             return Observation(
-                    step=action.step, ok=False,
-                    error=f"denied (tier {exc.decision.tier.name}): "
-                          f"{exc.decision.reason}",
-                )
+                step=action.step,
+                ok=False,
+                error=f"denied (tier {exc.decision.tier.name}): {exc.decision.reason}",
+            )
         except Exception as exc:
             raise ToolExecutionError(f"{action.tool}.{action.operation} failed: {exc}") from exc
-        return Observation(step=action.step, ok=result.ok,
-                           content=result.output, error=result.error)
-
+        return Observation(step=action.step, ok=result.ok, content=result.output, error=result.error)

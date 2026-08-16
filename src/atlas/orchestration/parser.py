@@ -20,22 +20,25 @@ class ResponseParser:
         try:
             data = json.loads(self._json(text))
             thought = Thought(
-                step=step, content=str(data.get("thought", "")),
+                step=step,
+                content=str(data.get("thought", "")),
                 confidence=float(data.get("confidence", 0.5)),
             )
             a = data.get("action", {})
             action = Action(
-                step=step, kind=self._kind(a.get("kind")),
-                tool=a.get("tool"), operation=a.get("operation"),
-                args=dict(a.get("args") or {}), final_text=a.get("final_text"),
+                step=step,
+                kind=self._kind(a.get("kind")),
+                tool=a.get("tool"),
+                operation=a.get("operation"),
+                args=dict(a.get("args") or {}),
+                final_text=a.get("final_text"),
             )
             return thought, action
         except (json.JSONDecodeError, ValueError, TypeError) as exc:
             _log.error("parser.failed", error=str(exc), raw_text=text)
             return (
                 Thought(step=step, content="unparseable model output", confidence=0.0),
-                Action(step=step, kind="ask_user",
-                       final_text="I couldn't produce a clear next step. Can you clarify?"),
+                Action(step=step, kind="ask_user", final_text="I couldn't produce a clear next step. Can you clarify?"),
             )
 
     @staticmethod

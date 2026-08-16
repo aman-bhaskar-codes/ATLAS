@@ -9,7 +9,7 @@ from __future__ import annotations
 class ProviderHealth:
     def __init__(self) -> None:
         self._failures: dict[str, int] = {}
-        
+
     def record(self, provider: str, *, ok: bool, latency_ms: int) -> None:
         if ok:
             self._failures[provider] = 0

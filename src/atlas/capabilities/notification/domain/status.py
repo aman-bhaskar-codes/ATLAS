@@ -24,7 +24,7 @@ _TERMINAL = {
     NotificationStatus.DELIVERED,
     NotificationStatus.DEAD_LETTER,
     NotificationStatus.EXPIRED,
-    NotificationStatus.CANCELLED
+    NotificationStatus.CANCELLED,
 }
 
 

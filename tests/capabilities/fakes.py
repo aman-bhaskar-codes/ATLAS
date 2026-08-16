@@ -24,14 +24,19 @@ class FakeProvider:
 
     async def initialize(self) -> None: ...
     async def authenticate(self) -> None: ...
-    async def health(self): return True  # type: ignore
+    async def health(self):
+        return True  # type: ignore
+
     async def execute(self, request: CapabilityRequest) -> Any:
         self.calls += 1
         if self.calls <= self._fail_times:
             raise RuntimeError("transient")
         return {"raw": request.args.get("q", "")}
+
     def normalize(self, raw: Any) -> FakePayload:
         return FakePayload(value=str(raw["raw"]))
+
     def retry_policy(self) -> RetryPolicy:
         return RetryPolicy(max_attempts=3, base_backoff_s=0)
+
     async def shutdown(self) -> None: ...

@@ -27,9 +27,7 @@ class Lifecycle:
                 await svc.start()
                 self._started.append((name, svc))
             except Exception as exc:
-                _log.error(
-                    "service.start_failed", event_type="lifecycle", service=name, error=repr(exc)
-                )
+                _log.error("service.start_failed", event_type="lifecycle", service=name, error=repr(exc))
                 await self.stop()
                 raise
 
@@ -38,9 +36,7 @@ class Lifecycle:
             try:
                 await svc.stop()
             except Exception as exc:
-                _log.error(
-                    "service.stop_failed", event_type="lifecycle", service=name, error=repr(exc)
-                )
+                _log.error("service.stop_failed", event_type="lifecycle", service=name, error=repr(exc))
         self._started.clear()
 
     async def restart(self) -> None:

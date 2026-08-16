@@ -18,10 +18,10 @@ from atlas.capabilities.registry.capability import Capability
 
 class KnowledgeProvider(Protocol):
     name: str
-    capability: Capability          # always Capability.KNOWLEDGE
+    capability: Capability  # always Capability.KNOWLEDGE
     is_local: bool
     requires_auth: bool
-    source_kind: str                # 'official' | 'web' | 'local' | 'model'
+    source_kind: str  # 'official' | 'web' | 'local' | 'model'
 
     async def initialize(self) -> None: ...
     async def authenticate(self) -> None: ...

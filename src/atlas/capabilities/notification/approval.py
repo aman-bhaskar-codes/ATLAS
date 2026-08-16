@@ -24,8 +24,9 @@ from atlas.infra.ids import IdGenerator
 
 
 class ApprovalRequestManager:
-    def __init__(self, *, dispatcher: NotificationDispatcher, ids: IdGenerator,
-                 clock: Clock, callback_base: str) -> None:
+    def __init__(
+        self, *, dispatcher: NotificationDispatcher, ids: IdGenerator, clock: Clock, callback_base: str
+    ) -> None:
         self._dispatcher = dispatcher
         self._ids = ids
         self._clock = clock
@@ -37,28 +38,32 @@ class ApprovalRequestManager:
         fut: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
         self._pending[req.id] = fut
         self._requests[req.id] = req
-        
-        actions = (("Approve", f"{self._cb}/approve/{req.id}?d=1"),
-                   ("Deny", f"{self._cb}/approve/{req.id}?d=0"))
-                   
+
+        actions = (("Approve", f"{self._cb}/approve/{req.id}?d=1"), ("Deny", f"{self._cb}/approve/{req.id}?d=0"))
+
         n = Notification(
-            id=self._ids.execution_id(), correlation_id=req.correlation_id,
-            kind=NotificationKind.APPROVAL, priority=NotificationPriority.HIGH,
-            title="Approval needed", body=f"{req.prompt}\n\n{req.detail}",
-            created_ts=self._clock.now())
-            
+            id=self._ids.execution_id(),
+            correlation_id=req.correlation_id,
+            kind=NotificationKind.APPROVAL,
+            priority=NotificationPriority.HIGH,
+            title="Approval needed",
+            body=f"{req.prompt}\n\n{req.detail}",
+            created_ts=self._clock.now(),
+        )
+
         await self._dispatcher.deliver(n, channels, multi=False, retry=True, actions=actions)
         try:
             approved = await asyncio.wait_for(fut, req.timeout_s)
             return ApprovalDecision(request_id=req.id, approved=approved, decided_ts=self._clock.now())
         except TimeoutError:
-            return ApprovalDecision(request_id=req.id, approved=req.default_on_timeout,
-                                    decided_ts=self._clock.now(), timed_out=True)
+            return ApprovalDecision(
+                request_id=req.id, approved=req.default_on_timeout, decided_ts=self._clock.now(), timed_out=True
+            )
         finally:
             self._pending.pop(req.id, None)
             self._requests.pop(req.id, None)
 
-    def resolve(self, request_id: str, approved: bool) -> None:   # called by comms callback (6.9)
+    def resolve(self, request_id: str, approved: bool) -> None:  # called by comms callback (6.9)
         fut = self._pending.get(request_id)
         if fut is not None and not fut.done():
             fut.set_result(approved)

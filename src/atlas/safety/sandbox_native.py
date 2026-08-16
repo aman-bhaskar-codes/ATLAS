@@ -46,10 +46,7 @@ class NativeSandbox:
                     break
             remapped.append(arg)
 
-        _log.info(
-            "sandbox.native.run", event_type="sandbox",
-            cmd=remapped, network=network
-        )
+        _log.info("sandbox.native.run", event_type="sandbox", cmd=remapped, network=network)
 
         # Ensure all mount source dirs exist.
         for host_path in mounts:
@@ -64,19 +61,19 @@ class NativeSandbox:
                 stderr=asyncio.subprocess.PIPE,
                 env={**os.environ},
             )
-            out_bytes, err_bytes = await asyncio.wait_for(
-                proc.communicate(input=stdin), timeout=timeout_s
-            )
+            out_bytes, err_bytes = await asyncio.wait_for(proc.communicate(input=stdin), timeout=timeout_s)
             code = proc.returncode if proc.returncode is not None else -1
         except TimeoutError:
             return SandboxResult(
-                exit_code=124, stdout_tail="",
+                exit_code=124,
+                stdout_tail="",
                 stderr_tail=f"timed out after {timeout_s}s",
                 duration_ms=int((time.perf_counter() - start) * 1000),
             )
         except Exception as exc:
             return SandboxResult(
-                exit_code=1, stdout_tail="",
+                exit_code=1,
+                stdout_tail="",
                 stderr_tail=str(exc),
                 duration_ms=int((time.perf_counter() - start) * 1000),
             )

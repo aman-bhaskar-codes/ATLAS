@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -34,6 +34,7 @@ class Event(BaseModel):
 # without violating the layer boundary. atlas.orchestration.events re-exports.
 # ---------------------------------------------------------------------------
 
+
 class MemoryBusEvent(Event):
     """Published to the 'memory' topic on any memory write or retrieval.
 
@@ -41,8 +42,9 @@ class MemoryBusEvent(Event):
     boundary). Defining the event here lets memory modules publish typed events
     while importing only from atlas.infra.
     """
+
     task_id: str
-    kind: str        # memory.stored | memory.retrieved | memory.consolidated | ...
+    kind: str  # memory.stored | memory.retrieved | memory.consolidated | ...
     memory_type: str  # episodic | semantic | working | user_model | knowledge
     count: int = 0
     query: str | None = None
@@ -88,26 +90,25 @@ class MessageBus:
     async def publish(self, topic: str, event: Event) -> None:
         if self._closed:
             raise BusError("publish on a closed bus")
-            
-        now = datetime.now(timezone.utc).isoformat()
+
+        now = datetime.now(UTC).isoformat()
         payload = event.model_dump_json()
-        
+
         # Write to event_queue for immediate processing
         await self._db.conn.execute(
-            "INSERT INTO event_queue(topic, payload_json, created_ts) VALUES (?,?,?)",
-            (topic, payload, now)
+            "INSERT INTO event_queue(topic, payload_json, created_ts) VALUES (?,?,?)", (topic, payload, now)
         )
-        
+
         # Also write to event_log for historical replay
         event_dict = event.model_dump()
         task_id = event_dict.get("task_id")
         correlation_id = event_dict.get("correlation_id", event.correlation_id)
-        
+
         await self._db.conn.execute(
             "INSERT INTO event_log(topic, payload_json, task_id, correlation_id, created_ts) VALUES (?,?,?,?,?)",
-            (topic, payload, task_id, correlation_id, now)
+            (topic, payload, task_id, correlation_id, now),
         )
-        
+
         await self._db.conn.commit()
         self._wake_event.set()
 
@@ -118,18 +119,18 @@ class MessageBus:
                     break
                 cur = await self._db.conn.execute("SELECT * FROM event_queue ORDER BY id ASC LIMIT 50")
                 rows = await cur.fetchall()
-                
+
                 if not rows:
                     self._wake_event.clear()
                     await self._wake_event.wait()
                     continue
-                    
+
                 ids_to_delete = []
                 for row in rows:
                     topic = row["topic"]
                     payload = row["payload_json"]
                     eid = row["id"]
-                    
+
                     event_cls = self._event_types.get(topic, Event)
                     try:
                         event = event_cls.model_validate_json(payload)
@@ -137,24 +138,24 @@ class MessageBus:
                         _log.error("bus.deserialize_error", event_type="bus", error=str(e), topic=topic)
                         ids_to_delete.append(eid)
                         continue
-                        
+
                     handlers = tuple(self._subs.get(topic, ()))
                     if handlers:
-                        results = await asyncio.gather(
-                            *(h(event) for h in handlers), return_exceptions=True
-                        )
+                        results = await asyncio.gather(*(h(event) for h in handlers), return_exceptions=True)
                         for res in results:
                             if isinstance(res, Exception):
                                 _log.warning(
-                                    "bus.handler_error", event_type="bus", topic=topic,
-                                    correlation_id=event.correlation_id, error=repr(res),
+                                    "bus.handler_error",
+                                    event_type="bus",
+                                    topic=topic,
+                                    correlation_id=event.correlation_id,
+                                    error=repr(res),
                                 )
                     ids_to_delete.append(eid)
-                
+
                 if ids_to_delete:
                     await self._db.conn.execute(
-                        f"DELETE FROM event_queue WHERE id IN ({','.join('?'*len(ids_to_delete))})",
-                        ids_to_delete
+                        f"DELETE FROM event_queue WHERE id IN ({','.join('?' * len(ids_to_delete))})", ids_to_delete
                     )
                     await self._db.conn.commit()
             except Exception as e:

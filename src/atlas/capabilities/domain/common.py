@@ -19,16 +19,17 @@ PayloadT = TypeVar("PayloadT", bound=BaseModel)
 
 
 class SourceKind(StrEnum):
-    LOCAL = "local"            # memory, filesystem, on-device
-    OFFICIAL = "official"      # vendor RSS/API, authoritative
-    WEB = "web"                # general web/search
-    MODEL = "model"            # parametric (LLM) knowledge
-    MCP = "mcp"                # served via an MCP server
+    LOCAL = "local"  # memory, filesystem, on-device
+    OFFICIAL = "official"  # vendor RSS/API, authoritative
+    WEB = "web"  # general web/search
+    MODEL = "model"  # parametric (LLM) knowledge
+    MCP = "mcp"  # served via an MCP server
 
 
 class Provenance(BaseModel):
     """Where a result came from. WHY mandatory: legibility + knowledge ranking
     both need to know the source and how trustworthy it is."""
+
     model_config = {"frozen": True}
     provider: str
     source_kind: SourceKind
@@ -38,8 +39,8 @@ class Provenance(BaseModel):
 
 class Confidence(BaseModel):
     model_config = {"frozen": True}
-    score: float = 0.5           # 0..1
-    basis: str = ""              # e.g. 'single-source', 'agreement 4/5'
+    score: float = 0.5  # 0..1
+    basis: str = ""  # e.g. 'single-source', 'agreement 4/5'
 
 
 PayloadT = TypeVar("PayloadT", bound=BaseModel)  # type: ignore
@@ -47,6 +48,7 @@ PayloadT = TypeVar("PayloadT", bound=BaseModel)  # type: ignore
 
 class CapabilityResult[PayloadT](BaseModel):
     """Uniform envelope returned by every capability execution."""
+
     model_config = {"frozen": True}
     ok: bool
     payload: PayloadT | None = None

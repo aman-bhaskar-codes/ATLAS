@@ -10,10 +10,12 @@ def test_max_tool_calls() -> None:
     with pytest.raises(ReasoningError):
         c.tick_tool()
 
+
 def test_max_tokens() -> None:
     c = LimitCounter(ExecutionLimits(max_tokens=10))
     with pytest.raises(ReasoningError):
         c.add_tokens(11)
+
 
 def test_retry_budget() -> None:
     c = LimitCounter(ExecutionLimits(max_retries=2))

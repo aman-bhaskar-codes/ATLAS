@@ -42,7 +42,8 @@ async def submit_feedback(
         raise HTTPException(503, "Feedback store not initialized")
     try:
         fid = await atlas.feedback.record(
-            task_id=req.task_id, rating=req.rating,
+            task_id=req.task_id,
+            rating=req.rating,
             comment=req.comment,
             original_output=req.original_output,
             edited_output=req.edited_output,

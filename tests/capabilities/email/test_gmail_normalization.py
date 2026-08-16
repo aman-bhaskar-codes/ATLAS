@@ -9,9 +9,10 @@ class DummyIdentity:
     async def get_usable_secret(self, key: str) -> str:
         return "fake_token"
 
+
 def test_gmail_normalization() -> None:
-    provider = GmailProvider(DummyIdentity(), "fake_key") # type: ignore
-    
+    provider = GmailProvider(DummyIdentity(), "fake_key")  # type: ignore
+
     raw_payload: dict[str, Any] = {
         "id": "msg_123",
         "threadId": "thread_123",
@@ -22,24 +23,21 @@ def test_gmail_normalization() -> None:
                 {"name": "From", "value": "Alice <alice@example.com>"},
                 {"name": "To", "value": "Bob <bob@example.com>, charlie@example.com"},
                 {"name": "Cc", "value": "Dave <dave@example.com>"},
-                {"name": "Subject", "value": "Hello World"}
+                {"name": "Subject", "value": "Hello World"},
             ],
             "mimeType": "multipart/alternative",
             "parts": [
-                {
-                    "mimeType": "text/html",
-                    "body": {"data": "PGh0bWw+... (ignored)"}
-                },
+                {"mimeType": "text/html", "body": {"data": "PGh0bWw+... (ignored)"}},
                 {
                     "mimeType": "text/plain",
-                    "body": {"data": "VGhpcyBpcyB0aGUgYm9keQ=="} # "This is the body" in base64
-                }
-            ]
-        }
+                    "body": {"data": "VGhpcyBpcyB0aGUgYm9keQ=="},  # "This is the body" in base64
+                },
+            ],
+        },
     }
-    
+
     msg: EmailMessage = provider._to_message(raw_payload)
-    
+
     assert msg.id == "msg_123"
     assert msg.thread_id == "thread_123"
     assert msg.sender.email == "alice@example.com"
@@ -56,4 +54,3 @@ def test_gmail_normalization() -> None:
     assert "UNREAD" in msg.labels
     assert "INBOX" in msg.labels
     assert msg.unread is True
-

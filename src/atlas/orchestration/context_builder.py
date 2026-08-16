@@ -24,8 +24,12 @@ class ContextLayer:
 
 class ContextBuilder:
     def __init__(
-        self, *, retriever: Retriever, working: WorkingMemory,
-        system_prompt: str, token_budget: int = 3000,
+        self,
+        *,
+        retriever: Retriever,
+        working: WorkingMemory,
+        system_prompt: str,
+        token_budget: int = 3000,
     ) -> None:
         self._retriever = retriever
         self._working = working
@@ -37,12 +41,16 @@ class ContextBuilder:
         return max(1, len(text) // 4)
 
     async def build(
-        self, request: str, *, safety_constraints: str, tool_catalog: str,
-        plan_summary: str | None = None, task_id: str | None = None, 
+        self,
+        request: str,
+        *,
+        safety_constraints: str,
+        tool_catalog: str,
+        plan_summary: str | None = None,
+        task_id: str | None = None,
         correlation_id: str | None = None,
     ) -> str:
-        retrieved = await self._retriever.retrieve(request, task_id=task_id, 
-                                                   correlation_id=correlation_id)
+        retrieved = await self._retriever.retrieve(request, task_id=task_id, correlation_id=correlation_id)
         working = "\n".join(e.content[:200] for e in self._working.recent(10))
 
         layers: list[ContextLayer] = [
@@ -76,6 +84,7 @@ class ContextBuilder:
         """Render memory using the RetrievedContext.render() method."""
         # Phase 3: Use full render() method which includes knowledge chunks
         from atlas.memory.types import RetrievedContext
+
         if isinstance(retrieved, RetrievedContext):
             return retrieved.render()
         # Fallback for testing

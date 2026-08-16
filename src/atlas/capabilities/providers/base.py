@@ -25,6 +25,7 @@ from atlas.capabilities.registry.capability import Capability
 class CapabilityRequest(BaseModel):
     """What the dispatcher hands a provider. operation + typed args; the provider
     knows how to fulfill it for its backend."""
+
     model_config = {"frozen": True}
     capability: Capability
     operation: str
@@ -45,9 +46,9 @@ class Provider(Protocol):
     requires_auth: bool
 
     async def initialize(self) -> None: ...
-    async def authenticate(self) -> None: ...            # no-op if requires_auth is False
+    async def authenticate(self) -> None: ...  # no-op if requires_auth is False
     async def health(self) -> bool: ...
-    async def execute(self, request: CapabilityRequest) -> Any: ...   # RAW backend result
-    def normalize(self, raw: Any) -> BaseModel: ...       # RAW -> domain payload
+    async def execute(self, request: CapabilityRequest) -> Any: ...  # RAW backend result
+    def normalize(self, raw: Any) -> BaseModel: ...  # RAW -> domain payload
     def retry_policy(self) -> RetryPolicy: ...
     async def shutdown(self) -> None: ...

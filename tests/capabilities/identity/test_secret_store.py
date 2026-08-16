@@ -11,14 +11,14 @@ from atlas.infra.db import Database
 async def test_roundtrip_encrypts(memory_db: Database) -> None:
     s = SecretStore(memory_db, master_key="test-key")
     await s.put("c1", "super-secret")
-    
+
     # stored value is ciphertext, not plaintext
     assert memory_db.conn is not None
     cur = await memory_db.conn.execute("SELECT ciphertext FROM secrets WHERE id='c1'")
     row = await cur.fetchone()
     assert row is not None
     assert row["ciphertext"] != "super-secret"
-    
+
     assert await s.get("c1") == "super-secret"
 
 

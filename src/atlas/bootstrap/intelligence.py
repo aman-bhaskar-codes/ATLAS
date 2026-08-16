@@ -54,16 +54,19 @@ async def build_intelligence(
 ) -> IntelligenceComponents:
     """Build intelligence layer: providers, gateway, embedder, tracker."""
 
-    async def on_audit_cost(
-        corr: str, provider: str, model_id: str, usage: Usage, latency_ms: int
-    ) -> None:
-        await audit.record(AuditRecord(
-            correlation_id=CorrelationId(corr), ts=clock.now(), actor="intel_platform",
-            action="model.call", outcome="ok",
-            cost_tokens=usage.input_tokens + usage.output_tokens,
-            cost_usd=usage.usd,
-            payload={"model": model_id, "provider": provider, "latency_ms": latency_ms},
-        ))
+    async def on_audit_cost(corr: str, provider: str, model_id: str, usage: Usage, latency_ms: int) -> None:
+        await audit.record(
+            AuditRecord(
+                correlation_id=CorrelationId(corr),
+                ts=clock.now(),
+                actor="intel_platform",
+                action="model.call",
+                outcome="ok",
+                cost_tokens=usage.input_tokens + usage.output_tokens,
+                cost_usd=usage.usd,
+                payload={"model": model_id, "provider": provider, "latency_ms": latency_ms},
+            )
+        )
 
     telemetry = Telemetry(on_audit_cost)
     health = HealthMonitor()
@@ -81,44 +84,66 @@ async def build_intelligence(
 
     if config.models.allow_cloud:
         if settings.deepseek_api_key:
-            provider_registry.register(OpenAICompatibleProvider(
-                name="deepseek", base_url="https://openrouter.ai/api/v1",
-                api_key=settings.deepseek_api_key, timeout_s=config.models.cloud_timeout_s,
-            ))
+            provider_registry.register(
+                OpenAICompatibleProvider(
+                    name="deepseek",
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=settings.deepseek_api_key,
+                    timeout_s=config.models.cloud_timeout_s,
+                )
+            )
         if settings.glm_api_key:
-            provider_registry.register(OpenAICompatibleProvider(
-                name="glm", base_url="https://openrouter.ai/api/v1",
-                api_key=settings.glm_api_key, timeout_s=config.models.cloud_timeout_s,
-            ))
+            provider_registry.register(
+                OpenAICompatibleProvider(
+                    name="glm",
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=settings.glm_api_key,
+                    timeout_s=config.models.cloud_timeout_s,
+                )
+            )
         if settings.kimi_api_key:
-            provider_registry.register(OpenAICompatibleProvider(
-                name="kimi", base_url="https://openrouter.ai/api/v1",
-                api_key=settings.kimi_api_key, timeout_s=config.models.cloud_timeout_s,
-            ))
+            provider_registry.register(
+                OpenAICompatibleProvider(
+                    name="kimi",
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=settings.kimi_api_key,
+                    timeout_s=config.models.cloud_timeout_s,
+                )
+            )
         if settings.mimo_api_key:
-            provider_registry.register(OpenAICompatibleProvider(
-                name="mimo", base_url="https://openrouter.ai/api/v1",
-                api_key=settings.mimo_api_key, timeout_s=config.models.cloud_timeout_s,
-            ))
+            provider_registry.register(
+                OpenAICompatibleProvider(
+                    name="mimo",
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=settings.mimo_api_key,
+                    timeout_s=config.models.cloud_timeout_s,
+                )
+            )
         if settings.anthropic_api_key:
             try:
                 from atlas.intelligence.providers.anthropic import AnthropicProvider
-                provider_registry.register(AnthropicProvider(
-                    name="anthropic",
-                    api_key=settings.anthropic_api_key,
-                    timeout_s=config.models.cloud_timeout_s,
-                ))
+
+                provider_registry.register(
+                    AnthropicProvider(
+                        name="anthropic",
+                        api_key=settings.anthropic_api_key,
+                        timeout_s=config.models.cloud_timeout_s,
+                    )
+                )
                 _log.info("provider.registered", event_type="lifecycle", provider="anthropic")
             except Exception as exc:
                 _log.warning("provider.anthropic_failed", event_type="lifecycle", error=str(exc))
         if settings.gemini_api_key:
             try:
                 from atlas.intelligence.providers.gemini import GeminiProvider
-                provider_registry.register(GeminiProvider(
-                    name="gemini",
-                    api_key=settings.gemini_api_key,
-                    timeout_s=config.models.cloud_timeout_s,
-                ))
+
+                provider_registry.register(
+                    GeminiProvider(
+                        name="gemini",
+                        api_key=settings.gemini_api_key,
+                        timeout_s=config.models.cloud_timeout_s,
+                    )
+                )
                 _log.info("provider.registered", event_type="lifecycle", provider="gemini")
             except Exception as exc:
                 _log.warning("provider.gemini_failed", event_type="lifecycle", error=str(exc))
@@ -130,8 +155,10 @@ async def build_intelligence(
     llm_tracker = LLMCallTracker(db=db, ids=ids, clock=clock)
 
     runtime = InferenceRuntime(
-        providers=provider_registry, health=health,
-        governor=governor, telemetry=telemetry,
+        providers=provider_registry,
+        health=health,
+        governor=governor,
+        telemetry=telemetry,
         model_timeout_s=config.models.cloud_timeout_s,
         tracker=llm_tracker,
     )
@@ -144,10 +171,15 @@ async def build_intelligence(
     semantic_cache = SemanticCache(db, cache_vectors, embedder)
 
     gateway = ModelGateway(
-        router=cap_router, selector=selector,
-        fallback=fallback, runtime=runtime, cache=semantic_cache,
+        router=cap_router,
+        selector=selector,
+        fallback=fallback,
+        runtime=runtime,
+        cache=semantic_cache,
     )
 
     return IntelligenceComponents(
-        gateway=gateway, embedder=embedder, llm_tracker=llm_tracker,
+        gateway=gateway,
+        embedder=embedder,
+        llm_tracker=llm_tracker,
     )

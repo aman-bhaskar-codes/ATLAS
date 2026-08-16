@@ -6,6 +6,7 @@ from atlas.infra.ids import CorrelationId
 class GW:
     async def complete(self, req) -> None:  # type: ignore
         from atlas.infra.types import ModelResponse, ModelTarget
+
         return ModelResponse(text="[]", target=ModelTarget.LOCAL_FAST, model="f")  # type: ignore
 
 

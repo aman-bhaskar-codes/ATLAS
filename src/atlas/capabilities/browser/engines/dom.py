@@ -1,4 +1,5 @@
 """DOM engine fetches accessibility tree and raw nodes."""
+
 from __future__ import annotations
 
 from atlas.capabilities.browser.domain.dom import AccessibilityNode

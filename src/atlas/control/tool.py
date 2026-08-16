@@ -38,9 +38,7 @@ class AppControlTool:
         intent = str(args.get("intent", ""))
         tmpl = get_template(intent)
         if tmpl is None:
-            return ToolResult(ok=False,
-                              error=f"intent {intent!r} not allowlisted; "
-                                    f"known: {', '.join(known_intents())}")
+            return ToolResult(ok=False, error=f"intent {intent!r} not allowlisted; known: {', '.join(known_intents())}")
         params = {k: str(v) for k, v in args.items() if k != "intent"}
         missing = [p for p in tmpl.required_params if p not in params]
         if missing:
@@ -54,7 +52,5 @@ class AppControlTool:
 
         effects: tuple[SideEffect, ...] = ()
         if tmpl.side_effecting:
-            effects = (SideEffect(kind="app_control", target=intent,
-                                  detail=str(params), reversible=False),)
-        return ToolResult(ok=True, output={"intent": intent, "stdout": result.stdout},
-                          side_effects=effects)
+            effects = (SideEffect(kind="app_control", target=intent, detail=str(params), reversible=False),)
+        return ToolResult(ok=True, output={"intent": intent, "stdout": result.stdout}, side_effects=effects)

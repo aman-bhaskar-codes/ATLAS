@@ -72,9 +72,7 @@ class DefaultAtlasControlPlane:
         row = await cur.fetchone()
         active_tasks = row[0] if row else 0
 
-        cur2 = await self.atlas.db.conn.execute(
-            "SELECT ts FROM audit_events ORDER BY id DESC LIMIT 1"
-        )
+        cur2 = await self.atlas.db.conn.execute("SELECT ts FROM audit_events ORDER BY id DESC LIMIT 1")
         audit_row = await cur2.fetchone()
         last_audit = audit_row["ts"] if audit_row else None
 
@@ -105,16 +103,14 @@ class DefaultAtlasControlPlane:
 
     async def get_tasks(self) -> list[TaskResponse]:
         cur = await self.atlas.db.conn.execute(
-            "SELECT id, source, state, payload, created_ts, updated_ts "
-            "FROM tasks ORDER BY created_ts DESC LIMIT 20"
+            "SELECT id, source, state, payload, created_ts, updated_ts FROM tasks ORDER BY created_ts DESC LIMIT 20"
         )
         rows = await cur.fetchall()
         return [_row_to_task(r) for r in rows]
 
     async def get_task(self, task_id: str) -> TaskResponse:
         cur = await self.atlas.db.conn.execute(
-            "SELECT id, source, state, payload, created_ts, updated_ts "
-            "FROM tasks WHERE id = ?",
+            "SELECT id, source, state, payload, created_ts, updated_ts FROM tasks WHERE id = ?",
             (task_id,),
         )
         r = await cur.fetchone()
@@ -130,8 +126,7 @@ class DefaultAtlasControlPlane:
         """
         # Check idempotency: if this key was already used, return the existing task
         cur = await self.atlas.db.conn.execute(
-            "SELECT id, source, state, payload, created_ts, updated_ts "
-            "FROM tasks WHERE idempotency_key = ?",
+            "SELECT id, source, state, payload, created_ts, updated_ts FROM tasks WHERE idempotency_key = ?",
             (command.idempotency_key,),
         )
         existing = await cur.fetchone()
@@ -146,10 +141,13 @@ class DefaultAtlasControlPlane:
             "INSERT INTO tasks(id, source, state, payload, idempotency_key, created_ts, updated_ts) "
             "VALUES (?,?,?,?,?,?,?)",
             (
-                task_id, "api", "created",
+                task_id,
+                "api",
+                "created",
                 json.dumps({"request": command.request, "correlation_id": str(corr_id)}),
                 command.idempotency_key,
-                now.isoformat(), now.isoformat(),
+                now.isoformat(),
+                now.isoformat(),
             ),
         )
         await self.atlas.db.conn.commit()
@@ -182,9 +180,7 @@ class DefaultAtlasControlPlane:
 
     async def cancel_task(self, task_id: str, command: CancelTaskRequest) -> CancelTaskResponse:
         """Signal cancellation. Returns server decision — may not stop immediately."""
-        cur = await self.atlas.db.conn.execute(
-            "SELECT state FROM tasks WHERE id = ?", (task_id,)
-        )
+        cur = await self.atlas.db.conn.execute("SELECT state FROM tasks WHERE id = ?", (task_id,))
         row = await cur.fetchone()
         if not row:
             raise KeyError(f"Task not found: {task_id}")
@@ -208,9 +204,7 @@ class DefaultAtlasControlPlane:
             message="Cancellation requested. The current provider call may finish before stopping.",
         )
 
-    async def task_events(
-        self, task_id: str, after_sequence: int | None = None
-    ) -> list[TaskEventResponse]:
+    async def task_events(self, task_id: str, after_sequence: int | None = None) -> list[TaskEventResponse]:
         """Return ordered events from the task_events table (not episodes)."""
         return await self.event_store.list_events(task_id, after_sequence=after_sequence)
 
@@ -219,12 +213,8 @@ class DefaultAtlasControlPlane:
         # TODO(Phase 3): subscribe safety.confirm.requested events → approvals table
         return []
 
-    async def decide_approval(
-        self, approval_id: str, command: ApprovalDecisionRequest
-    ) -> ApprovalResponse:
-        raise NotImplementedError(
-            "decide_approval requires approval storage (Phase Three)"
-        )
+    async def decide_approval(self, approval_id: str, command: ApprovalDecisionRequest) -> ApprovalResponse:
+        raise NotImplementedError("decide_approval requires approval storage (Phase Three)")
 
     async def get_capabilities(self) -> list[CapabilityResponse]:
         caps = []

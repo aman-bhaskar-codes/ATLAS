@@ -5,6 +5,7 @@ WHY KnownContacts lives here (not in email): both email-send (6.5) and event-inv
 definition. The ContactsPlatform owns it; email's thin known set is populated FROM
 here so 'known' is consistent across every outbound capability.
 """
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -50,19 +51,21 @@ class Contact(BaseModel):
 
 class ContactDraft(BaseModel):
     """Intended create/update. Rendered in the preview, approved before commit."""
+
     model_config = {"frozen": True}
     name: str = ""
     emails: tuple[EmailRef, ...] = ()
     phones: tuple[PhoneNumber, ...] = ()
     org: str | None = None
     title: str | None = None
-    contact_id: str | None = None         # None => create; set => update
+    contact_id: str | None = None  # None => create; set => update
 
 
 class KnownContacts:
     """The one predicate both email-send and event-invite consult.
     Case-insensitive on the email address. Populated from the ContactsPlatform
     (and optionally seeded from config)."""
+
     def __init__(self, addresses: set[str]) -> None:
         self._known = {a.lower() for a in addresses}
 

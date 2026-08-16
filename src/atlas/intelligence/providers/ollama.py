@@ -31,13 +31,18 @@ class OllamaProvider:
             "options": {
                 "num_predict": max_tokens,
                 "temperature": temperature,
-            }
+            },
         }
 
     async def complete(
-        self, *, model: str, messages: Sequence[Message],
-        max_tokens: int, temperature: float,
-        usd_in: float, usd_out: float,
+        self,
+        *,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
+        usd_in: float,
+        usd_out: float,
     ) -> ProviderCompletion:
         try:
             r = await self._client.post(
@@ -47,7 +52,7 @@ class OllamaProvider:
             r.raise_for_status()
         except httpx.HTTPError as exc:
             raise ProviderError(f"{self.name} transport: {exc}") from exc
-            
+
         data = r.json()
         text = data.get("message", {}).get("content", "")
         it, ot = int(data.get("prompt_eval_count", 0)), int(data.get("eval_count", 0))
@@ -55,12 +60,17 @@ class OllamaProvider:
         return ProviderCompletion(str(text), Usage(input_tokens=it, output_tokens=ot, usd=0.0))
 
     async def stream(
-        self, *, model: str, messages: Sequence[Message],
-        max_tokens: int, temperature: float,
+        self,
+        *,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
     ) -> AsyncIterator[StreamChunk]:
         try:
             async with self._client.stream(
-                "POST", f"{self._host}/api/chat",
+                "POST",
+                f"{self._host}/api/chat",
                 json=self._payload(model, messages, max_tokens, temperature, True),
             ) as r:
                 r.raise_for_status()
@@ -71,7 +81,7 @@ class OllamaProvider:
                         data = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-                        
+
                     delta = data.get("message", {}).get("content", "")
                     done = data.get("done", False)
                     if delta or done:

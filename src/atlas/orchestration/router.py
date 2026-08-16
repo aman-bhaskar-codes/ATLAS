@@ -33,21 +33,25 @@ class Router:
     async def route(self, request: str, correlation_id: CorrelationId) -> Capabilities:
         # 1) cheap deterministic signals
         low = request.lower()
-        tool_hint = any(
-            k in low for k in ("file", "open", "run", "delete", "send", "install", "search")
-        )
+        tool_hint = any(k in low for k in ("file", "open", "run", "delete", "send", "install", "search"))
         # 2) local classification (thinking off; cheap)
         raw_text: str | None = None
         try:
-            resp = await self._gw.complete(ModelRequest(
-                correlation_id=correlation_id, system=_CLASSIFY_SYSTEM,
-                prompt=request,
-                required_capabilities=frozenset({
-                    ModelCapability.CLASSIFICATION,
-                    ModelCapability.JSON_GENERATION,
-                }),
-                max_tokens=1024, temperature=0.0,
-            ))
+            resp = await self._gw.complete(
+                ModelRequest(
+                    correlation_id=correlation_id,
+                    system=_CLASSIFY_SYSTEM,
+                    prompt=request,
+                    required_capabilities=frozenset(
+                        {
+                            ModelCapability.CLASSIFICATION,
+                            ModelCapability.JSON_GENERATION,
+                        }
+                    ),
+                    max_tokens=1024,
+                    temperature=0.0,
+                )
+            )
             raw_text = str(resp.text)
             data = json.loads(self._json(raw_text))
         except Exception as exc:  # fail toward MORE caution, not less
@@ -58,14 +62,14 @@ class Router:
                 error=repr(exc),
                 raw_text=raw_text,
             )
-            return Capabilities(needs_tools=tool_hint, needs_confirmation=True,
-                                max_risk=RiskLevel.MEDIUM)
+            return Capabilities(needs_tools=tool_hint, needs_confirmation=True, max_risk=RiskLevel.MEDIUM)
         return Capabilities(
             needs_tools=bool(data.get("needs_tools", tool_hint)),
             needs_reasoning=bool(data.get("needs_reasoning", True)),
             needs_cloud=bool(data.get("needs_cloud", False)),
             needs_confirmation=bool(data.get("needs_confirmation", False)),
-            needs_memory=True, needs_retrieval=True,
+            needs_memory=True,
+            needs_retrieval=True,
             max_risk=self._risk(data.get("max_risk", "low")),
         )
 

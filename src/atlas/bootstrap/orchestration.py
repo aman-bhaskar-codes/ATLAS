@@ -8,6 +8,7 @@ from typing import Any
 from atlas.infra.clock import Clock
 from atlas.infra.config import AppConfig
 from atlas.infra.db import Database
+from atlas.infra.execution_store import SQLiteCancellationStore, SQLiteExecutionStore
 from atlas.infra.ids import CorrelationId, IdGenerator
 from atlas.infra.types import AuditRecord
 from atlas.intelligence.gateway import ModelGateway
@@ -81,9 +82,7 @@ def build_orchestration(
 
     router = Router(gateway)
     planner = Planner(gateway)
-    context_builder = ContextBuilder(
-        retriever=retriever, working=working, system_prompt="You are an autonomous agent."
-    )
+    context_builder = ContextBuilder(retriever=retriever, working=working, system_prompt="You are an autonomous agent.")
     parser = ResponseParser()
     validator = OutputValidator()
     prompts = PromptBuilder()
@@ -93,19 +92,27 @@ def build_orchestration(
     estimator = TierEstimator(classifier)
 
     async def critique_audit(corr: str, action: Action, critique: Critique) -> None:
-        await audit.record(AuditRecord(
-            correlation_id=CorrelationId(corr), ts=clock.now(), actor="critique",
-            action="self_critique", tool=action.tool,
-            outcome=critique.verdict.value,
-            payload={"reason": critique.reason, "action": action.model_dump()},
-        ))
+        await audit.record(
+            AuditRecord(
+                correlation_id=CorrelationId(corr),
+                ts=clock.now(),
+                actor="critique",
+                action="self_critique",
+                tool=action.tool,
+                outcome=critique.verdict.value,
+                payload={"reason": critique.reason, "action": action.model_dump()},
+            )
+        )
 
     reflection: SelfCritique | NoOpReflection
     if config.critique.enabled:
         reflection = SelfCritique(
-            gateway=gateway, estimator=estimator,
-            parser=parser, validator=validator,
-            correlation_id_provider=ids.correlation_id, audit=critique_audit,
+            gateway=gateway,
+            estimator=estimator,
+            parser=parser,
+            validator=validator,
+            correlation_id_provider=ids.correlation_id,
+            audit=critique_audit,
             memory=semantic,
         )
     else:
@@ -119,18 +126,34 @@ def build_orchestration(
     verifier = GoalVerifier(gateway) if config.critique.enabled else NullVerifier()
 
     reasoning = ReasoningLoop(
-        gateway=gateway, dispatcher=dispatcher, parser=parser,
-        validator=validator, prompts=prompts, recorder=recorder,
-        monitor=monitor, retry=retry, reflection=reflection,
-        events=events, limits=limits, working=working,
-        replanner=replanner, verifier=verifier,
+        gateway=gateway,
+        dispatcher=dispatcher,
+        parser=parser,
+        validator=validator,
+        prompts=prompts,
+        recorder=recorder,
+        monitor=monitor,
+        retry=retry,
+        reflection=reflection,
+        events=events,
+        limits=limits,
+        working=working,
+        replanner=replanner,
+        verifier=verifier,
         trajectory_store=trajectory_store,  # Phase 2
     )
 
     orchestrator = Orchestrator(
-        ids=ids, clock=clock, db=db, router=router, planner=planner,
-        context_builder=context_builder, reasoning=reasoning,
-        registry=tool_registry, events=events,
+        ids=ids,
+        clock=clock,
+        execution_store=SQLiteExecutionStore(db),
+        cancellation_store=SQLiteCancellationStore(db),
+        router=router,
+        planner=planner,
+        context_builder=context_builder,
+        reasoning=reasoning,
+        registry=tool_registry,
+        events=events,
         trajectory_store=trajectory_store,  # Phase 2
         experience_extractor=experience_extractor,  # Phase 2
     )

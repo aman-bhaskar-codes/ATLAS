@@ -1,4 +1,5 @@
 """SessionManager coordinates acquisition and profile injection."""
+
 from __future__ import annotations
 
 import uuid

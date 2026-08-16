@@ -12,7 +12,7 @@ SSE format per spec:
     id: {sequence}
     event: task_event
     data: {JSON}
-    
+
 The SSE queue mechanism:
 - The lifespan subscriber (_on_orchestrator_event_sse) pushes task_id into
   per-task queues whenever a new event arrives.
@@ -33,6 +33,7 @@ from fastapi.responses import StreamingResponse
 
 from atlas.interfaces.api.dependencies import get_control_plane
 from atlas.interfaces.api.facade import AtlasControlPlane
+from atlas.interfaces.api.schemas import TaskEventResponse
 
 router = APIRouter(tags=["events"])
 
@@ -151,37 +152,31 @@ async def ws_global_events(
 ) -> None:
     """Global WebSocket firehose for all orchestrator events."""
     await websocket.accept()
-    
-    global_ws_queues: list[asyncio.Queue] = websocket.app.state.global_ws_queues
-    queue: asyncio.Queue = asyncio.Queue()
+
+    global_ws_queues: list[asyncio.Queue[TaskEventResponse]] = websocket.app.state.global_ws_queues
+    queue: asyncio.Queue[TaskEventResponse] = asyncio.Queue()
     global_ws_queues.append(queue)
-    
+
     try:
         await websocket.send_json({"event": "connected", "type": "global_firehose"})
         while True:
             # We must also listen for client disconnects
             receive_task = asyncio.create_task(websocket.receive_text())
             queue_task = asyncio.create_task(queue.get())
-            
-            done, pending = await asyncio.wait(
-                [receive_task, queue_task], return_when=asyncio.FIRST_COMPLETED
-            )
-            
+
+            done, pending = await asyncio.wait([receive_task, queue_task], return_when=asyncio.FIRST_COMPLETED)
+
             if receive_task in done:
                 # Client sent something or disconnected
                 try:
                     await receive_task
                 except WebSocketDisconnect:
                     break
-            
+
             if queue_task in done:
                 event = await queue_task
-                await websocket.send_json({
-                    "event": "task_event",
-                    "task_id": event.task_id,
-                    "data": event.model_dump()
-                })
-                
+                await websocket.send_json({"event": "task_event", "task_id": event.task_id, "data": event.model_dump()})
+
             for task in pending:
                 task.cancel()
     except WebSocketDisconnect:
@@ -199,26 +194,22 @@ async def ws_task_events(
 ) -> None:
     """WebSocket stream for a specific task."""
     await websocket.accept()
-    
-    ws_queues: dict[str, list[asyncio.Queue]] = websocket.app.state.ws_queues
-    queue: asyncio.Queue = asyncio.Queue()
-    
+
+    ws_queues: dict[str, list[asyncio.Queue[TaskEventResponse]]] = websocket.app.state.ws_queues
+    queue: asyncio.Queue[TaskEventResponse] = asyncio.Queue()
+
     if task_id not in ws_queues:
         ws_queues[task_id] = []
     ws_queues[task_id].append(queue)
-    
+
     try:
         await websocket.send_json({"event": "connected", "task_id": task_id})
-        
+
         # Initial snapshot
         initial_events = await control_plane.task_events(task_id, after_sequence=None)
         for event in initial_events:
-            await websocket.send_json({
-                "event": "task_event",
-                "id": event.sequence,
-                "data": event.model_dump()
-            })
-            
+            await websocket.send_json({"event": "task_event", "id": event.sequence, "data": event.model_dump()})
+
         task = await control_plane.get_task(task_id)
         if task.state in _TERMINAL_STATES:
             await websocket.send_json({"event": "stream_closed", "state": task.state})
@@ -227,31 +218,25 @@ async def ws_task_events(
         while True:
             receive_task = asyncio.create_task(websocket.receive_text())
             queue_task = asyncio.create_task(queue.get())
-            
-            done, pending = await asyncio.wait(
-                [receive_task, queue_task], return_when=asyncio.FIRST_COMPLETED
-            )
-            
+
+            done, pending = await asyncio.wait([receive_task, queue_task], return_when=asyncio.FIRST_COMPLETED)
+
             if receive_task in done:
                 try:
                     await receive_task
                 except WebSocketDisconnect:
                     break
-                    
+
             if queue_task in done:
                 event = await queue_task
-                await websocket.send_json({
-                    "event": "task_event",
-                    "id": event.sequence,
-                    "data": event.model_dump()
-                })
-                
+                await websocket.send_json({"event": "task_event", "id": event.sequence, "data": event.model_dump()})
+
                 # Check terminal state
                 t = await control_plane.get_task(task_id)
                 if t.state in _TERMINAL_STATES:
                     await websocket.send_json({"event": "stream_closed", "state": t.state})
                     break
-                    
+
             for task_pending in pending:
                 task_pending.cancel()
 

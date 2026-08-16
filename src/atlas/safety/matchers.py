@@ -61,9 +61,7 @@ def is_credential_access(paths: list[str], credential_dirs: list[str]) -> tuple[
         return True, f"matcher error, failing closed: {exc!r}"
 
 
-def is_mass_deletion(
-    target_count: int, targets_glob: str | None, threshold: int
-) -> tuple[bool, str]:
+def is_mass_deletion(target_count: int, targets_glob: str | None, threshold: int) -> tuple[bool, str]:
     try:
         if targets_glob:
             root = targets_glob.rstrip("/*")
@@ -76,9 +74,7 @@ def is_mass_deletion(
         return True, f"matcher error, failing closed: {exc!r}"
 
 
-def is_financial(
-    url: str | None, command: str | None, financial_domains: list[str]
-) -> tuple[bool, str]:
+def is_financial(url: str | None, command: str | None, financial_domains: list[str]) -> tuple[bool, str]:
     try:
         if url:
             parsed = urlparse(url)
@@ -134,9 +130,7 @@ def is_invites_person(args: dict[str, Any]) -> tuple[bool, str]:
 
 
 def is_destructive_pim(tool: str, operation: str) -> tuple[bool, str]:
-    if (tool == "calendar" and operation == "delete") or (
-        tool == "contacts" and operation in {"merge", "delete"}
-    ):
+    if (tool == "calendar" and operation == "delete") or (tool == "contacts" and operation in {"merge", "delete"}):
         return True, f"destructive PIM operation: {tool}.{operation}"
     return False, ""
 
@@ -166,23 +160,17 @@ def _browser_locator_matches(
 
 
 def is_financial_ui(tool: str, operation: str, args: dict[str, Any]) -> tuple[bool, str]:
-    return _browser_locator_matches(
-        tool, operation, args, ("pay", "checkout", "buy", "purchase", "order", "subscribe")
-    )
+    return _browser_locator_matches(tool, operation, args, ("pay", "checkout", "buy", "purchase", "order", "subscribe"))
 
 
 def is_destructive_ui(tool: str, operation: str, args: dict[str, Any]) -> tuple[bool, str]:
-    return _browser_locator_matches(
-        tool, operation, args, ("delete", "remove", "deactivate", "destroy")
-    )
+    return _browser_locator_matches(tool, operation, args, ("delete", "remove", "deactivate", "destroy"))
 
 
 def is_credential_entry(tool: str, operation: str, args: dict[str, Any]) -> tuple[bool, str]:
     if operation != "type":
         return False, ""
-    return _browser_locator_matches(
-        tool, operation, args, ("password", "pass", "otp", "pin", "cvv", "secret")
-    )
+    return _browser_locator_matches(tool, operation, args, ("password", "pass", "otp", "pin", "cvv", "secret"))
 
 
 def is_form_submission(tool: str, operation: str) -> tuple[bool, str]:

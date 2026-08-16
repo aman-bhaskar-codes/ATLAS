@@ -23,8 +23,10 @@ class TierEstimator:
         if action.kind != "tool_call" or action.tool is None or action.operation is None:
             return Tier.AUTO
         req = ToolRequest(
-            correlation_id=correlation_id, tool=action.tool,
-            operation=action.operation, args=action.args,
+            correlation_id=correlation_id,
+            tool=action.tool,
+            operation=action.operation,
+            args=action.args,
         )
         return self._clf.classify(req).tier
 

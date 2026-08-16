@@ -19,12 +19,20 @@ class CapabilityTelemetry:
         self._audit = audit_hook
 
     async def record(
-        self, *, correlation_id: str, capability: Capability, provider: str,
-        ok: bool, latency_ms: int, task_id: str | None = None,
+        self,
+        *,
+        correlation_id: str,
+        capability: Capability,
+        provider: str,
+        ok: bool,
+        latency_ms: int,
+        task_id: str | None = None,
     ) -> None:
         await self._audit(
-            correlation_id=correlation_id, actor="capability",
-            action=f"capability.{capability.value}", tool=provider,
+            correlation_id=correlation_id,
+            actor="capability",
+            action=f"capability.{capability.value}",
+            tool=provider,
             outcome="ok" if ok else "error",
             payload={"latency_ms": latency_ms, "task_id": task_id},
         )

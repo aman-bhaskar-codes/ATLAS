@@ -37,8 +37,14 @@ _DUP_SIMILARITY = 0.92
 
 class Consolidator:
     def __init__(
-        self, *, episodic: EpisodicMemory, semantic: SemanticMemory,
-        gateway: ModelGateway, db: Database, ids: IdGenerator, clock: Clock,
+        self,
+        *,
+        episodic: EpisodicMemory,
+        semantic: SemanticMemory,
+        gateway: ModelGateway,
+        db: Database,
+        ids: IdGenerator,
+        clock: Clock,
     ) -> None:
         self._epi = episodic
         self._sem = semantic
@@ -53,18 +59,22 @@ class Consolidator:
             return {"episodes": 0, "applied": 0, "proposed": 0}
 
         blob = "\n".join(f"[{e.kind.value}] {e.content}" for e in episodes)
-        resp = await self._gw.complete(ModelRequest(
-            correlation_id=self._ids.correlation_id(),
-            system="Extract durable memory. Output ONLY JSON.",
-            prompt=_DISTILL_PROMPT + blob,
-            required_capabilities=frozenset({
-                ModelCapability.REASONING,
-                ModelCapability.SUMMARIZATION,
-                ModelCapability.JSON_GENERATION,
-            }),
-            needs_deep_reasoning=True,  # thinking on; offline, no latency pressure
-            max_tokens=1200,
-        ))
+        resp = await self._gw.complete(
+            ModelRequest(
+                correlation_id=self._ids.correlation_id(),
+                system="Extract durable memory. Output ONLY JSON.",
+                prompt=_DISTILL_PROMPT + blob,
+                required_capabilities=frozenset(
+                    {
+                        ModelCapability.REASONING,
+                        ModelCapability.SUMMARIZATION,
+                        ModelCapability.JSON_GENERATION,
+                    }
+                ),
+                needs_deep_reasoning=True,  # thinking on; offline, no latency pressure
+                max_tokens=1200,
+            )
+        )
         try:
             parsed = json.loads(self._extract_json(resp.text))
         except (json.JSONDecodeError, ValueError) as exc:
@@ -86,8 +96,11 @@ class Consolidator:
                 continue
             if conf >= _AUTO_APPLY_CONFIDENCE:
                 await self._sem.add_fact(
-                    text, self._kind(fact.get("kind")), confidence=conf,
-                    salience=0.5, sources=source_ids,
+                    text,
+                    self._kind(fact.get("kind")),
+                    confidence=conf,
+                    salience=0.5,
+                    sources=source_ids,
                 )
                 applied += 1
             else:
@@ -100,14 +113,12 @@ class Consolidator:
             proposed += 1
 
         await self._epi.mark_consolidated([e.id for e in episodes if e.id is not None])
-        _log.info("consolidation.done", event_type="memory",
-                  episodes=len(episodes), applied=applied, proposed=proposed)
+        _log.info("consolidation.done", event_type="memory", episodes=len(episodes), applied=applied, proposed=proposed)
         return {"episodes": len(episodes), "applied": applied, "proposed": proposed}
 
     async def _propose(self, kind: str, payload: dict[str, object]) -> None:
         await self._db.conn.execute(
-            "INSERT INTO consolidation_proposals(id, created_ts, kind, payload, status) "
-            "VALUES (?,?,?,?, 'pending')",
+            "INSERT INTO consolidation_proposals(id, created_ts, kind, payload, status) VALUES (?,?,?,?, 'pending')",
             (self._ids.execution_id(), self._clock.now().isoformat(), kind, json.dumps(payload)),
         )
         await self._db.conn.commit()

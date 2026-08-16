@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from atlas.infra.bus import MessageBus
 from atlas.infra.clock import Clock, SystemClock
@@ -50,8 +49,12 @@ def build_infrastructure(settings: Settings, config: AppConfig) -> InfraComponen
     bus = MessageBus(db)
     from atlas.infra.bus import MemoryBusEvent
     from atlas.orchestration.events import (
-        MemoryEvent, OrchestratorEvent, PlanningEvent, SafetyEvent, ToolEvent,
+        OrchestratorEvent,
+        PlanningEvent,
+        SafetyEvent,
+        ToolEvent,
     )
+
     bus.register_type("orchestrator", OrchestratorEvent)
     bus.register_type("safety", SafetyEvent)
     bus.register_type("planning", PlanningEvent)
@@ -62,7 +65,14 @@ def build_infrastructure(settings: Settings, config: AppConfig) -> InfraComponen
     killswitch = KillSwitch(config.safety.stop_flag_path)
 
     return InfraComponents(
-        ids=ids, clock=clock, metrics=metrics, tracer=tracer,
-        db=db, registry=registry, lifecycle=lifecycle,
-        bus=bus, audit=audit, killswitch=killswitch,
+        ids=ids,
+        clock=clock,
+        metrics=metrics,
+        tracer=tracer,
+        db=db,
+        registry=registry,
+        lifecycle=lifecycle,
+        bus=bus,
+        audit=audit,
+        killswitch=killswitch,
     )

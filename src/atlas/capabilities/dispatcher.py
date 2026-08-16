@@ -56,8 +56,13 @@ class _CapabilityTool:
 
 class CapabilityDispatcher:
     def __init__(
-        self, *, registry: CapabilityRegistry, providers: ProviderRegistry,
-        health: CapabilityHealth, safety: SafetyEngine, telemetry: CapabilityTelemetry,
+        self,
+        *,
+        registry: CapabilityRegistry,
+        providers: ProviderRegistry,
+        health: CapabilityHealth,
+        safety: SafetyEngine,
+        telemetry: CapabilityTelemetry,
     ) -> None:
         self._registry = registry
         self._providers = providers
@@ -66,8 +71,11 @@ class CapabilityDispatcher:
         self._telemetry = telemetry
 
     async def execute(
-        self, request: CapabilityRequest, correlation_id: CorrelationId,
-        *, task_id: str | None = None,
+        self,
+        request: CapabilityRequest,
+        correlation_id: CorrelationId,
+        *,
+        task_id: str | None = None,
     ) -> CapabilityResult[Any]:
         spec = self._registry.get(request.capability)
 
@@ -82,13 +90,14 @@ class CapabilityDispatcher:
         async def run_chain() -> ToolResult:
             result = await self._walk_providers(chain, request, correlation_id, task_id)
             # smuggle the CapabilityResult out through ToolResult.output
-            return ToolResult(ok=result.ok, output=result,
-                              error=result.error)
+            return ToolResult(ok=result.ok, output=result, error=result.error)
 
         tool: Tool = _CapabilityTool(spec.safety_tool, run_chain, preview)
         safety_req = ToolRequest(
-            correlation_id=correlation_id, tool=spec.safety_tool,
-            operation=request.operation, args=dict(request.args),
+            correlation_id=correlation_id,
+            tool=spec.safety_tool,
+            operation=request.operation,
+            args=dict(request.args),
         )
         try:
             tool_result = await self._safety.guard(safety_req, tool)
@@ -103,25 +112,37 @@ class CapabilityDispatcher:
         return CapabilityResult(ok=tool_result.ok, error=tool_result.error)
 
     async def _walk_providers(
-        self, chain: list[Provider], request: CapabilityRequest,
-        correlation_id: CorrelationId, task_id: str | None,
+        self,
+        chain: list[Provider],
+        request: CapabilityRequest,
+        correlation_id: CorrelationId,
+        task_id: str | None,
     ) -> CapabilityResult[Any]:
         last: Exception | None = None
         for i, provider in enumerate(chain):
             try:
-                return await self._attempt(provider, request, correlation_id, task_id,
-                                           fell_back=i > 0)
+                return await self._attempt(provider, request, correlation_id, task_id, fell_back=i > 0)
             except CapabilityError as exc:
                 last = exc
-                _log.warning("cap.fallback", event_type="cap", provider=provider.name,
-                             error=repr(exc), remaining=len(chain) - i - 1)
+                _log.warning(
+                    "cap.fallback",
+                    event_type="cap",
+                    provider=provider.name,
+                    error=repr(exc),
+                    remaining=len(chain) - i - 1,
+                )
                 if not exc.provider_switch_helps and not exc.retryable:
                     break
         return CapabilityResult(ok=False, error=f"all providers failed; last={last!r}")
 
     async def _attempt(
-        self, provider: Provider, request: CapabilityRequest,
-        correlation_id: CorrelationId, task_id: str | None, *, fell_back: bool,
+        self,
+        provider: Provider,
+        request: CapabilityRequest,
+        correlation_id: CorrelationId,
+        task_id: str | None,
+        *,
+        fell_back: bool,
     ) -> CapabilityResult[Any]:
         policy = provider.retry_policy()
         attempt = 0
@@ -134,21 +155,38 @@ class CapabilityDispatcher:
                 latency = int((time.perf_counter() - start) * 1000)
                 self._health.record(provider.name, ok=True, latency_ms=latency)
                 await self._telemetry.record(
-                    correlation_id=str(correlation_id), capability=request.capability,
-                    provider=provider.name, ok=True, latency_ms=latency, task_id=task_id)
+                    correlation_id=str(correlation_id),
+                    capability=request.capability,
+                    provider=provider.name,
+                    ok=True,
+                    latency_ms=latency,
+                    task_id=task_id,
+                )
                 return CapabilityResult(
-                    ok=True, payload=payload, provider=provider.name, latency_ms=latency,
-                    provenance=(Provenance(
-                        provider=provider.name,
-                        source_kind=SourceKind.MCP if provider.name.startswith("mcp:")
-                        else (SourceKind.LOCAL if provider.is_local else SourceKind.WEB)),),
+                    ok=True,
+                    payload=payload,
+                    provider=provider.name,
+                    latency_ms=latency,
+                    provenance=(
+                        Provenance(
+                            provider=provider.name,
+                            source_kind=SourceKind.MCP
+                            if provider.name.startswith("mcp:")
+                            else (SourceKind.LOCAL if provider.is_local else SourceKind.WEB),
+                        ),
+                    ),
                 )
             except Exception as exc:
                 latency = int((time.perf_counter() - start) * 1000)
                 self._health.record(provider.name, ok=False, latency_ms=latency)
                 await self._telemetry.record(
-                    correlation_id=str(correlation_id), capability=request.capability,
-                    provider=provider.name, ok=False, latency_ms=latency, task_id=task_id)
+                    correlation_id=str(correlation_id),
+                    capability=request.capability,
+                    provider=provider.name,
+                    ok=False,
+                    latency_ms=latency,
+                    task_id=task_id,
+                )
                 if attempt >= policy.max_attempts:
                     if isinstance(exc, CapabilityError):
                         raise

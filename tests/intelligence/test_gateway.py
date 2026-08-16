@@ -50,10 +50,12 @@ async def test_complete_rejects_empty_required_capabilities() -> None:
     gateway = _gateway(RecordingRouter())
 
     with pytest.raises(ValueError, match="required_capabilities must not be empty"):
-        await gateway.complete(ModelRequest(
-            correlation_id=CorrelationId("empty-caps"),
-            prompt="hello",
-        ))
+        await gateway.complete(
+            ModelRequest(
+                correlation_id=CorrelationId("empty-caps"),
+                prompt="hello",
+            )
+        )
 
 
 async def test_complete_preserves_explicit_required_capabilities() -> None:
@@ -61,11 +63,13 @@ async def test_complete_preserves_explicit_required_capabilities() -> None:
     gateway = _gateway(router)
     capabilities = frozenset({ModelCapability.REASONING, ModelCapability.TOOL_CALLING})
 
-    response = await gateway.complete(ModelRequest(
-        correlation_id=CorrelationId("explicit-caps"),
-        prompt="use a tool",
-        required_capabilities=capabilities,
-    ))
+    response = await gateway.complete(
+        ModelRequest(
+            correlation_id=CorrelationId("explicit-caps"),
+            prompt="use a tool",
+            required_capabilities=capabilities,
+        )
+    )
 
     assert response.text == "ok"
     assert router.required_capabilities == capabilities

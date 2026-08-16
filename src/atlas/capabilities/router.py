@@ -48,19 +48,25 @@ class CapabilityRouter:
             return frozenset(hits)
         # ambiguous -> one cheap local classification
         try:
-            resp = await self._gw.complete(ModelRequest(
-                correlation_id=correlation_id, system=_CLASSIFY_SYSTEM,
-                prompt=request,
-                required_capabilities=frozenset({
-                    ModelCapability.CLASSIFICATION,
-                    ModelCapability.JSON_GENERATION,
-                }),
-                max_tokens=80, temperature=0.0))
+            resp = await self._gw.complete(
+                ModelRequest(
+                    correlation_id=correlation_id,
+                    system=_CLASSIFY_SYSTEM,
+                    prompt=request,
+                    required_capabilities=frozenset(
+                        {
+                            ModelCapability.CLASSIFICATION,
+                            ModelCapability.JSON_GENERATION,
+                        }
+                    ),
+                    max_tokens=80,
+                    temperature=0.0,
+                )
+            )
             names = json.loads(self._json_array(resp.text))
             return frozenset(Capability(n) for n in names if n in Capability._value2member_map_)
         except Exception as exc:
-            _log.warning("cap_router.classify_failed", event_type="cap",
-                         correlation_id=correlation_id, error=repr(exc))
+            _log.warning("cap_router.classify_failed", event_type="cap", correlation_id=correlation_id, error=repr(exc))
             return frozenset()
 
     @staticmethod

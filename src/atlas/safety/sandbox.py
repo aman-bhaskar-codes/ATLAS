@@ -20,16 +20,24 @@ class SandboxResult:
 
 class Sandbox(Protocol):
     async def run(
-        self, command: list[str], *, mounts: dict[str, str],
-        network: bool = False, timeout_s: float = 60.0,
+        self,
+        command: list[str],
+        *,
+        mounts: dict[str, str],
+        network: bool = False,
+        timeout_s: float = 60.0,
         stdin: bytes | None = None,
     ) -> SandboxResult: ...
 
 
 class NullSandbox:
     async def run(
-        self, command: list[str], *, mounts: dict[str, str],
-        network: bool = False, timeout_s: float = 60.0,
+        self,
+        command: list[str],
+        *,
+        mounts: dict[str, str],
+        network: bool = False,
+        timeout_s: float = 60.0,
         stdin: bytes | None = None,
     ) -> SandboxResult:
         raise SystemError_(

@@ -64,9 +64,7 @@ class CronScheduler:
         # In-process jobs: name -> (cron_expression, callable)
         self._jobs: dict[str, tuple[str, _InProcessJob]] = {}
 
-    def register_job(
-        self, name: str, cron: str, fn: _InProcessJob
-    ) -> None:
+    def register_job(self, name: str, cron: str, fn: _InProcessJob) -> None:
         """Register an in-process recurring job (not persisted to DB).
 
         The job function is called by tick() when the cron expression matches.
@@ -74,11 +72,13 @@ class CronScheduler:
         that shouldn't appear as user-visible schedules.
         """
         self._jobs[name] = (cron, fn)
-        _log.info("scheduler.job_registered", event_type="scheduler",
-                  name=name, cron=cron)
+        _log.info("scheduler.job_registered", event_type="scheduler", name=name, cron=cron)
 
     async def add_schedule(
-        self, *, description: str, cron_expression: str,
+        self,
+        *,
+        description: str,
+        cron_expression: str,
         task_template: dict[str, object],
     ) -> str:
         """Register a new recurring schedule."""
@@ -87,24 +87,20 @@ class CronScheduler:
         await self._db.conn.execute(
             "INSERT INTO schedules(id, description, cron_expression, task_template, "
             "enabled, next_run_ts, created_ts) VALUES (?,?,?,?,?,?,?)",
-            (sid, description, cron_expression, json.dumps(task_template),
-             1, now.isoformat(), now.isoformat()),
+            (sid, description, cron_expression, json.dumps(task_template), 1, now.isoformat(), now.isoformat()),
         )
         await self._db.conn.commit()
-        _log.info("scheduler.added", event_type="scheduler", schedule_id=sid,
-                   description=description, cron=cron_expression)
+        _log.info(
+            "scheduler.added", event_type="scheduler", schedule_id=sid, description=description, cron=cron_expression
+        )
         return sid
 
     async def list_schedules(self) -> list[dict[str, object]]:
-        cur = await self._db.conn.execute(
-            "SELECT * FROM schedules ORDER BY created_ts DESC"
-        )
+        cur = await self._db.conn.execute("SELECT * FROM schedules ORDER BY created_ts DESC")
         return [dict(r) for r in await cur.fetchall()]
 
     async def toggle(self, schedule_id: str, enabled: bool) -> None:
-        await self._db.conn.execute(
-            "UPDATE schedules SET enabled=? WHERE id=?", (int(enabled), schedule_id)
-        )
+        await self._db.conn.execute("UPDATE schedules SET enabled=? WHERE id=?", (int(enabled), schedule_id))
         await self._db.conn.commit()
 
     async def tick(self) -> list[dict[str, object]]:
@@ -115,9 +111,7 @@ class CronScheduler:
         registered in-process jobs whose cron expression matches.
         """
         now = self._clock.now()
-        cur = await self._db.conn.execute(
-            "SELECT * FROM schedules WHERE enabled=1"
-        )
+        cur = await self._db.conn.execute("SELECT * FROM schedules WHERE enabled=1")
         schedules = [dict(r) for r in await cur.fetchall()]
         due: list[dict[str, object]] = []
 
@@ -129,8 +123,12 @@ class CronScheduler:
                     "UPDATE schedules SET last_run_ts=?, next_run_ts=? WHERE id=?",
                     (now.isoformat(), now.isoformat(), sched["id"]),
                 )
-                _log.info("scheduler.triggered", event_type="scheduler",
-                           schedule_id=sched["id"], description=sched["description"])
+                _log.info(
+                    "scheduler.triggered",
+                    event_type="scheduler",
+                    schedule_id=sched["id"],
+                    description=sched["description"],
+                )
 
         if due:
             await self._db.conn.commit()
@@ -142,7 +140,6 @@ class CronScheduler:
                 try:
                     await fn()
                 except Exception as exc:
-                    _log.error("scheduler.job_error", event_type="scheduler",
-                               name=name, error=str(exc))
+                    _log.error("scheduler.job_error", event_type="scheduler", name=name, error=str(exc))
 
         return due

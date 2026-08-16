@@ -20,6 +20,7 @@ def get_atlas(request: Request) -> Atlas:
 
 def get_control_plane(request: Request) -> AtlasControlPlane:
     from atlas.interfaces.api.facade import DefaultAtlasControlPlane
+
     return DefaultAtlasControlPlane(
         atlas=request.app.state.atlas,
         event_store=request.app.state.event_store,
@@ -28,4 +29,5 @@ def get_control_plane(request: Request) -> AtlasControlPlane:
 
 def get_trust_plane(request: Request) -> AtlasTrustPlane:
     from atlas.interfaces.api.trust_facade import DefaultAtlasTrustPlane
+
     return DefaultAtlasTrustPlane(atlas=request.app.state.atlas)

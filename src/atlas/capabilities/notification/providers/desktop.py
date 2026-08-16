@@ -15,14 +15,11 @@ class DesktopProvider:
     async def initialize(self) -> None: ...
     async def health(self) -> bool:
         return True
-        
-    async def send(self, channel: Channel, title: str, body: str,
-                   *, actions: tuple[tuple[str, str], ...] = ()) -> bool:
-        script = f'display notification {shlex.quote(body)} with title {shlex.quote(title)}'
+
+    async def send(self, channel: Channel, title: str, body: str, *, actions: tuple[tuple[str, str], ...] = ()) -> bool:
+        script = f"display notification {shlex.quote(body)} with title {shlex.quote(title)}"
         proc = await asyncio.create_subprocess_exec(
-            "osascript", "-e", script,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL
+            "osascript", "-e", script, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
         )
         await proc.communicate()
         return proc.returncode == 0

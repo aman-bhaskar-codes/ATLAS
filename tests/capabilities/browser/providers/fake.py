@@ -1,4 +1,5 @@
 """FakeBrowserProvider for zero-flake end-to-end testing of the session layer, gates, and recovery."""
+
 from __future__ import annotations
 
 import uuid
@@ -24,14 +25,13 @@ class FakeBrowserProvider(BrowserProvider):
             multi_tab=True,
             device_emulation=False,
             remote=False,
-            vision_native=False
+            vision_native=False,
         )
         self.sessions: dict[str, dict[str, Any]] = {}  # session_id -> {tabs, etc}
-        self.pages: dict[str, dict[str, Any]] = {}     # tab_id -> {url, dom}
+        self.pages: dict[str, dict[str, Any]] = {}  # tab_id -> {url, dom}
         self.log: list[str] = []
 
-    async def launch(self, *, profile: str | None, incognito: bool,
-                     sandbox_spec: Any) -> str:
+    async def launch(self, *, profile: str | None, incognito: bool, sandbox_spec: Any) -> str:
         sid = f"fs_{uuid.uuid4().hex[:8]}"
         self.sessions[sid] = {"tabs": []}
         self.log.append(f"launch:{sid}")

@@ -6,8 +6,10 @@ from atlas.capabilities.browser.providers.base import BrowserProvider
 
 _log = logging.getLogger("atlas.browser.registry.provider")
 
+
 class ProviderRegistry:
     """Manages the available BrowserProvider implementations, ranked by preference."""
+
     def __init__(self) -> None:
         self._providers: dict[str, BrowserProvider] = {}
         self._preferences: dict[str, int] = {}

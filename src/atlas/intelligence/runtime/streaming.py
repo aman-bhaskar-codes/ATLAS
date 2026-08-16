@@ -22,8 +22,13 @@ _log = get_logger("atlas.intel.streaming")
 
 class StreamingRuntime:
     def __init__(
-        self, *, providers: ProviderRegistry, health: HealthMonitor,
-        governor: CostGovernor, telemetry: Telemetry, model_timeout_s: float = 120.0,
+        self,
+        *,
+        providers: ProviderRegistry,
+        health: HealthMonitor,
+        governor: CostGovernor,
+        telemetry: Telemetry,
+        model_timeout_s: float = 120.0,
     ) -> None:
         self._providers = providers
         self._health = health
@@ -44,8 +49,10 @@ class StreamingRuntime:
         # fallback handles it if it fails early.
         try:
             stream = provider.stream(
-                model=spec.provider_model, messages=req.messages,
-                max_tokens=req.max_tokens, temperature=req.temperature,
+                model=spec.provider_model,
+                messages=req.messages,
+                max_tokens=req.max_tokens,
+                temperature=req.temperature,
             )
             async for chunk in stream:
                 yield chunk
@@ -57,7 +64,7 @@ class StreamingRuntime:
 
         latency = int((time.perf_counter() - start) * 1000)
         self._health.record(spec.provider, ok=True, latency_ms=latency)
-        
+
         # calculate approximate usage
         approx_in = sum(len(m.content) for m in req.messages) // 4
         # Since we don't get exact output tokens from all providers in stream mode easily,

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 from atlas.infra.db import Database
@@ -24,8 +24,10 @@ _log = get_logger("atlas.cache")
 # Local protocols — avoids importing atlas.memory (layer boundary violation)
 # ---------------------------------------------------------------------------
 
+
 class _VectorHit:
     """Structural match for atlas.memory.vectorstore.VectorHit."""
+
     ref: str
     score: float
     text: str
@@ -49,6 +51,7 @@ class _VectorStore(Protocol):
 # SemanticCache
 # ---------------------------------------------------------------------------
 
+
 class SemanticCache:
     def __init__(self, db: Database, vectors: _VectorStore, embedder: _Embedder) -> None:
         self._db = db
@@ -65,7 +68,7 @@ class SemanticCache:
             return None
 
         prompt_hash = self._hash_prompt(req)
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
 
         # 1. Exact match fast-path
         cur = await self._db.conn.execute(
@@ -109,7 +112,7 @@ class SemanticCache:
         time_sensitive = {"calendar", "mail", "web", "browser", "search", "contacts"}
         req_caps = set(req.required_capabilities)
         ttl = timedelta(minutes=5) if req_caps & time_sensitive else timedelta(days=1)
-        expires_ts = (datetime.now(timezone.utc) + ttl).isoformat()
+        expires_ts = (datetime.now(UTC) + ttl).isoformat()
 
         prompt_hash = self._hash_prompt(req)
         prompt_text = "\n".join(f"{m.role}: {m.content}" for m in req.messages)
@@ -120,7 +123,7 @@ class SemanticCache:
         await self._vectors.upsert(ref, prompt_text, embedding)
 
         resp_json = resp.model_dump_json()
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
 
         await self._db.conn.execute(
             "INSERT INTO semantic_cache "

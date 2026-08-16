@@ -30,14 +30,13 @@ class SecretStore:
         token = self._fernet.encrypt(plaintext.encode()).decode()
         assert self._db.conn is not None
         await self._db.conn.execute(
-            "INSERT OR REPLACE INTO secrets(id, ciphertext) VALUES (?, ?)",
-            (credential_id, token))
+            "INSERT OR REPLACE INTO secrets(id, ciphertext) VALUES (?, ?)", (credential_id, token)
+        )
         await self._db.conn.commit()
 
     async def get(self, credential_id: str) -> str | None:
         assert self._db.conn is not None
-        cur = await self._db.conn.execute(
-            "SELECT ciphertext FROM secrets WHERE id=?", (credential_id,))
+        cur = await self._db.conn.execute("SELECT ciphertext FROM secrets WHERE id=?", (credential_id,))
         row = await cur.fetchone()
         if row is None:
             return None

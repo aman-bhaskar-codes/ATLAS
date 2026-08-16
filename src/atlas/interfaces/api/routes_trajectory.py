@@ -19,12 +19,12 @@ GET  /api/v1/trajectory/stats           Aggregate trajectory stats
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from atlas.infra.ids import CorrelationId, TaskId
 from atlas.infra.logging import get_logger
 
 _log = get_logger("atlas.api.trajectory")
@@ -39,6 +39,7 @@ router = APIRouter()
 
 class TrajectoryOut(BaseModel):
     """Complete trajectory with execution history."""
+
     id: str
     task_id: str
     correlation_id: str
@@ -66,8 +67,9 @@ class TrajectoryOut(BaseModel):
     observations: list[dict[str, Any]] | None = None
 
 
-class TrajectoryS ummaryOut(BaseModel):
+class TrajectorySummaryOut(BaseModel):
     """Lightweight trajectory summary without actions/observations."""
+
     id: str
     task_id: str
     goal: str
@@ -80,6 +82,7 @@ class TrajectoryS ummaryOut(BaseModel):
 
 class DecisionTraceOut(BaseModel):
     """A single decision point record."""
+
     id: str
     task_id: str
     ts: str
@@ -96,6 +99,7 @@ class DecisionTraceOut(BaseModel):
 
 class FailureRecordOut(BaseModel):
     """A structured failure record."""
+
     id: str
     task_id: str
     ts: str
@@ -111,6 +115,7 @@ class FailureRecordOut(BaseModel):
 
 class FailurePatternOut(BaseModel):
     """Aggregated failure pattern statistics."""
+
     category: str
     component: str
     occurrence_count: int
@@ -121,6 +126,7 @@ class FailurePatternOut(BaseModel):
 
 class ExperienceOut(BaseModel):
     """An extracted lesson from trajectory analysis."""
+
     id: str
     trajectory_id: str
     task_id: str
@@ -139,6 +145,7 @@ class ExperienceOut(BaseModel):
 
 class TrajectoryStatsOut(BaseModel):
     """Aggregate trajectory statistics."""
+
     total_trajectories: int
     successful_trajectories: int
     failed_trajectories: int
@@ -172,21 +179,21 @@ async def query_trajectories(
     """
     atlas = request.app.state.atlas
     trajectory_store = atlas.trajectory_store
-    
+
     from atlas.memory.trajectory import TrajectoryQuery
-    
+
     query = TrajectoryQuery(
-        task_id=task_id,
-        correlation_id=correlation_id,
+        task_id=TaskId(task_id) if task_id else None,
+        correlation_id=CorrelationId(correlation_id) if correlation_id else None,
         success=success,
         min_replan_count=min_replan_count,
         min_steps=min_steps,
         min_latency_ms=min_latency_ms,
         limit=limit,
     )
-    
+
     trajectories = await trajectory_store.query_trajectories(query)
-    
+
     return [
         TrajectorySummaryOut(
             id=t.id,
@@ -214,12 +221,12 @@ async def get_trajectory(
     """
     atlas = request.app.state.atlas
     trajectory_store = atlas.trajectory_store
-    
+
     trajectory = await trajectory_store.get_trajectory(trajectory_id)
-    
+
     if not trajectory:
         raise HTTPException(status_code=404, detail="Trajectory not found")
-    
+
     return TrajectoryOut(
         id=trajectory.id,
         task_id=trajectory.task_id,
@@ -260,12 +267,12 @@ async def get_trajectory_by_task(
     """
     atlas = request.app.state.atlas
     trajectory_store = atlas.trajectory_store
-    
+
     trajectory = await trajectory_store.get_trajectory_by_task(task_id)
-    
+
     if not trajectory:
         raise HTTPException(status_code=404, detail="Trajectory not found for task")
-    
+
     return TrajectoryOut(
         id=trajectory.id,
         task_id=trajectory.task_id,
@@ -305,9 +312,9 @@ async def get_recent_trajectories(
     """
     atlas = request.app.state.atlas
     trajectory_store = atlas.trajectory_store
-    
+
     trajectories = await trajectory_store.get_recent_trajectories(limit=limit)
-    
+
     return [
         TrajectorySummaryOut(
             id=t.id,
@@ -334,9 +341,9 @@ async def get_failed_trajectories(
     """
     atlas = request.app.state.atlas
     trajectory_store = atlas.trajectory_store
-    
+
     trajectories = await trajectory_store.get_failed_trajectories(limit=limit)
-    
+
     return [
         TrajectorySummaryOut(
             id=t.id,
@@ -371,16 +378,16 @@ async def query_decision_traces(
     """
     atlas = request.app.state.atlas
     trajectory_store = atlas.trajectory_store
-    
+
     from atlas.memory.trajectory import DecisionOutcome, DecisionPoint
-    
+
     traces = await trajectory_store.get_decision_traces(
         task_id=task_id,
         decision_point=DecisionPoint(decision_point) if decision_point else None,
         outcome=DecisionOutcome(outcome) if outcome else None,
         limit=limit,
     )
-    
+
     return [
         DecisionTraceOut(
             id=t.id,
@@ -420,9 +427,9 @@ async def query_failure_records(
     """
     atlas = request.app.state.atlas
     trajectory_store = atlas.trajectory_store
-    
+
     from atlas.memory.trajectory import FailureCategory
-    
+
     failures = await trajectory_store.get_failure_records(
         task_id=task_id,
         category=FailureCategory(category) if category else None,
@@ -430,7 +437,7 @@ async def query_failure_records(
         recovered_only=recovered_only,
         limit=limit,
     )
-    
+
     return [
         FailureRecordOut(
             id=f.id,
@@ -461,14 +468,14 @@ async def get_failure_patterns(
     """
     atlas = request.app.state.atlas
     trajectory_store = atlas.trajectory_store
-    
+
     from atlas.memory.trajectory import FailureCategory
-    
+
     patterns = await trajectory_store.get_failure_patterns(
         category=FailureCategory(category),
         min_occurrences=min_occurrences,
     )
-    
+
     return [
         FailurePatternOut(
             category=str(p["category"]),
@@ -477,8 +484,7 @@ async def get_failure_patterns(
             recovery_count=int(p["recovery_count"]),
             recovery_success_count=int(p["recovery_success_count"]),
             recovery_rate=(
-                float(p["recovery_success_count"]) / float(p["recovery_count"])
-                if p["recovery_count"] > 0 else 0.0
+                float(p["recovery_success_count"]) / float(p["recovery_count"]) if p["recovery_count"] > 0 else 0.0
             ),
         )
         for p in patterns
@@ -506,9 +512,9 @@ async def query_experiences(
     """
     atlas = request.app.state.atlas
     trajectory_store = atlas.trajectory_store
-    
+
     from atlas.memory.trajectory import ExperienceCategory, ExperienceQuery
-    
+
     query = ExperienceQuery(
         category=ExperienceCategory(category) if category else None,
         min_confidence=min_confidence,
@@ -516,9 +522,9 @@ async def query_experiences(
         min_success_rate=min_success_rate,
         limit=limit,
     )
-    
+
     experiences = await trajectory_store.query_experiences(query)
-    
+
     return [
         ExperienceOut(
             id=e.id,
@@ -553,10 +559,10 @@ async def get_trajectory_stats(request: Request) -> TrajectoryStatsOut:
     """
     atlas = request.app.state.atlas
     db = atlas.db
-    
+
     # Run queries in parallel
     import asyncio
-    
+
     total, successful, failed, total_replans, total_steps, total_latency, total_exp, total_fail = await asyncio.gather(
         _count_trajectories(db),
         _count_successful(db),
@@ -567,10 +573,10 @@ async def get_trajectory_stats(request: Request) -> TrajectoryStatsOut:
         _count_experiences(db),
         _count_failures(db),
     )
-    
+
     avg_steps = float(total_steps) / float(total) if total > 0 else 0.0
     avg_latency = float(total_latency) / float(total) if total > 0 else 0.0
-    
+
     return TrajectoryStatsOut(
         total_trajectories=total,
         successful_trajectories=successful,
@@ -625,9 +631,7 @@ async def _sum_latency(db: Any) -> int:
 
 
 async def _count_experiences(db: Any) -> int:
-    cur = await db.conn.execute(
-        "SELECT COUNT(*) FROM experiences WHERE superseded_by IS NULL"
-    )
+    cur = await db.conn.execute("SELECT COUNT(*) FROM experiences WHERE superseded_by IS NULL")
     row = await cur.fetchone()
     return int(row[0]) if row else 0
 

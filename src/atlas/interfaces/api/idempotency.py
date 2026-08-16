@@ -1,4 +1,5 @@
 """Small durable idempotency boundary for Trust Center mutations."""
+
 from __future__ import annotations
 
 import hashlib

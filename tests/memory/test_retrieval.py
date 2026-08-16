@@ -9,14 +9,28 @@ from atlas.memory.types import Episode, EpisodeKind, FactKind, SemanticFact
 class FakeSem:
     async def semantic_search(self, query: str, k: int) -> list[SemanticFact]:
         now = datetime(2026, 1, 1, tzinfo=UTC)
-        return [SemanticFact(id="f1", text="prefers dark mode", kind=FactKind.PREFERENCE,
-                             created_ts=now, updated_ts=now, salience=0.9)]
+        return [
+            SemanticFact(
+                id="f1",
+                text="prefers dark mode",
+                kind=FactKind.PREFERENCE,
+                created_ts=now,
+                updated_ts=now,
+                salience=0.9,
+            )
+        ]
 
 
 class FakeEpi:
     async def keyword_search(self, terms: list[str], limit: int) -> list[Episode]:
-        return [Episode(correlation_id="c", ts=datetime(2026, 1, 1, tzinfo=UTC),
-                        kind=EpisodeKind.MESSAGE, content="opened VS Code")]
+        return [
+            Episode(
+                correlation_id="c",
+                ts=datetime(2026, 1, 1, tzinfo=UTC),
+                kind=EpisodeKind.MESSAGE,
+                content="opened VS Code",
+            )
+        ]
 
     async def semantic_search(self, query: str, limit: int, min_salience: float = 0.0) -> list[Episode]:
         return []

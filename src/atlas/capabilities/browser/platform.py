@@ -1,4 +1,5 @@
 """BrowserPlatform: The top-level facade for the Browser & Web Automation capability."""
+
 from __future__ import annotations
 
 import logging
@@ -30,7 +31,7 @@ _log = logging.getLogger("atlas.browser.platform")
 
 class BrowserPlatform:
     """Facade for the complete browser automation capability.
-    
+
     Callers work in terms of high-level domain objects (PageHandle, Locator, etc.)
     and never interact with providers directly. Engine + safety tiers are encapsulated.
     """
@@ -67,9 +68,7 @@ class BrowserPlatform:
 
     # --- Sessions ---
 
-    async def create_session(
-        self, *, profile: str | None = None, incognito: bool = False
-    ) -> BrowserSession:
+    async def create_session(self, *, profile: str | None = None, incognito: bool = False) -> BrowserSession:
         return await self._sessions.acquire(profile=profile, incognito=incognito)
 
     async def close_session(self, session_id: str) -> None:
@@ -102,14 +101,10 @@ class BrowserPlatform:
 
     # --- Read engines (Tier-0/1) ---
 
-    async def get_accessibility_tree(
-        self, handle: PageHandle, cid: CorrelationId
-    ) -> AccessibilityNode:
+    async def get_accessibility_tree(self, handle: PageHandle, cid: CorrelationId) -> AccessibilityNode:
         return await self._dom.get_accessibility_tree(handle, cid)
 
-    async def capture_screenshot(
-        self, handle: PageHandle, full_page: bool, cid: CorrelationId
-    ) -> Screenshot:
+    async def capture_screenshot(self, handle: PageHandle, full_page: bool, cid: CorrelationId) -> Screenshot:
         return await self._screen.capture(handle, full_page, cid)
 
     async def extract_web_page(self, handle: PageHandle, cid: CorrelationId) -> WebPage:
@@ -120,14 +115,10 @@ class BrowserPlatform:
 
     # --- Mutating engines (Tier-2+) ---
 
-    async def click(
-        self, handle: PageHandle, locator: Locator, cid: CorrelationId
-    ) -> Any:
+    async def click(self, handle: PageHandle, locator: Locator, cid: CorrelationId) -> Any:
         return await self._click.click(handle, locator, cid)
 
-    async def type_text(
-        self, handle: PageHandle, locator: Locator, text: str, cid: CorrelationId
-    ) -> Any:
+    async def type_text(self, handle: PageHandle, locator: Locator, text: str, cid: CorrelationId) -> Any:
         return await self._type.type_text(handle, locator, text, cid)
 
     async def submit_form(
@@ -140,14 +131,13 @@ class BrowserPlatform:
         # Submit engine expects a FormModel; form_id is passed as a simple string here.
         # Callers with a full FormModel should use submit_engine.submit() directly.
         from atlas.capabilities.browser.domain.content import FormModel
+
         form = FormModel(id=form_id, action_url="", fields=[], submits_externally=False)  # type: ignore
         return await self._submit.submit(handle, form, data, cid)
 
     # --- Locator / Network helpers ---
 
-    async def resolve_locator(
-        self, handle: PageHandle, locator: Locator
-    ) -> list[Any]:
+    async def resolve_locator(self, handle: PageHandle, locator: Locator) -> list[Any]:
         return await self._locate.resolve(handle, locator)
 
     async def start_network_capture(self, handle: PageHandle, cid: CorrelationId) -> None:

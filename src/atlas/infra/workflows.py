@@ -25,8 +25,12 @@ class WorkflowStore:
         self._clock = clock
 
     async def save_template(
-        self, *, name: str, description: str,
-        steps: list[dict[str, object]], variables: list[str] | None = None,
+        self,
+        *,
+        name: str,
+        description: str,
+        steps: list[dict[str, object]],
+        variables: list[str] | None = None,
         derived_from: list[str] | None = None,
     ) -> str:
         """Save a workflow template derived from a successful task execution."""
@@ -34,14 +38,18 @@ class WorkflowStore:
         await self._db.conn.execute(
             "INSERT INTO workflow_templates(id, name, description, steps, "
             "variables, derived_from, created_ts) VALUES (?,?,?,?,?,?,?)",
-            (wid, name, description,
-             json.dumps(steps), json.dumps(variables or []),
-             json.dumps(derived_from or []),
-             self._clock.now().isoformat()),
+            (
+                wid,
+                name,
+                description,
+                json.dumps(steps),
+                json.dumps(variables or []),
+                json.dumps(derived_from or []),
+                self._clock.now().isoformat(),
+            ),
         )
         await self._db.conn.commit()
-        _log.info("workflow.saved", event_type="workflow", id=wid, name=name,
-                   steps=len(steps))
+        _log.info("workflow.saved", event_type="workflow", id=wid, name=name, steps=len(steps))
         return wid
 
     async def find_similar(self, description: str, limit: int = 5) -> list[dict[str, object]]:
@@ -53,8 +61,7 @@ class WorkflowStore:
         conditions = " OR ".join(["LOWER(description) LIKE ?" for _ in keywords])
         params = [f"%{kw}%" for kw in keywords]
         cur = await self._db.conn.execute(
-            f"SELECT * FROM workflow_templates WHERE {conditions} "
-            f"ORDER BY use_count DESC, success_rate DESC LIMIT ?",
+            f"SELECT * FROM workflow_templates WHERE {conditions} ORDER BY use_count DESC, success_rate DESC LIMIT ?",
             (*params, limit),
         )
         return [dict(r) for r in await cur.fetchall()]
@@ -83,15 +90,11 @@ class WorkflowStore:
 
     async def list_templates(self, limit: int = 50) -> list[dict[str, object]]:
         """List all workflow templates, sorted by usage."""
-        cur = await self._db.conn.execute(
-            "SELECT * FROM workflow_templates ORDER BY use_count DESC LIMIT ?", (limit,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM workflow_templates ORDER BY use_count DESC LIMIT ?", (limit,))
         return [dict(r) for r in await cur.fetchall()]
 
     async def get(self, template_id: str) -> dict[str, object] | None:
         """Get a specific workflow template by ID."""
-        cur = await self._db.conn.execute(
-            "SELECT * FROM workflow_templates WHERE id=?", (template_id,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM workflow_templates WHERE id=?", (template_id,))
         row = await cur.fetchone()
         return dict(row) if row else None

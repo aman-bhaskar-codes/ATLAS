@@ -26,7 +26,7 @@ class FakeExtractionEngine:
             title="Test",
             text="Text",
             markdown="Markdown",
-            provenance=Provenance(provider="fake", source_kind=SourceKind.WEB, retrieved_ts=datetime.now(UTC), uri=url)
+            provenance=Provenance(provider="fake", source_kind=SourceKind.WEB, retrieved_ts=datetime.now(UTC), uri=url),
         )
 
 
@@ -53,16 +53,16 @@ async def test_crawler_engine_basic() -> None:
     nav = FakeNavEngine()
     extract = FakeExtractionEngine()
     pages = FakePageManager()
-    
+
     crawler = CrawlerEngine(
         nav_engine=nav,  # type: ignore
         extract_engine=extract,  # type: ignore
         page_manager=pages,  # type: ignore
     )
-    
+
     cid = CorrelationId("test")
     result = await crawler.crawl("sess-1", "https://example.com", depth=1, budget=2, cid=cid)
-    
+
     assert result.seed_url == "https://example.com"
     assert len(result.articles) == 2
     assert len(result.visited_urls) == 2

@@ -25,7 +25,11 @@ class FilesystemTool:
     name = "filesystem"
 
     def __init__(
-        self, *, read_globs: list[str], write_globs: list[str], sandbox: Sandbox,
+        self,
+        *,
+        read_globs: list[str],
+        write_globs: list[str],
+        sandbox: Sandbox,
     ) -> None:
         self._read_globs = read_globs
         self._write_globs = write_globs
@@ -87,7 +91,9 @@ class FilesystemTool:
         rp = resolve_in_allowlist(path, self._read_globs)
         result = await self._sandbox.run(
             ["rg", "--line-number", "--no-heading", query, rp.mount_target],
-            mounts={str(rp.mount_source): rp.mount_target}, network=False, timeout_s=30.0,
+            mounts={str(rp.mount_source): rp.mount_target},
+            network=False,
+            timeout_s=30.0,
         )
         # rg exit 1 == no matches (not an error)
         if result.exit_code not in (0, 1):
@@ -99,26 +105,33 @@ class FilesystemTool:
         # Safe write: use 'tee' with an explicit path argument — no shell.
         result = await self._sandbox.run(
             ["tee", rp.container],
-            mounts={str(rp.mount_source): rp.mount_target}, network=False, timeout_s=15.0,
-            stdin=content.encode("utf-8")
+            mounts={str(rp.mount_source): rp.mount_target},
+            network=False,
+            timeout_s=15.0,
+            stdin=content.encode("utf-8"),
         )
         if result.exit_code != 0:
             return ToolResult(ok=False, error=result.stderr_tail or "write failed")
         return ToolResult(
-            ok=True, output={"path": str(rp.host), "bytes": len(content)},
-            side_effects=(SideEffect(kind="file_write", target=str(rp.host),
-                                     detail=f"{len(content)} bytes", reversible=False),),
+            ok=True,
+            output={"path": str(rp.host), "bytes": len(content)},
+            side_effects=(
+                SideEffect(kind="file_write", target=str(rp.host), detail=f"{len(content)} bytes", reversible=False),
+            ),
         )
 
     async def _delete(self, path: str) -> ToolResult:
         rp = resolve_in_allowlist(path, self._write_globs)
         result = await self._sandbox.run(
             ["rm", "-rf", rp.container],
-            mounts={str(rp.mount_source): rp.mount_target}, network=False, timeout_s=15.0,
+            mounts={str(rp.mount_source): rp.mount_target},
+            network=False,
+            timeout_s=15.0,
         )
         if result.exit_code != 0:
             return ToolResult(ok=False, error=result.stderr_tail or "delete failed")
         return ToolResult(
-            ok=True, output={"path": str(rp.host)},
+            ok=True,
+            output={"path": str(rp.host)},
             side_effects=(SideEffect(kind="file_delete", target=str(rp.host), reversible=False),),
         )

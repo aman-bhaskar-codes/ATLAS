@@ -1,4 +1,5 @@
 """Reader engine: distills HTML into Article models."""
+
 from __future__ import annotations
 
 import re
@@ -13,14 +14,14 @@ class ReaderEngine:
             return ""
 
         # Remove script and style blocks
-        text = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", html, flags=re.DOTALL | re.IGNORECASE)
         # Remove nav, header, footer
-        text = re.sub(r'<(nav|header|footer)[^>]*>.*?</\1>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r"<(nav|header|footer)[^>]*>.*?</\1>", "", text, flags=re.DOTALL | re.IGNORECASE)
         # Strip all other HTML tags
-        text = re.sub(r'<[^>]+>', ' ', text)
+        text = re.sub(r"<[^>]+>", " ", text)
         # Normalize whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
-        
+        text = re.sub(r"\s+", " ", text).strip()
+
         return text
 
     def extract_markdown(self, html: str, title: str) -> str:

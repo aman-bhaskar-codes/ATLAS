@@ -16,7 +16,7 @@ class CredentialNotFound(IdentityError):  # noqa: N818
 
 
 class CredentialExpired(IdentityError):  # noqa: N818
-    retryable = True            # after refresh
+    retryable = True  # after refresh
 
 
 class RefreshFailed(IdentityError):  # noqa: N818

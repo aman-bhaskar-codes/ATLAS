@@ -16,9 +16,9 @@ from pathlib import Path
 @dataclass(frozen=True)
 class ResolvedPath:
     host: Path
-    container: str            # path inside the sandbox, e.g. /work/<name>
-    mount_source: Path        # host dir to bind-mount
-    mount_target: str         # container dir for the mount
+    container: str  # path inside the sandbox, e.g. /work/<name>
+    mount_source: Path  # host dir to bind-mount
+    mount_target: str  # container dir for the mount
 
 
 class PathError(ValueError):
@@ -33,6 +33,5 @@ def resolve_in_allowlist(raw: str, globs: list[str], *, workdir: str = "/work") 
             # Mount the parent dir read/write; expose the file at /work/<name>.
             mount_source = p.parent
             container = f"{workdir}/{p.name}"
-            return ResolvedPath(host=p, container=container,
-                                mount_source=mount_source, mount_target=workdir)
+            return ResolvedPath(host=p, container=container, mount_source=mount_source, mount_target=workdir)
     raise PathError(f"{p} is outside allowed paths")

@@ -1,4 +1,3 @@
-
 from atlas.infra.ids import CorrelationId
 from atlas.infra.types import ModelCapability, ModelRequest, ModelResponse, ModelTarget
 from atlas.orchestration.router import Router
@@ -16,14 +15,17 @@ class FakeGateway:
 
 
 async def test_router_parses_capabilities() -> None:
-    gw = FakeGateway('{"needs_tools":true,"needs_reasoning":true,"needs_cloud":false,'
-                     '"needs_confirmation":true,"max_risk":"high"}')
+    gw = FakeGateway(
+        '{"needs_tools":true,"needs_reasoning":true,"needs_cloud":false,"needs_confirmation":true,"max_risk":"high"}'
+    )
     caps = await Router(gw).route("delete my temp files", CorrelationId("c"))  # type: ignore[arg-type]
     assert caps.needs_tools and caps.needs_confirmation and caps.max_risk == RiskLevel.HIGH
-    assert gw.requests[0].required_capabilities == frozenset({
-        ModelCapability.CLASSIFICATION,
-        ModelCapability.JSON_GENERATION,
-    })
+    assert gw.requests[0].required_capabilities == frozenset(
+        {
+            ModelCapability.CLASSIFICATION,
+            ModelCapability.JSON_GENERATION,
+        }
+    )
 
 
 async def test_router_fails_cautious() -> None:

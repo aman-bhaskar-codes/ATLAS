@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
 from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
@@ -29,7 +29,7 @@ router = APIRouter()
 
 class EventStreamDependencies:
     """Shared dependencies for event streaming routes."""
-    
+
     def __init__(self, manager: ConnectionManager, db: Database) -> None:
         self.manager = manager
         self.db = db
@@ -49,9 +49,9 @@ def set_dependencies(manager: ConnectionManager, db: Database) -> None:
 async def global_event_stream(websocket: WebSocket) -> None:
     """
     Global event firehose - all events from all tasks.
-    
+
     Used by: Web Dashboard for observability across all running tasks.
-    
+
     Protocol:
     - Server sends JSON events as they occur
     - Client can send pong responses to ping keepalive
@@ -60,51 +60,48 @@ async def global_event_stream(websocket: WebSocket) -> None:
     if _deps is None:
         await websocket.close(code=1011, reason="Server not initialized")
         return
-    
+
     client_id = await _deps.manager.connect(websocket)
-    _log.info("ws.global_stream_connected", event_type="websocket", 
-              client_id=client_id)
-    
+    _log.info("ws.global_stream_connected", event_type="websocket", client_id=client_id)
+
     try:
         # Keep connection alive - client can send pong or close
         while True:
             try:
                 # Wait for client message (pong, close, etc)
                 data = await websocket.receive_text()
-                
+
                 # Handle pong response
                 if data == "pong":
                     continue
-                
+
                 # Handle client-initiated close
                 if data == "close":
                     break
-                    
+
             except WebSocketDisconnect:
                 break
             except Exception as exc:
-                _log.error("ws.receive_error", event_type="websocket",
-                         client_id=client_id, error=str(exc))
+                _log.error("ws.receive_error", event_type="websocket", client_id=client_id, error=str(exc))
                 break
-    
+
     finally:
         await _deps.manager.disconnect(client_id)
-        _log.info("ws.global_stream_disconnected", event_type="websocket",
-                 client_id=client_id)
+        _log.info("ws.global_stream_disconnected", event_type="websocket", client_id=client_id)
 
 
 @router.websocket("/ws/tasks/{task_id}/stream")
 async def task_scoped_stream(websocket: WebSocket, task_id: str) -> None:
     """
     Task-scoped event stream - only events for a specific task.
-    
+
     Used by: CLI 'atlas task watch <id>' for focused task monitoring.
-    
+
     Features:
     - Replays historical events from DB first (catch up on reconnect)
     - Then streams live events matching task_id
     - Automatically filters out events from other tasks
-    
+
     Protocol:
     - Server sends historical events first (marked with "historical": true)
     - Then sends live events as they occur
@@ -113,72 +110,71 @@ async def task_scoped_stream(websocket: WebSocket, task_id: str) -> None:
     if _deps is None:
         await websocket.close(code=1011, reason="Server not initialized")
         return
-    
+
     client_id = await _deps.manager.connect(websocket)
-    _log.info("ws.task_stream_connected", event_type="websocket",
-             client_id=client_id, task_id=task_id)
-    
+    _log.info("ws.task_stream_connected", event_type="websocket", client_id=client_id, task_id=task_id)
+
     # Set filter for this client to only receive events for this task
     _deps.manager.set_filter(client_id, task_id=task_id)
-    
+
     try:
         # 1. Send historical events first (replay from event_queue)
         historical_events = await _fetch_task_history(task_id)
-        
+
         for event in historical_events:
             event["historical"] = True
             try:
                 await websocket.send_json(event)
             except Exception as exc:
-                _log.error("ws.send_historical_failed", event_type="websocket",
-                          client_id=client_id, error=str(exc))
+                _log.error("ws.send_historical_failed", event_type="websocket", client_id=client_id, error=str(exc))
                 await _deps.manager.disconnect(client_id)
                 return
-        
+
         # Send replay complete marker
-        await websocket.send_json({
-            "type": "replay_complete",
-            "task_id": task_id,
-            "historical_count": len(historical_events)
-        })
-        
-        _log.info("ws.history_replayed", event_type="websocket",
-                 client_id=client_id, task_id=task_id, count=len(historical_events))
-        
+        await websocket.send_json(
+            {"type": "replay_complete", "task_id": task_id, "historical_count": len(historical_events)}
+        )
+
+        _log.info(
+            "ws.history_replayed",
+            event_type="websocket",
+            client_id=client_id,
+            task_id=task_id,
+            count=len(historical_events),
+        )
+
         # 2. Now switch to live streaming (ConnectionManager handles this)
         # Keep connection alive
         while True:
             try:
                 data = await websocket.receive_text()
-                
+
                 if data == "pong":
                     continue
-                
+
                 if data == "close":
                     break
-                    
+
             except WebSocketDisconnect:
                 break
             except Exception as exc:
-                _log.error("ws.receive_error", event_type="websocket",
-                         client_id=client_id, error=str(exc))
+                _log.error("ws.receive_error", event_type="websocket", client_id=client_id, error=str(exc))
                 break
-    
+
     finally:
         await _deps.manager.disconnect(client_id)
-        _log.info("ws.task_stream_disconnected", event_type="websocket",
-                 client_id=client_id, task_id=task_id)
+        _log.info("ws.task_stream_disconnected", event_type="websocket", client_id=client_id, task_id=task_id)
 
 
 async def _fetch_task_history(task_id: str) -> list[dict[str, Any]]:
     """
     Fetch historical events for a task from event_log.
-    
+
     Returns events in chronological order (oldest first).
     """
     if _deps is None:
         return []
-    
+
     try:
         cursor = await _deps.db.conn.execute(
             """
@@ -188,23 +184,23 @@ async def _fetch_task_history(task_id: str) -> list[dict[str, Any]]:
             ORDER BY id ASC
             LIMIT 1000
             """,
-            (task_id,)
+            (task_id,),
         )
         rows = await cursor.fetchall()
-        
+
         events = []
         for row in rows:
             import json
+
             event_data = json.loads(row["payload_json"])
             event_data["_topic"] = row["topic"]
             event_data["_timestamp"] = row["created_ts"]
             events.append(event_data)
-        
+
         return events
-    
+
     except Exception as exc:
-        _log.error("ws.fetch_history_failed", event_type="websocket",
-                  task_id=task_id, error=str(exc))
+        _log.error("ws.fetch_history_failed", event_type="websocket", task_id=task_id, error=str(exc))
         return []
 
 
@@ -212,19 +208,20 @@ async def _fetch_task_history(task_id: str) -> list[dict[str, Any]]:
 async def websocket_stats() -> dict[str, Any]:
     """
     Get WebSocket connection statistics (HTTP endpoint for monitoring).
-    
+
     Returns:
         - total_connections: number of active WebSocket clients
         - clients: list of client IDs
     """
     if _deps is None:
         return {"error": "Server not initialized"}
-    
+
     return _deps.manager.get_stats()
 
 
 class EventSearchResult(BaseModel):
     """Search results with pagination metadata."""
+
     events: list[dict[str, Any]]
     total: int
     limit: int
@@ -238,44 +235,44 @@ async def _search_events(
     from_ts: str | None = None,
     to_ts: str | None = None,
     limit: int = 100,
-    offset: int = 0
+    offset: int = 0,
 ) -> EventSearchResult:
     """
     Search event_log with filters and pagination.
-    
+
     Builds dynamic SQL query based on provided filters and returns
     paginated results with total count.
     """
     import json
-    
+
     # Build WHERE clause dynamically
     conditions = []
     params = []
-    
+
     if task_id:
         conditions.append("task_id = ?")
         params.append(task_id)
-    
+
     if topic:
         conditions.append("topic LIKE ?")
         params.append(f"%{topic}%")
-    
+
     if from_ts:
         conditions.append("created_ts >= ?")
         params.append(from_ts)
-    
+
     if to_ts:
         conditions.append("created_ts <= ?")
         params.append(to_ts)
-    
+
     where_clause = " AND ".join(conditions) if conditions else "1=1"
-    
+
     # Count total matches
     count_query = f"SELECT COUNT(*) as total FROM event_log WHERE {where_clause}"
     cursor = await db.conn.execute(count_query, params)
     row = await cursor.fetchone()
     total = row["total"] if row else 0
-    
+
     # Fetch paginated results
     query = f"""
         SELECT topic, payload_json, task_id, correlation_id, created_ts
@@ -284,9 +281,9 @@ async def _search_events(
         ORDER BY created_ts DESC
         LIMIT ? OFFSET ?
     """
-    cursor = await db.conn.execute(query, params + [limit, offset])
+    cursor = await db.conn.execute(query, [*params, limit, offset])
     rows = await cursor.fetchall()
-    
+
     # Parse JSON payloads
     events = []
     for row in rows:
@@ -296,13 +293,8 @@ async def _search_events(
         event_data["_correlation_id"] = row["correlation_id"]
         event_data["_timestamp"] = row["created_ts"]
         events.append(event_data)
-    
-    return EventSearchResult(
-        events=events,
-        total=total,
-        limit=limit,
-        offset=offset
-    )
+
+    return EventSearchResult(events=events, total=total, limit=limit, offset=offset)
 
 
 @router.get("/api/v1/events/search")
@@ -316,10 +308,10 @@ async def search_events(
 ) -> dict[str, Any]:
     """
     Search historical events with filters and pagination.
-    
+
     Query the event_log table with optional filters for forensic analysis,
     debugging, and system-wide event exploration.
-    
+
     Examples:
         /search?task_id=abc123
         /search?topic=tool.completed&limit=50
@@ -328,19 +320,12 @@ async def search_events(
     """
     if _deps is None:
         return {"error": "Server not initialized"}
-    
-    _log.info("events.search", event_type="api",
-             task_id=task_id, topic=topic, limit=limit, offset=offset)
-    
+
+    _log.info("events.search", event_type="api", task_id=task_id, topic=topic, limit=limit, offset=offset)
+
     try:
         result = await _search_events(
-            _deps.db,
-            task_id=task_id,
-            topic=topic,
-            from_ts=from_ts,
-            to_ts=to_ts,
-            limit=limit,
-            offset=offset
+            _deps.db, task_id=task_id, topic=topic, from_ts=from_ts, to_ts=to_ts, limit=limit, offset=offset
         )
         return result.model_dump()
     except Exception as exc:

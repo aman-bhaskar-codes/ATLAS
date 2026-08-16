@@ -16,6 +16,7 @@ class ContextSpec(BaseModel):
     mobile: bool = False
     geolocation: tuple[float, float] | None = None
 
+
 class SessionState(BaseModel):
     model_config = {"frozen": True}
     session_id: str
@@ -23,11 +24,13 @@ class SessionState(BaseModel):
     auth_state: AuthState
     storage_state: Any | None = None
 
+
 class Profile(BaseModel):
     model_config = {"frozen": True}
     name: str
     persistent: bool = True
     credential_id: str | None = None
+
 
 class BrowserSession(BaseModel):
     model_config = {"frozen": True}

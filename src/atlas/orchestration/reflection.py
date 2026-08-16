@@ -22,6 +22,7 @@ from atlas.orchestration.types import Action, Observation
 @dataclass(frozen=True)
 class ReflectionResult:
     """Outcome of reflecting on an action's result."""
+
     succeeded: bool
     learnings: list[str] = field(default_factory=list)
     should_adjust_plan: bool = False
@@ -47,4 +48,3 @@ class NoOpReflection:
     async def reflect(self, action: Action, observation: Observation, context: str) -> ReflectionResult:
         succeeded = observation.success if hasattr(observation, "success") else True
         return ReflectionResult(succeeded=succeeded)
-

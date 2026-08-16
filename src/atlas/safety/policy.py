@@ -29,8 +29,10 @@ class KillSwitchPolicy:
     def apply(self, decision: SafetyDecision) -> SafetyDecision:
         if self._ks.is_active():
             return SafetyDecision(
-                decision="deny", tier=Tier.BLOCK,
-                reason="kill switch active", matched_rule="policy:killswitch",
+                decision="deny",
+                tier=Tier.BLOCK,
+                reason="kill switch active",
+                matched_rule="policy:killswitch",
             )
         return decision
 

@@ -28,7 +28,7 @@ class AnthropicProvider:
         # Anthropic extracts system messages to a top-level parameter
         system_msg = next((m.content for m in messages if m.role == Role.SYSTEM), "")
         chat_msgs = [{"role": m.role.value, "content": m.content} for m in messages if m.role != Role.SYSTEM]
-        
+
         payload: dict[str, Any] = {
             "model": model,
             "max_tokens": max_tokens,
@@ -41,18 +41,19 @@ class AnthropicProvider:
         return payload
 
     async def complete(
-        self, *, model: str, messages: Sequence[Message],
-        max_tokens: int, temperature: float,
-        usd_in: float, usd_out: float,
+        self,
+        *,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
+        usd_in: float,
+        usd_out: float,
     ) -> ProviderCompletion:
         try:
             r = await self._client.post(
                 f"{self._base}/messages",
-                headers={
-                    "x-api-key": self._key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
-                },
+                headers={"x-api-key": self._key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
                 json=self._payload(model, messages, max_tokens, temperature, False),
             )
             if r.status_code == 429:
@@ -62,7 +63,7 @@ class AnthropicProvider:
             raise ProviderError(f"{self.name} http {exc.response.status_code}") from exc
         except httpx.HTTPError as exc:
             raise ProviderError(f"{self.name} transport: {exc}") from exc
-            
+
         data = r.json()
         text = data["content"][0]["text"]
         u = data.get("usage", {})
@@ -71,17 +72,18 @@ class AnthropicProvider:
         return ProviderCompletion(str(text), Usage(input_tokens=it, output_tokens=ot, usd=usd))
 
     async def stream(
-        self, *, model: str, messages: Sequence[Message],
-        max_tokens: int, temperature: float,
+        self,
+        *,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
     ) -> AsyncIterator[StreamChunk]:
         try:
             async with self._client.stream(
-                "POST", f"{self._base}/messages",
-                headers={
-                    "x-api-key": self._key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
-                },
+                "POST",
+                f"{self._base}/messages",
+                headers={"x-api-key": self._key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
                 json=self._payload(model, messages, max_tokens, temperature, True),
             ) as r:
                 if r.status_code == 429:
@@ -95,7 +97,7 @@ class AnthropicProvider:
                         data = json.loads(body)
                     except json.JSONDecodeError:
                         continue
-                        
+
                     typ = data.get("type")
                     if typ == "content_block_delta":
                         delta = data.get("delta", {}).get("text", "")

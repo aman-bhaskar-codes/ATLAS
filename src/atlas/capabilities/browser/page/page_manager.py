@@ -1,4 +1,5 @@
 """PageManager handles tab lifecycle and routes calls to the appropriate provider."""
+
 from __future__ import annotations
 
 from typing import Any

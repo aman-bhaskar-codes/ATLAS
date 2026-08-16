@@ -10,8 +10,10 @@ class BoundingBox(BaseModel):
     width: float
     height: float
 
+
 class ElementRef(BaseModel):
     """A reference to an element on a page."""
+
     model_config = {"frozen": True}
     id: str
     tag_name: str = ""
@@ -19,8 +21,10 @@ class ElementRef(BaseModel):
     attributes: dict[str, str] = {}
     bounding_box: BoundingBox | None = None
 
+
 class DOMNode(BaseModel):
     """Raw DOM node representation (rarely used directly by intelligence)."""
+
     model_config = {"frozen": True}
     node_name: str
     node_type: int
@@ -28,8 +32,10 @@ class DOMNode(BaseModel):
     attributes: dict[str, str] = {}
     children: tuple[DOMNode, ...] = ()
 
+
 class AccessibilityNode(BaseModel):
     """Accessibility tree node (used for grounding and reasoning)."""
+
     model_config = {"frozen": True}
     role: str
     name: str = ""

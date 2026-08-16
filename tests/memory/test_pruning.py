@@ -14,7 +14,9 @@ class FakeGateway:
     async def complete(self, req) -> None:  # type: ignore
         class Resp:
             text = "summarized!"
+
         return Resp()  # type: ignore
+
 
 @pytest.fixture
 async def prune_db(tmp_path: Path) -> AsyncIterator[Database]:
@@ -23,11 +25,12 @@ async def prune_db(tmp_path: Path) -> AsyncIterator[Database]:
     yield db
     await db.stop()
 
+
 @pytest.mark.asyncio
 async def test_pruning_compacts_old_episodes(prune_db: Database) -> None:
     clock = SystemClock()
     ids = UuidGenerator()
-    pruner = Pruner(db=prune_db, gateway=FakeGateway(), ids=ids, clock=clock) # type: ignore
+    pruner = Pruner(db=prune_db, gateway=FakeGateway(), ids=ids, clock=clock)  # type: ignore
     # an old episode, consolidated, low salience
     old_ts = clock.now() - timedelta(days=40)
     await prune_db.conn.execute(
@@ -36,10 +39,10 @@ async def test_pruning_compacts_old_episodes(prune_db: Database) -> None:
         ("c1", old_ts.isoformat(), "message", "old msg", 0.1, 1, 5),
     )
     await prune_db.conn.commit()
-    
+
     stats = await pruner.run()
     assert stats["archived"] == 1
-    
+
     cur = await prune_db.conn.execute("SELECT COUNT(*) as c FROM episodes")
     count_row = await cur.fetchone()
     assert count_row is not None

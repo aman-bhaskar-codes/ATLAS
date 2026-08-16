@@ -1,4 +1,5 @@
 """Browser error taxonomy — typed so recovery/retry/provider-switch decisions are explicit."""
+
 from __future__ import annotations
 
 from atlas.capabilities.errors import CapabilityError
@@ -31,6 +32,7 @@ class VisionError(BrowserError): ...
 
 class SessionError(BrowserError):
     provider_switch_helps = True
+
 
 class ProviderError(BrowserError): ...
 

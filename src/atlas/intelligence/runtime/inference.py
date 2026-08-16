@@ -31,9 +31,14 @@ _log = get_logger("atlas.intel.inference")
 
 class InferenceRuntime:
     def __init__(
-        self, *, providers: ProviderRegistry, health: HealthMonitor,
-        governor: CostGovernor, telemetry: Telemetry, model_timeout_s: float = 120.0,
-        tracker: "LLMCallTracker | None" = None,
+        self,
+        *,
+        providers: ProviderRegistry,
+        health: HealthMonitor,
+        governor: CostGovernor,
+        telemetry: Telemetry,
+        model_timeout_s: float = 120.0,
+        tracker: LLMCallTracker | None = None,
     ) -> None:
         self._providers = providers
         self._health = health
@@ -52,19 +57,25 @@ class InferenceRuntime:
             await self._governor.check(projected, task_id=req.task_id)
 
         start = time.perf_counter()
-        
+
         async def _call() -> InferenceResponse:
             comp = await provider.complete(
-                model=spec.provider_model, messages=req.messages,
-                max_tokens=req.max_tokens, temperature=req.temperature,
-                usd_in=spec.usd_per_1m_input, usd_out=spec.usd_per_1m_output,
+                model=spec.provider_model,
+                messages=req.messages,
+                max_tokens=req.max_tokens,
+                temperature=req.temperature,
+                usd_in=spec.usd_per_1m_input,
+                usd_out=spec.usd_per_1m_output,
             )
             latency = int((time.perf_counter() - start) * 1000)
             return InferenceResponse(
-                text=comp.text, model_id=spec.id, provider=spec.provider,
-                usage=comp.usage, latency_ms=latency,
+                text=comp.text,
+                model_id=spec.id,
+                provider=spec.provider,
+                usage=comp.usage,
+                latency_ms=latency,
             )
-            
+
         try:
             resp = await self._retry.run(_call)
         except (ProviderError, RateLimitError) as exc:

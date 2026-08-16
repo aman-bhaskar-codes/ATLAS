@@ -41,14 +41,14 @@ _log = get_logger("atlas.memory.trajectory")
 
 class TrajectoryStore:
     """Async trajectory storage with comprehensive querying.
-    
+
     Performance targets:
     - Save trajectory: < 50ms (one transaction, 4 tables)
     - Query by task_id: < 10ms (indexed)
     - Query failures: < 20ms (indexed by category)
     - Query experiences: < 30ms (indexed by confidence/reuse)
     """
-    
+
     def __init__(
         self,
         *,
@@ -72,7 +72,7 @@ class TrajectoryStore:
 
     async def save_trajectory(self, trajectory: Trajectory) -> str:
         """Save complete trajectory with all related records.
-        
+
         Returns trajectory ID. Target: < 50ms.
         """
         # Serialize complex fields
@@ -81,7 +81,7 @@ class TrajectoryStore:
         decision_trace_ids = json.dumps(list(trajectory.decision_traces))
         failure_record_ids = json.dumps(list(trajectory.failure_records))
         plan_steps_json = json.dumps(list(trajectory.plan_steps))
-        
+
         await self._db.conn.execute(
             """
             INSERT INTO trajectories (
@@ -94,21 +94,36 @@ class TrajectoryStore:
             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
-                trajectory.id, trajectory.task_id, trajectory.correlation_id,
-                trajectory.request, trajectory.goal, plan_steps_json,
-                trajectory.risk_level, trajectory.plan_confidence,
-                actions_json, observations_json,
-                decision_trace_ids, failure_record_ids, trajectory.replan_count,
+                trajectory.id,
+                trajectory.task_id,
+                trajectory.correlation_id,
+                trajectory.request,
+                trajectory.goal,
+                plan_steps_json,
+                trajectory.risk_level,
+                trajectory.plan_confidence,
+                actions_json,
+                observations_json,
+                decision_trace_ids,
+                failure_record_ids,
+                trajectory.replan_count,
                 int(trajectory.verification_passed) if trajectory.verification_passed is not None else None,
                 trajectory.verification_score,
-                int(trajectory.success), trajectory.answer, trajectory.error,
-                trajectory.steps_taken, trajectory.latency_ms, trajectory.tokens_used,
-                trajectory.cost_usd, trajectory.model_calls, trajectory.tool_calls,
-                trajectory.created_ts.isoformat(), trajectory.completed_ts.isoformat(),
+                int(trajectory.success),
+                trajectory.answer,
+                trajectory.error,
+                trajectory.steps_taken,
+                trajectory.latency_ms,
+                trajectory.tokens_used,
+                trajectory.cost_usd,
+                trajectory.model_calls,
+                trajectory.tool_calls,
+                trajectory.created_ts.isoformat(),
+                trajectory.completed_ts.isoformat(),
             ),
         )
         await self._db.conn.commit()
-        
+
         _log.info(
             "trajectory.saved",
             event_type="memory",
@@ -118,40 +133,43 @@ class TrajectoryStore:
             steps=trajectory.steps_taken,
             latency_ms=trajectory.latency_ms,
         )
-        
+
         # Emit event for WebSocket broadcast
         if self._bus:
-            from atlas.infra.bus import MemoryBusEvent
             import asyncio
-            asyncio.create_task(self._bus.publish("memory", MemoryBusEvent(
-                correlation_id=trajectory.correlation_id,
-                task_id=trajectory.task_id,
-                kind="trajectory.saved",
-                memory_type="trajectory",
-                count=1,
-                items=[f"Trajectory {trajectory.id}: {trajectory.goal[:50]}"],
-                metadata={
-                    "success": trajectory.success,
-                    "steps": trajectory.steps_taken,
-                    "replan_count": trajectory.replan_count,
-                },
-            )))
-        
+
+            from atlas.infra.bus import MemoryBusEvent
+
+            asyncio.create_task(
+                self._bus.publish(
+                    "memory",
+                    MemoryBusEvent(
+                        correlation_id=trajectory.correlation_id,
+                        task_id=trajectory.task_id,
+                        kind="trajectory.saved",
+                        memory_type="trajectory",
+                        count=1,
+                        items=[f"Trajectory {trajectory.id}: {trajectory.goal[:50]}"],
+                        metadata={
+                            "success": trajectory.success,
+                            "steps": trajectory.steps_taken,
+                            "replan_count": trajectory.replan_count,
+                        },
+                    ),
+                )
+            )
+
         return trajectory.id
 
     async def get_trajectory(self, trajectory_id: str) -> Trajectory | None:
         """Get trajectory by ID. Target: < 10ms."""
-        cur = await self._db.conn.execute(
-            "SELECT * FROM trajectories WHERE id = ?", (trajectory_id,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM trajectories WHERE id = ?", (trajectory_id,))
         row = await cur.fetchone()
         return self._trajectory_from_row(row) if row else None
 
     async def get_trajectory_by_task(self, task_id: str) -> Trajectory | None:
         """Get trajectory by task_id (one-to-one). Target: < 10ms."""
-        cur = await self._db.conn.execute(
-            "SELECT * FROM trajectories WHERE task_id = ?", (task_id,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM trajectories WHERE task_id = ?", (task_id,))
         row = await cur.fetchone()
         return self._trajectory_from_row(row) if row else None
 
@@ -159,59 +177,56 @@ class TrajectoryStore:
         """Query trajectories with filters. Target: < 50ms."""
         conditions = []
         params: list[str | int | float] = []
-        
+
         if query.task_id:
             conditions.append("task_id = ?")
             params.append(query.task_id)
-        
+
         if query.correlation_id:
             conditions.append("correlation_id = ?")
             params.append(query.correlation_id)
-        
+
         if query.success is not None:
             conditions.append("success = ?")
             params.append(int(query.success))
-        
+
         if query.min_replan_count > 0:
             conditions.append("replan_count >= ?")
             params.append(query.min_replan_count)
-        
+
         if query.min_steps > 0:
             conditions.append("steps_taken >= ?")
             params.append(query.min_steps)
-        
+
         if query.min_latency_ms > 0:
             conditions.append("latency_ms >= ?")
             params.append(query.min_latency_ms)
-        
+
         if query.from_ts:
             conditions.append("completed_ts >= ?")
             params.append(query.from_ts.isoformat())
-        
+
         if query.to_ts:
             conditions.append("completed_ts <= ?")
             params.append(query.to_ts.isoformat())
-        
+
         where_clause = " AND ".join(conditions) if conditions else "1=1"
         params.append(query.limit)
-        
+
         sql = f"""
             SELECT * FROM trajectories
             WHERE {where_clause}
             ORDER BY completed_ts DESC
             LIMIT ?
         """
-        
+
         cur = await self._db.conn.execute(sql, tuple(params))
         rows = await cur.fetchall()
         return [self._trajectory_from_row(r) for r in rows]
 
     async def get_recent_trajectories(self, limit: int = 20) -> list[Trajectory]:
         """Get most recent trajectories. Target: < 20ms."""
-        cur = await self._db.conn.execute(
-            "SELECT * FROM trajectories ORDER BY completed_ts DESC LIMIT ?",
-            (limit,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM trajectories ORDER BY completed_ts DESC LIMIT ?", (limit,))
         rows = await cur.fetchall()
         return [self._trajectory_from_row(r) for r in rows]
 
@@ -224,7 +239,7 @@ class TrajectoryStore:
             ORDER BY completed_ts DESC
             LIMIT ?
             """,
-            (limit,)
+            (limit,),
         )
         rows = await cur.fetchall()
         return [self._trajectory_from_row(r) for r in rows]
@@ -237,7 +252,7 @@ class TrajectoryStore:
         """Save decision trace. Target: < 10ms."""
         options_json = json.dumps(list(trace.options_considered))
         context_json = json.dumps(trace.context)
-        
+
         await self._db.conn.execute(
             """
             INSERT INTO decision_traces (
@@ -247,15 +262,24 @@ class TrajectoryStore:
             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
-                trace.id, trace.task_id, trace.correlation_id,
-                trace.ts.isoformat(), trace.decision_point.value,
-                options_json, trace.chosen_option, trace.rationale,
-                context_json, trace.outcome.value, trace.outcome_detail,
-                trace.confidence, trace.latency_ms, trace.cost_usd,
+                trace.id,
+                trace.task_id,
+                trace.correlation_id,
+                trace.ts.isoformat(),
+                trace.decision_point.value,
+                options_json,
+                trace.chosen_option,
+                trace.rationale,
+                context_json,
+                trace.outcome.value,
+                trace.outcome_detail,
+                trace.confidence,
+                trace.latency_ms,
+                trace.cost_usd,
             ),
         )
         await self._db.conn.commit()
-        
+
         _log.debug(
             "decision_trace.saved",
             event_type="memory",
@@ -263,7 +287,7 @@ class TrajectoryStore:
             decision_point=trace.decision_point.value,
             chosen=trace.chosen_option,
         )
-        
+
         return trace.id
 
     async def get_decision_traces(
@@ -276,29 +300,29 @@ class TrajectoryStore:
         """Query decision traces. Target: < 20ms."""
         conditions = []
         params: list[str | int] = []
-        
+
         if task_id:
             conditions.append("task_id = ?")
             params.append(task_id)
-        
+
         if decision_point:
             conditions.append("decision_point = ?")
             params.append(decision_point.value)
-        
+
         if outcome:
             conditions.append("outcome = ?")
             params.append(outcome.value)
-        
+
         where_clause = " AND ".join(conditions) if conditions else "1=1"
         params.append(limit)
-        
+
         sql = f"""
             SELECT * FROM decision_traces
             WHERE {where_clause}
             ORDER BY ts DESC
             LIMIT ?
         """
-        
+
         cur = await self._db.conn.execute(sql, tuple(params))
         rows = await cur.fetchall()
         return [self._decision_trace_from_row(r) for r in rows]
@@ -328,7 +352,7 @@ class TrajectoryStore:
         """Save failure record for taxonomy building. Target: < 10ms."""
         context_json = json.dumps(failure.context)
         similar_ids_json = json.dumps(list(failure.similar_failure_ids))
-        
+
         await self._db.conn.execute(
             """
             INSERT INTO failure_records (
@@ -339,16 +363,25 @@ class TrajectoryStore:
             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
-                failure.id, failure.task_id, failure.correlation_id,
-                failure.ts.isoformat(), failure.category.value, failure.step,
-                failure.component, failure.error_message, context_json,
-                int(failure.recovered), failure.recovery_method,
-                int(failure.recovery_succeeded), similar_ids_json,
-                failure.mitigation_suggested, int(failure.mitigation_applied),
+                failure.id,
+                failure.task_id,
+                failure.correlation_id,
+                failure.ts.isoformat(),
+                failure.category.value,
+                failure.step,
+                failure.component,
+                failure.error_message,
+                context_json,
+                int(failure.recovered),
+                failure.recovery_method,
+                int(failure.recovery_succeeded),
+                similar_ids_json,
+                failure.mitigation_suggested,
+                int(failure.mitigation_applied),
             ),
         )
         await self._db.conn.commit()
-        
+
         _log.info(
             "failure.recorded",
             event_type="memory",
@@ -357,7 +390,7 @@ class TrajectoryStore:
             component=failure.component,
             recovered=failure.recovered,
         )
-        
+
         return failure.id
 
     async def get_failure_records(
@@ -371,32 +404,32 @@ class TrajectoryStore:
         """Query failure records. Target: < 20ms."""
         conditions = []
         params: list[str | int] = []
-        
+
         if task_id:
             conditions.append("task_id = ?")
             params.append(task_id)
-        
+
         if category:
             conditions.append("category = ?")
             params.append(category.value)
-        
+
         if component:
             conditions.append("component = ?")
             params.append(component)
-        
+
         if recovered_only:
             conditions.append("recovered = 1 AND recovery_succeeded = 1")
-        
+
         where_clause = " AND ".join(conditions) if conditions else "1=1"
         params.append(limit)
-        
+
         sql = f"""
             SELECT * FROM failure_records
             WHERE {where_clause}
             ORDER BY ts DESC
             LIMIT ?
         """
-        
+
         cur = await self._db.conn.execute(sql, tuple(params))
         rows = await cur.fetchall()
         return [self._failure_record_from_row(r) for r in rows]
@@ -432,7 +465,7 @@ class TrajectoryStore:
         supporting_actions_json = json.dumps(list(experience.supporting_actions))
         supporting_observations_json = json.dumps(list(experience.supporting_observations))
         counter_examples_json = json.dumps(list(experience.counter_examples))
-        
+
         await self._db.conn.execute(
             """
             INSERT INTO experiences (
@@ -444,20 +477,28 @@ class TrajectoryStore:
             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
-                experience.id, experience.trajectory_id, experience.task_id,
-                experience.correlation_id, experience.category.value,
-                experience.lesson_text, experience.applicability_context,
-                experience.confidence, supporting_actions_json,
-                supporting_observations_json, counter_examples_json,
-                experience.reuse_count, experience.success_rate,
-                experience.avg_improvement_ms, experience.avg_cost_savings_usd,
+                experience.id,
+                experience.trajectory_id,
+                experience.task_id,
+                experience.correlation_id,
+                experience.category.value,
+                experience.lesson_text,
+                experience.applicability_context,
+                experience.confidence,
+                supporting_actions_json,
+                supporting_observations_json,
+                counter_examples_json,
+                experience.reuse_count,
+                experience.success_rate,
+                experience.avg_improvement_ms,
+                experience.avg_cost_savings_usd,
                 experience.extracted_ts.isoformat(),
                 experience.last_applied_ts.isoformat() if experience.last_applied_ts else None,
                 experience.superseded_by,
             ),
         )
         await self._db.conn.commit()
-        
+
         _log.info(
             "experience.saved",
             event_type="memory",
@@ -465,14 +506,12 @@ class TrajectoryStore:
             category=experience.category.value,
             confidence=experience.confidence,
         )
-        
+
         return experience.id
 
     async def get_experience(self, experience_id: str) -> Experience | None:
         """Get experience by ID. Target: < 5ms."""
-        cur = await self._db.conn.execute(
-            "SELECT * FROM experiences WHERE id = ?", (experience_id,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM experiences WHERE id = ?", (experience_id,))
         row = await cur.fetchone()
         return self._experience_from_row(row) if row else None
 
@@ -480,37 +519,37 @@ class TrajectoryStore:
         """Query experiences with filters. Target: < 30ms."""
         conditions = ["superseded_by IS NULL"]  # Exclude superseded
         params: list[str | int | float] = []
-        
+
         if query.category:
             conditions.append("category = ?")
             params.append(query.category.value)
-        
+
         if query.min_confidence > 0:
             conditions.append("confidence >= ?")
             params.append(query.min_confidence)
-        
+
         if query.min_reuse_count > 0:
             conditions.append("reuse_count >= ?")
             params.append(query.min_reuse_count)
-        
+
         if query.min_success_rate > 0:
             conditions.append("success_rate >= ?")
             params.append(query.min_success_rate)
-        
+
         if query.applicability_context:
             conditions.append("applicability_context LIKE ?")
             params.append(f"%{query.applicability_context}%")
-        
+
         where_clause = " AND ".join(conditions)
         params.append(query.limit)
-        
+
         sql = f"""
             SELECT * FROM experiences
             WHERE {where_clause}
             ORDER BY confidence DESC, reuse_count DESC
             LIMIT ?
         """
-        
+
         cur = await self._db.conn.execute(sql, tuple(params))
         rows = await cur.fetchall()
         return [self._experience_from_row(r) for r in rows]
@@ -533,11 +572,15 @@ class TrajectoryStore:
             ) VALUES (?,?,?,?,?,?)
             """,
             (
-                experience_id, task_id, self._clock.now().isoformat(),
-                int(success), improvement_ms, cost_savings_usd,
+                experience_id,
+                task_id,
+                self._clock.now().isoformat(),
+                int(success),
+                improvement_ms,
+                cost_savings_usd,
             ),
         )
-        
+
         # Update experience stats
         await self._db.conn.execute(
             """
@@ -563,7 +606,10 @@ class TrajectoryStore:
             """,
             (
                 self._clock.now().isoformat(),
-                experience_id, experience_id, experience_id, experience_id,
+                experience_id,
+                experience_id,
+                experience_id,
+                experience_id,
             ),
         )
         await self._db.conn.commit()
@@ -587,14 +633,14 @@ class TrajectoryStore:
     @staticmethod
     def _trajectory_from_row(row: object) -> Trajectory:
         d = dict(row)  # type: ignore[call-overload]
-        
+
         # Deserialize JSON fields
         actions = tuple(ActionRecord(**a) for a in json.loads(d["actions"]))
         observations = tuple(ObservationRecord(**o) for o in json.loads(d["observations"]))
         decision_traces = tuple(json.loads(d["decision_trace_ids"]))
         failure_records = tuple(json.loads(d["failure_record_ids"]))
         plan_steps = tuple(json.loads(d["plan_steps"]))
-        
+
         return Trajectory(
             id=d["id"],
             task_id=d["task_id"],

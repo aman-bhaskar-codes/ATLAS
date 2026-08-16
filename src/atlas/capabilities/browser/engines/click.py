@@ -1,4 +1,5 @@
 """Click engine handles Tier-1/2 clicks."""
+
 from __future__ import annotations
 
 from typing import Any

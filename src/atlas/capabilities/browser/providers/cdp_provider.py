@@ -1,4 +1,5 @@
 """PlaywrightProvider adapts the playwright async API to the BrowserProvider protocol."""
+
 from __future__ import annotations
 
 import asyncio
@@ -50,21 +51,19 @@ class CDPProvider:
     async def _ensure_browser(self) -> None:
         if self._browser is not None:
             return
-        
+
         # Start a local Chrome process with remote debugging enabled
         # In a real CDP setup, this would be a remote endpoint like browserbase or a running docker container.
         # For the test, we launch it via playwright's executable path in a subprocess to expose the CDP port.
         self._pw = await async_playwright().start()
         exe_path = self._pw.chromium.executable_path
-        
-        self._subproc = subprocess.Popen([
-            exe_path,
-            "--headless=new",
-            "--remote-debugging-port=9222",
-            "--disable-gpu",
-            "--no-sandbox"
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
+
+        self._subproc = subprocess.Popen(
+            [exe_path, "--headless=new", "--remote-debugging-port=9222", "--disable-gpu", "--no-sandbox"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
         # Wait for the port to bind
         for _ in range(10):
             await asyncio.sleep(0.5)
@@ -196,6 +195,7 @@ class CDPProvider:
     def _resolve_locator(self, page: Any, locator: Locator) -> Any:
         """Convert domain Locator to a playwright Locator object."""
         from atlas.capabilities.browser.domain.locator import LocatorKind
+
         kind, value = locator.kind, locator.value
         if kind == LocatorKind.CSS:
             return page.locator(value)
@@ -232,9 +232,7 @@ class CDPProvider:
         page = self._get_page(session_id, tab_id)
         await self._resolve_locator(page, locator).first.click()
 
-    async def type_text(
-        self, session_id: str, tab_id: str, locator: Locator, text: str
-    ) -> None:
+    async def type_text(self, session_id: str, tab_id: str, locator: Locator, text: str) -> None:
         page = self._get_page(session_id, tab_id)
         await self._resolve_locator(page, locator).first.fill(text)
 
@@ -289,9 +287,7 @@ class CDPProvider:
     async def drain_network_events(self, session_id: str, tab_id: str) -> list[Any]:
         return []
 
-    async def await_download(
-        self, session_id: str, tab_id: str
-    ) -> tuple[str, str]:
+    async def await_download(self, session_id: str, tab_id: str) -> tuple[str, str]:
         raise NotImplementedError
 
     # ------------------------------------------------------------------ #

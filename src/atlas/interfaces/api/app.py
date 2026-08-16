@@ -36,16 +36,17 @@ if TYPE_CHECKING:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Build and start Atlas on startup; close it on shutdown."""
+    from atlas.interfaces.api import routes_events
     from atlas.interfaces.api.event_store import TaskEventStore
     from atlas.interfaces.api.websocket import ConnectionManager, EventBroadcaster
-    from atlas.interfaces.api import routes_events
     from atlas.orchestration.events import OrchestratorEvent
 
     atlas = await build()
     await atlas.start()
-    
+
     # Run a startup backup in the background
     from atlas.infra.backup import create_backup
+
     asyncio.create_task(create_backup(atlas.settings))
 
     # ── Phase 3: wire event bus into each memory subsystem so MemoryEvents
@@ -74,9 +75,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             safe_metadata={
                 k: str(v)
                 for k, v in event.metadata.items()
-                if k not in {"summary", "capability", "operation", "provider", "tier",
-                              "requires_approval", "steps", "risk", "confidence",
-                              "tool", "args", "ok", "error"}
+                if k
+                not in {
+                    "summary",
+                    "capability",
+                    "operation",
+                    "provider",
+                    "tier",
+                    "requires_approval",
+                    "steps",
+                    "risk",
+                    "confidence",
+                    "tool",
+                    "args",
+                    "ok",
+                    "error",
+                }
             },
             ts=atlas.clock.now().isoformat(),
         )
@@ -90,6 +104,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # ── Phase 3: dedicated memory WebSocket manager + broadcaster ──────────
     from atlas.interfaces.api.websocket import MemoryBroadcaster
+
     memory_ws_manager = ConnectionManager()
     memory_ws_broadcaster = MemoryBroadcaster(atlas.bus, memory_ws_manager)
     memory_ws_broadcaster.start()
@@ -99,10 +114,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Set dependencies for memory routes
     from atlas.interfaces.api import routes_memory
+
     routes_memory.set_dependencies(memory_ws_manager, atlas.db, atlas)
-    
+
     # Phase 2: Connect trajectory store to event bus
-    if hasattr(atlas, 'trajectory_store') and atlas.trajectory_store:
+    if hasattr(atlas, "trajectory_store") and atlas.trajectory_store:
         atlas.trajectory_store.set_bus(atlas.bus)
 
     # SSE connections subscribe per-task; we store queues in a shared dict.
@@ -112,7 +128,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async def _on_orchestrator_event_bus(event: Event) -> None:
         if not isinstance(event, OrchestratorEvent):
             return
-            
+
         # Notify SSE clients
         queues = sse_queues.get(event.task_id, [])
         for q in queues:
@@ -164,16 +180,16 @@ def create_app() -> FastAPI:
     # Register routers (imported here to keep the factory free of circular deps)
     from atlas.interfaces.api.events import router as events_router
     from atlas.interfaces.api.routes_approvals import router as approvals_router
+    from atlas.interfaces.api.routes_attachments import router as attachments_router
     from atlas.interfaces.api.routes_capabilities import router as capabilities_router
+    from atlas.interfaces.api.routes_events import router as events_ws_router
     from atlas.interfaces.api.routes_feedback import router as feedback_router
     from atlas.interfaces.api.routes_knowledge import router as knowledge_router
     from atlas.interfaces.api.routes_memory import router as memory_router
     from atlas.interfaces.api.routes_runtime import router as runtime_router
     from atlas.interfaces.api.routes_tasks import router as tasks_router
-    from atlas.interfaces.api.routes_trust import router as trust_router
-    from atlas.interfaces.api.routes_attachments import router as attachments_router
-    from atlas.interfaces.api.routes_events import router as events_ws_router
     from atlas.interfaces.api.routes_trajectory import router as trajectory_router  # Phase 2
+    from atlas.interfaces.api.routes_trust import router as trust_router
 
     # Each API path now has exactly one owning router — see routes_tasks.py
     # and routes_trust.py module docstrings/comments for the split:
@@ -191,12 +207,12 @@ def create_app() -> FastAPI:
     app.include_router(approvals_router, prefix="/api/v1")
     app.include_router(capabilities_router, prefix="/api/v1")
     app.include_router(feedback_router, prefix="/api/v1")
-    app.include_router(knowledge_router, prefix="")   # already has /api/v1 prefix
-    app.include_router(memory_router, prefix="")      # already has /api/v1 prefix and /ws prefix
+    app.include_router(knowledge_router, prefix="")  # already has /api/v1 prefix
+    app.include_router(memory_router, prefix="")  # already has /api/v1 prefix and /ws prefix
     app.include_router(trajectory_router, prefix="")  # Phase 2: already has /api/v1 prefix
     app.include_router(attachments_router, prefix="/api/v1")
     app.include_router(trust_router, prefix="")
     app.include_router(events_router, prefix="/api/v1")
-    app.include_router(events_ws_router, prefix="")   # WebSocket routes include /ws/ prefix
+    app.include_router(events_ws_router, prefix="")  # WebSocket routes include /ws/ prefix
 
     return app

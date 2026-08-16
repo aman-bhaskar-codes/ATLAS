@@ -26,8 +26,12 @@ AuditHook = Callable[..., Awaitable[None]]
 
 class IdentityPlatform:
     def __init__(
-        self, *, store: SecretStore, db: Database,
-        strategies: dict[CredentialKind, AuthStrategy], audit: AuditHook,
+        self,
+        *,
+        store: SecretStore,
+        db: Database,
+        strategies: dict[CredentialKind, AuthStrategy],
+        audit: AuditHook,
     ) -> None:
         self._store = store
         self._db = db
@@ -40,24 +44,31 @@ class IdentityPlatform:
         await self._db.conn.execute(
             "INSERT OR REPLACE INTO identities(id, kind, provider_hint, expires_at, "
             "scopes, rotated_ts) VALUES (?,?,?,?,?,?)",
-            (credential.id, credential.kind.value, credential.provider_hint,
-             credential.expires_at.isoformat() if credential.expires_at else None,
-             ",".join(credential.scopes),
-             credential.rotated_ts.isoformat() if credential.rotated_ts else None))
+            (
+                credential.id,
+                credential.kind.value,
+                credential.provider_hint,
+                credential.expires_at.isoformat() if credential.expires_at else None,
+                ",".join(credential.scopes),
+                credential.rotated_ts.isoformat() if credential.rotated_ts else None,
+            ),
+        )
         await self._db.conn.commit()
 
     async def _load(self, credential_id: str) -> Credential:
         assert self._db.conn is not None
-        cur = await self._db.conn.execute(
-            "SELECT * FROM identities WHERE id=?", (credential_id,))
+        cur = await self._db.conn.execute("SELECT * FROM identities WHERE id=?", (credential_id,))
         row = await cur.fetchone()
         secret = await self._store.get(credential_id)
         if row is None or secret is None:
             raise CredentialNotFound(f"no credential {credential_id!r}")
         return Credential(
-            id=row["id"], kind=CredentialKind(row["kind"]),
-            provider_hint=row["provider_hint"], secret=secret,
-            scopes=tuple(row["scopes"].split(",")) if row["scopes"] else ())
+            id=row["id"],
+            kind=CredentialKind(row["kind"]),
+            provider_hint=row["provider_hint"],
+            secret=secret,
+            scopes=tuple(row["scopes"].split(",")) if row["scopes"] else (),
+        )
 
     async def verify_store(self) -> tuple[bool, int]:
         """Verify every stored secret decrypts and no row equals its plaintext."""
@@ -78,11 +89,15 @@ class IdentityPlatform:
         strategy = self._strategies[credential.kind]
         if not await strategy.valid(credential):
             credential = await strategy.refresh(credential)
-            await self.put_credential(credential)   # persist rotation
+            await self.put_credential(credential)  # persist rotation
             _log.info("identity.refreshed", event_type="identity", credential=credential_id)
         await self._audit(
-            correlation_id="identity", actor="identity", action="credential.access",
-            tool=credential.provider_hint, outcome="ok",
-            payload={"credential_id": credential_id, "kind": credential.kind.value})
-            # NOTE: never the secret itself — redacted by construction
+            correlation_id="identity",
+            actor="identity",
+            action="credential.access",
+            tool=credential.provider_hint,
+            outcome="ok",
+            payload={"credential_id": credential_id, "kind": credential.kind.value},
+        )
+        # NOTE: never the secret itself — redacted by construction
         return await strategy.usable_secret(credential)

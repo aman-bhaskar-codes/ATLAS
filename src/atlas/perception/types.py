@@ -14,15 +14,26 @@ from pydantic import BaseModel
 
 
 class PerceptionSource(StrEnum):
-    AX_TREE = "ax_tree"       # free, local, structured   (C1)
-    OCR = "ocr"               # free, local, text          (C5)
+    AX_TREE = "ax_tree"  # free, local, structured   (C1)
+    OCR = "ocr"  # free, local, text          (C5)
     CLOUD_VISION = "cloud_vision"  # paid-ish, leaves machine (C5)
-    UNSUPPORTED = "unsupported"    # not macOS / no PyObjC
+    UNSUPPORTED = "unsupported"  # not macOS / no PyObjC
 
 
 Role = Literal[
-    "window", "button", "text_field", "static_text", "menu", "menu_item",
-    "checkbox", "link", "image", "group", "list", "row", "other",
+    "window",
+    "button",
+    "text_field",
+    "static_text",
+    "menu",
+    "menu_item",
+    "checkbox",
+    "link",
+    "image",
+    "group",
+    "list",
+    "row",
+    "other",
 ]
 
 
@@ -33,11 +44,11 @@ class UIElement(BaseModel):
 
     model_config = {"frozen": True}
     role: Role
-    label: str | None = None          # AXTitle / AXDescription / AXValue-as-label
-    value: str | None = None          # current text/value if any
+    label: str | None = None  # AXTitle / AXDescription / AXValue-as-label
+    value: str | None = None  # current text/value if any
     enabled: bool = True
     focused: bool = False
-    ax_path: str | None = None        # e.g. "window[0]/group[2]/button[1]:Send"
+    ax_path: str | None = None  # e.g. "window[0]/group[2]/button[1]:Send"
     bounds: tuple[int, int, int, int] | None = None  # x,y,w,h (only if cheap to get)
 
 
@@ -47,8 +58,8 @@ class ScreenState(BaseModel):
     app_name: str | None = None
     window_title: str | None = None
     elements: tuple[UIElement, ...] = ()
-    sensitive: bool = False           # frontmost app is on the sensitivity list
-    note: str | None = None           # why a fallback/limitation happened
+    sensitive: bool = False  # frontmost app is on the sensitivity list
+    note: str | None = None  # why a fallback/limitation happened
 
     def summarize(self, limit: int = 40) -> str:
         """Compact text rendering for the planner's context window. WHY: we feed

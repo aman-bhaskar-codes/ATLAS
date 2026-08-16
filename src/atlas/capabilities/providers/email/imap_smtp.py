@@ -19,8 +19,16 @@ class ImapSmtpProvider:
 
     async def initialize(self) -> None: ...
     async def authenticate(self) -> None: ...
-    async def health(self) -> bool: return True
-    async def search(self, query: str, *, limit: int) -> list[EmailMessage]: return []
-    async def get_thread(self, thread_id: str) -> Thread: raise NotImplementedError
-    async def send(self, draft: EmailDraft) -> str: raise NotImplementedError
+    async def health(self) -> bool:
+        return True
+
+    async def search(self, query: str, *, limit: int) -> list[EmailMessage]:
+        return []
+
+    async def get_thread(self, thread_id: str) -> Thread:
+        raise NotImplementedError
+
+    async def send(self, draft: EmailDraft) -> str:
+        raise NotImplementedError
+
     async def shutdown(self) -> None: ...

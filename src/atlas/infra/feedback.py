@@ -19,7 +19,10 @@ class FeedbackStore:
         self._clock = clock
 
     async def record(
-        self, *, task_id: str, rating: int,
+        self,
+        *,
+        task_id: str,
+        rating: int,
         comment: str | None = None,
         original_output: str | None = None,
         edited_output: str | None = None,
@@ -31,30 +34,23 @@ class FeedbackStore:
         await self._db.conn.execute(
             "INSERT INTO feedback(id, task_id, rating, comment, original_output, "
             "edited_output, created_ts) VALUES (?,?,?,?,?,?,?)",
-            (fid, task_id, rating, comment, original_output, edited_output,
-             self._clock.now().isoformat()),
+            (fid, task_id, rating, comment, original_output, edited_output, self._clock.now().isoformat()),
         )
         await self._db.conn.commit()
         return fid
 
     async def for_task(self, task_id: str) -> list[dict[str, object]]:
-        cur = await self._db.conn.execute(
-            "SELECT * FROM feedback WHERE task_id=? ORDER BY created_ts", (task_id,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM feedback WHERE task_id=? ORDER BY created_ts", (task_id,))
         return [dict(r) for r in await cur.fetchall()]
 
     async def recent(self, limit: int = 50) -> list[dict[str, object]]:
-        cur = await self._db.conn.execute(
-            "SELECT * FROM feedback ORDER BY created_ts DESC LIMIT ?", (limit,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM feedback ORDER BY created_ts DESC LIMIT ?", (limit,))
         rows = list(await cur.fetchall())
         return [dict(r) for r in reversed(rows)]
 
     async def stats(self) -> dict[str, int]:
         """Return aggregate feedback statistics."""
-        cur = await self._db.conn.execute(
-            "SELECT rating, COUNT(*) as cnt FROM feedback GROUP BY rating"
-        )
+        cur = await self._db.conn.execute("SELECT rating, COUNT(*) as cnt FROM feedback GROUP BY rating")
         rows = await cur.fetchall()
         result = {"positive": 0, "negative": 0, "total": 0}
         for row in rows:

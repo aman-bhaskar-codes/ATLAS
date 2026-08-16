@@ -1,4 +1,5 @@
 """Download Artifacts models."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -17,8 +18,10 @@ class ArtifactKind(StrEnum):
     HTML = "html"
     OTHER = "other"
 
+
 class DownloadArtifact(BaseModel):
     """A download is a FIRST-CLASS artifact: hashed, provenance-tagged, memory-ready."""
+
     model_config = {"frozen": True}
     id: str
     filename: str

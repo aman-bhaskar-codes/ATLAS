@@ -28,6 +28,7 @@ _MAX_OUTPUT = 16_000  # chars; tool output is structured + truncated, never a ra
 @dataclass(frozen=True)
 class SandboxSpec:
     """Everything needed to launch one locked-down container run."""
+
     image: str
     cpus: float = 1.0
     memory: str = "512m"
@@ -38,15 +39,14 @@ class SandboxSpec:
 
 class DockerRunner(Protocol):
     """Injectable process boundary. Real impl runs `docker`; tests fake it."""
+
     async def run(
         self, argv: Sequence[str], *, timeout_s: float, stdin: bytes | None = None
     ) -> tuple[int, str, str]: ...
 
 
 class SubprocessDockerRunner:
-    async def run(
-        self, argv: Sequence[str], *, timeout_s: float, stdin: bytes | None = None
-    ) -> tuple[int, str, str]:
+    async def run(self, argv: Sequence[str], *, timeout_s: float, stdin: bytes | None = None) -> tuple[int, str, str]:
         proc = await asyncio.create_subprocess_exec(
             *argv,
             stdin=asyncio.subprocess.PIPE if stdin is not None else None,
@@ -71,29 +71,39 @@ class DockerSandbox:
         self._breaker = CircuitBreaker(fail_threshold=3, cooldown_s=30.0)
 
     def _build_argv(
-        self, command: list[str], mounts: dict[str, str], *, network: bool,
-        stdin: bytes | None = None
+        self, command: list[str], mounts: dict[str, str], *, network: bool, stdin: bytes | None = None
     ) -> list[str]:
         argv: list[str] = [
-            "docker", "run", "--rm",
+            "docker",
+            "run",
+            "--rm",
         ]
-        
-        # In Docker run, -i keeps stdin open even if not attached. 
+
+        # In Docker run, -i keeps stdin open even if not attached.
         # We need it if we're sending stdin.
         if stdin is not None:
             argv.append("-i")
-        
+
         argv += [
-            "--user", "65534:65534",          # nobody:nogroup, never root
-            "--read-only",                      # root fs is immutable
-            "--cap-drop", "ALL",               # no Linux capabilities
-            "--security-opt", "no-new-privileges",
-            "--pids-limit", str(self._spec.pids_limit),
-            "--cpus", str(self._spec.cpus),
-            "--memory", self._spec.memory,
-            "--network", "bridge" if network else "none",
-            "--tmpfs", "/tmp:rw,size=64m,noexec",  # scratch, non-executable
-            "--workdir", self._spec.workdir,
+            "--user",
+            "65534:65534",  # nobody:nogroup, never root
+            "--read-only",  # root fs is immutable
+            "--cap-drop",
+            "ALL",  # no Linux capabilities
+            "--security-opt",
+            "no-new-privileges",
+            "--pids-limit",
+            str(self._spec.pids_limit),
+            "--cpus",
+            str(self._spec.cpus),
+            "--memory",
+            self._spec.memory,
+            "--network",
+            "bridge" if network else "none",
+            "--tmpfs",
+            "/tmp:rw,size=64m,noexec",  # scratch, non-executable
+            "--workdir",
+            self._spec.workdir,
         ]
         # Only the explicitly permitted host paths are visible in the container.
         for host, container in mounts.items():
@@ -103,27 +113,35 @@ class DockerSandbox:
         return argv
 
     async def run(
-        self, command: list[str], *, mounts: dict[str, str],
-        network: bool = False, timeout_s: float = 60.0, stdin: bytes | None = None
+        self,
+        command: list[str],
+        *,
+        mounts: dict[str, str],
+        network: bool = False,
+        timeout_s: float = 60.0,
+        stdin: bytes | None = None,
     ) -> SandboxResult:
         if not self._breaker.allow():
             _log.error("sandbox.circuit_open", event_type="sandbox")
-            return SandboxResult(exit_code=-1, stdout_tail="", stderr_tail="Sandbox circuit breaker OPEN", duration_ms=0)
-            
+            return SandboxResult(
+                exit_code=-1, stdout_tail="", stderr_tail="Sandbox circuit breaker OPEN", duration_ms=0
+            )
+
         argv = self._build_argv(command, mounts, network=network, stdin=stdin)
-        _log.info("sandbox.run", event_type="sandbox",
-                  cmd=shlex.join(command), mounts=list(mounts.values()), network=network)
+        _log.info(
+            "sandbox.run", event_type="sandbox", cmd=shlex.join(command), mounts=list(mounts.values()), network=network
+        )
         start = time.perf_counter()
         code, out, err = await self._runner.run(argv, timeout_s=timeout_s, stdin=stdin)
         dur = int((time.perf_counter() - start) * 1000)
-        
-        # 125 is Docker daemon error (failed to run container). 
+
+        # 125 is Docker daemon error (failed to run container).
         # Anything else is either container exit code or timeout (124) which is normal behavior.
         if code == 125:
             self._breaker.record_failure()
         else:
             self._breaker.record_success()
-            
+
         return SandboxResult(
             exit_code=code,
             stdout_tail=out[-_MAX_OUTPUT:],
@@ -133,10 +151,7 @@ class DockerSandbox:
 
     async def health(self) -> bool:
         try:
-            code, _, _ = await self._runner.run(
-                ["docker", "version", "--format", "{{.Server.Version}}"],
-                timeout_s=5.0
-            )
+            code, _, _ = await self._runner.run(["docker", "version", "--format", "{{.Server.Version}}"], timeout_s=5.0)
         except (FileNotFoundError, OSError):
             return False  # docker not installed or not on PATH
         return code == 0

@@ -23,6 +23,7 @@ class CredentialKind(StrEnum):
 
 class Token(BaseModel):
     """OAuth2/JWT token material. refresh_token is the sensitive, long-lived part."""
+
     model_config = {"frozen": True}
     access_token: str
     refresh_token: str | None = None
@@ -33,11 +34,12 @@ class Token(BaseModel):
 class Credential(BaseModel):
     """Stored credential envelope. `secret` is the opaque payload (API key, or a
     serialized Token, or a cookie jar) — always encrypted at rest."""
+
     model_config = {"frozen": True}
-    id: str                     # e.g. 'google:anti@gmail.com'
+    id: str  # e.g. 'google:anti@gmail.com'
     kind: CredentialKind
-    provider_hint: str          # which provider family this serves ('google','github','brave')
-    secret: str                 # encrypted blob (opaque to everything but the store)
+    provider_hint: str  # which provider family this serves ('google','github','brave')
+    secret: str  # encrypted blob (opaque to everything but the store)
     expires_at: datetime | None = None
     scopes: tuple[str, ...] = ()
     rotated_ts: datetime | None = None
@@ -45,16 +47,17 @@ class Credential(BaseModel):
 
 class Profile(BaseModel):
     model_config = {"frozen": True}
-    id: str                     # 'google:anti@gmail.com'
+    id: str  # 'google:anti@gmail.com'
     display_name: str
     email: str | None = None
-    accounts: tuple[str, ...] = ()   # credential ids belonging to this profile
+    accounts: tuple[str, ...] = ()  # credential ids belonging to this profile
 
 
 class Session(BaseModel):
     """Ephemeral authenticated session (e.g. a live browser profile)."""
+
     model_config = {"frozen": True}
     id: str
     profile_id: str
-    state: str                  # opaque serialized session state (encrypted at rest)
+    state: str  # opaque serialized session state (encrypted at rest)
     created_ts: datetime

@@ -20,8 +20,12 @@ _OUTPUT_CONTRACT = (
 
 class PromptBuilder:
     def build_step_prompt(
-        self, *, context: str, goal: str,
-        history: list[tuple[Thought, Observation | None]], step: int,
+        self,
+        *,
+        context: str,
+        goal: str,
+        history: list[tuple[Thought, Observation | None]],
+        step: int,
     ) -> str:
         lines = [context, f"\nGOAL: {goal}", f"STEP: {step}", "\nHISTORY:"]
         for t, o in history:

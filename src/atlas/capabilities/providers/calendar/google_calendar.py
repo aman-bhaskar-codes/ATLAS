@@ -6,6 +6,7 @@ attendee/responseStatus shape are mapped to EventTime/Attendee HERE and never es
 WHY writes return only an id: the platform re-reads if it needs the committed event, so
 the adapter stays a thin mapper with no caching/state.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -32,8 +33,7 @@ class GoogleCalendarProvider:
     name = "google_calendar"
     requires_auth = True
 
-    def __init__(self, identity: IdentityPlatform, credential_id: str,
-                 timeout_s: float = 30.0) -> None:
+    def __init__(self, identity: IdentityPlatform, credential_id: str, timeout_s: float = 30.0) -> None:
         self._identity = identity
         self._credential_id = credential_id
         self._client = httpx.AsyncClient(timeout=timeout_s)
@@ -59,46 +59,49 @@ class GoogleCalendarProvider:
             return False
 
     # ---- reads (Tier-1) -------------------------------------------------------
-    async def list_events(self, calendar_id: str, *, start: datetime,
-                          end: datetime, limit: int) -> list[CalendarEvent]:
+    async def list_events(self, calendar_id: str, *, start: datetime, end: datetime, limit: int) -> list[CalendarEvent]:
         h = await self._headers()
         r = await self._client.get(
-            f"{_API}/calendars/{calendar_id}/events", headers=h,
-            params={"timeMin": _iso(start), "timeMax": _iso(end),
-                    "singleEvents": "true", "orderBy": "startTime",
-                    "maxResults": limit})
+            f"{_API}/calendars/{calendar_id}/events",
+            headers=h,
+            params={
+                "timeMin": _iso(start),
+                "timeMax": _iso(end),
+                "singleEvents": "true",
+                "orderBy": "startTime",
+                "maxResults": limit,
+            },
+        )
         r.raise_for_status()
         return [self._to_event(calendar_id, e) for e in r.json().get("items", [])]
 
     async def search(self, query: str, *, limit: int) -> list[CalendarEvent]:
         h = await self._headers()
         r = await self._client.get(
-            f"{_API}/calendars/primary/events", headers=h,
-            params={"q": query, "singleEvents": "true", "maxResults": limit})
+            f"{_API}/calendars/primary/events",
+            headers=h,
+            params={"q": query, "singleEvents": "true", "maxResults": limit},
+        )
         r.raise_for_status()
         return [self._to_event("primary", e) for e in r.json().get("items", [])]
 
     async def get_event(self, calendar_id: str, event_id: str) -> CalendarEvent:
         h = await self._headers()
-        r = await self._client.get(
-            f"{_API}/calendars/{calendar_id}/events/{event_id}", headers=h)
+        r = await self._client.get(f"{_API}/calendars/{calendar_id}/events/{event_id}", headers=h)
         r.raise_for_status()
         return self._to_event(calendar_id, r.json())
 
-    async def free_busy(self, calendar_id: str, *, start: datetime,
-                        end: datetime) -> Availability:
+    async def free_busy(self, calendar_id: str, *, start: datetime, end: datetime) -> Availability:
         h = await self._headers()
         r = await self._client.post(
-            f"{_API}/freeBusy", headers=h,
-            json={"timeMin": _iso(start), "timeMax": _iso(end),
-                  "items": [{"id": calendar_id}]})
+            f"{_API}/freeBusy",
+            headers=h,
+            json={"timeMin": _iso(start), "timeMax": _iso(end), "items": [{"id": calendar_id}]},
+        )
         r.raise_for_status()
         cal = r.json().get("calendars", {}).get(calendar_id, {})
-        busy = tuple(
-            FreeBusySlot(start=_parse(b["start"]), end=_parse(b["end"]))
-            for b in cal.get("busy", []))
-        return Availability(calendar_id=calendar_id, window_start=start,
-                            window_end=end, busy=busy)
+        busy = tuple(FreeBusySlot(start=_parse(b["start"]), end=_parse(b["end"])) for b in cal.get("busy", []))
+        return Availability(calendar_id=calendar_id, window_start=start, window_end=end, busy=busy)
 
     # ---- writes (only reached post-approval by the platform) -----------------
     async def create_event(self, draft: EventDraft) -> str:
@@ -110,8 +113,8 @@ class GoogleCalendarProvider:
             params["conferenceDataVersion"] = "1"
         try:
             r = await self._client.post(
-                f"{_API}/calendars/{draft.calendar_id}/events",
-                headers=h, params=params, json=body)
+                f"{_API}/calendars/{draft.calendar_id}/events", headers=h, params=params, json=body
+            )
             r.raise_for_status()
         except httpx.HTTPError as exc:
             raise ProviderExecutionError(f"gcal create failed: {exc}") from exc
@@ -123,16 +126,18 @@ class GoogleCalendarProvider:
         h = await self._headers()
         r = await self._client.patch(
             f"{_API}/calendars/{draft.calendar_id}/events/{draft.event_id}",
-            headers=h, params={"sendUpdates": "all" if draft.send_invites else "none"},
-            json=self._to_body(draft))
+            headers=h,
+            params={"sendUpdates": "all" if draft.send_invites else "none"},
+            json=self._to_body(draft),
+        )
         r.raise_for_status()
         return str(r.json()["id"])
 
     async def delete_event(self, calendar_id: str, event_id: str) -> None:
         h = await self._headers()
         r = await self._client.delete(
-            f"{_API}/calendars/{calendar_id}/events/{event_id}",
-            headers=h, params={"sendUpdates": "all"})
+            f"{_API}/calendars/{calendar_id}/events/{event_id}", headers=h, params={"sendUpdates": "all"}
+        )
         if r.status_code not in (200, 204):
             raise ProviderExecutionError(f"gcal delete failed: {r.status_code}")
 
@@ -149,41 +154,44 @@ class GoogleCalendarProvider:
             title=str(data.get("summary", "")),
             description=str(data.get("description", "")),
             location=str(data.get("location", "")),
-            when=_to_time(start if isinstance(start, dict) else {},
-                          end if isinstance(end, dict) else {}),
+            when=_to_time(start if isinstance(start, dict) else {}, end if isinstance(end, dict) else {}),
             attendees=tuple(
                 _to_attendee(a)
                 for a in (data.get("attendees") or [])  # type: ignore
                 if isinstance(a, dict)
             ),
-            conferencing=(str(data.get("hangoutLink"))
-                          if data.get("hangoutLink")
-                          else _extract_conf(
-                              data.get("conferenceData")  # type: ignore
-                              if isinstance(data.get("conferenceData"), dict) else None)),
-            recurrence=tuple(
-                str(r) for r in (data.get("recurrence") or [])  # type: ignore
+            conferencing=(
+                str(data.get("hangoutLink"))
+                if data.get("hangoutLink")
+                else _extract_conf(
+                    data.get("conferenceData")  # type: ignore
+                    if isinstance(data.get("conferenceData"), dict)
+                    else None
+                )
             ),
-            status=str(data.get("status", "confirmed")))
+            recurrence=tuple(
+                str(r)
+                for r in (data.get("recurrence") or [])  # type: ignore
+            ),
+            status=str(data.get("status", "confirmed")),
+        )
 
     def _to_body(self, draft: EventDraft) -> dict[str, object]:
         body: dict[str, object] = {
             "summary": draft.title,
             "description": draft.description,
             "location": draft.location,
-            "attendees": [{"email": str(a.email), "optional": a.optional}
-                          for a in draft.attendees],
+            "attendees": [{"email": str(a.email), "optional": a.optional} for a in draft.attendees],
         }
         if draft.when.all_day:
-            body["start"] = {"date": draft.when.start_date.isoformat()
-                             if draft.when.start_date else ""}
-            body["end"] = {"date": draft.when.end_date.isoformat()
-                           if draft.when.end_date else ""}
+            body["start"] = {"date": draft.when.start_date.isoformat() if draft.when.start_date else ""}
+            body["end"] = {"date": draft.when.end_date.isoformat() if draft.when.end_date else ""}
         else:
-            body["start"] = {"dateTime": _iso(draft.when.start_dt)
-                             if draft.when.start_dt else "", "timeZone": draft.when.tz}
-            body["end"] = {"dateTime": _iso(draft.when.end_dt)
-                           if draft.when.end_dt else "", "timeZone": draft.when.tz}
+            body["start"] = {
+                "dateTime": _iso(draft.when.start_dt) if draft.when.start_dt else "",
+                "timeZone": draft.when.tz,
+            }
+            body["end"] = {"dateTime": _iso(draft.when.end_dt) if draft.when.end_dt else "", "timeZone": draft.when.tz}
         if draft.recurrence:
             body["recurrence"] = list(draft.recurrence)
         return body
@@ -199,11 +207,14 @@ def _parse(s: str) -> datetime:
 
 def _to_time(start: dict[str, object], end: dict[str, object]) -> EventTime:
     if "date" in start:  # all-day
-        return EventTime(start_date=date.fromisoformat(str(start["date"])),
-                         end_date=date.fromisoformat(str(end["date"])))
-    return EventTime(start_dt=_parse(str(start.get("dateTime", ""))),
-                     end_dt=_parse(str(end.get("dateTime", ""))),
-                     tz=str(start.get("timeZone", "UTC")))
+        return EventTime(
+            start_date=date.fromisoformat(str(start["date"])), end_date=date.fromisoformat(str(end["date"]))
+        )
+    return EventTime(
+        start_dt=_parse(str(start.get("dateTime", ""))),
+        end_dt=_parse(str(end.get("dateTime", ""))),
+        tz=str(start.get("timeZone", "UTC")),
+    )
 
 
 def _to_attendee(a: dict[str, object]) -> Attendee:
@@ -217,7 +228,8 @@ def _to_attendee(a: dict[str, object]) -> Attendee:
         name=str(a["displayName"]) if a.get("displayName") else None,
         optional=bool(a.get("optional", False)),
         organizer=bool(a.get("organizer", False)),
-        response=resp)
+        response=resp,
+    )
 
 
 def _extract_conf(conf: dict[str, object] | None) -> str | None:

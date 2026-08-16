@@ -1,4 +1,5 @@
 """Builder for the BrowserPlatform, wiring all dependencies together."""
+
 from __future__ import annotations
 
 from atlas.capabilities.browser.engines.click import ClickEngine

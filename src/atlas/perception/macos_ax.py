@@ -21,10 +21,19 @@ _MAX_ELEMENTS = 300
 
 # AXRole string -> our normalized Role. Unknown roles collapse to "other".
 _ROLE_MAP: dict[str, Role] = {
-    "AXWindow": "window", "AXButton": "button", "AXTextField": "text_field",
-    "AXTextArea": "text_field", "AXStaticText": "static_text", "AXMenu": "menu",
-    "AXMenuItem": "menu_item", "AXCheckBox": "checkbox", "AXLink": "link",
-    "AXImage": "image", "AXGroup": "group", "AXList": "list", "AXRow": "row",
+    "AXWindow": "window",
+    "AXButton": "button",
+    "AXTextField": "text_field",
+    "AXTextArea": "text_field",
+    "AXStaticText": "static_text",
+    "AXMenu": "menu",
+    "AXMenuItem": "menu_item",
+    "AXCheckBox": "checkbox",
+    "AXLink": "link",
+    "AXImage": "image",
+    "AXGroup": "group",
+    "AXList": "list",
+    "AXRow": "row",
 }
 
 
@@ -34,8 +43,7 @@ class MacOSAXBackend:
 
     def capture_frontmost(self) -> ScreenState:
         if not has_pyobjc():
-            return ScreenState(source=PerceptionSource.UNSUPPORTED,
-                               note="pyobjc unavailable / not macOS")
+            return ScreenState(source=PerceptionSource.UNSUPPORTED, note="pyobjc unavailable / not macOS")
         # Lazy imports: only executed on a real Mac with pyobjc present.
         from AppKit import NSWorkspace  # type: ignore
         from ApplicationServices import (  # type: ignore
@@ -69,8 +77,13 @@ class MacOSAXBackend:
             elements=tuple(elements[:_MAX_ELEMENTS]),
             sensitive=is_sensitive_app(app_name),
         )
-        _log.info("ax.captured", event_type="perception", app=app_name,
-                  elements=len(state.elements), sensitive=state.sensitive)
+        _log.info(
+            "ax.captured",
+            event_type="perception",
+            app=app_name,
+            elements=len(state.elements),
+            sensitive=state.sensitive,
+        )
         return state
 
     # --- internals ---------------------------------------------------------
@@ -89,10 +102,16 @@ class MacOSAXBackend:
         # Only record nodes that carry signal (a label/value or an interactable role).
         if label or value or role in ("button", "text_field", "checkbox", "link", "menu_item"):
             leaf_path = f"{path}:{label}" if label else path
-            out.append(UIElement(
-                role=role, label=label, value=value, enabled=enabled,
-                focused=focused, ax_path=leaf_path,
-            ))
+            out.append(
+                UIElement(
+                    role=role,
+                    label=label,
+                    value=value,
+                    enabled=enabled,
+                    focused=focused,
+                    ax_path=leaf_path,
+                )
+            )
 
         err, children = AXUIElementCopyAttributeValue(node, "AXChildren", None)
         if err == kAXErrorSuccess and children:
@@ -102,6 +121,7 @@ class MacOSAXBackend:
     @staticmethod
     def _attr_str(node: object, attr: str) -> str | None:
         from ApplicationServices import AXUIElementCopyAttributeValue, kAXErrorSuccess
+
         err, val = AXUIElementCopyAttributeValue(node, attr, None)
         if err != kAXErrorSuccess or val is None:
             return None
@@ -111,6 +131,7 @@ class MacOSAXBackend:
     @staticmethod
     def _attr_bool(node: object, attr: str, *, default: bool) -> bool:
         from ApplicationServices import AXUIElementCopyAttributeValue, kAXErrorSuccess
+
         err, val = AXUIElementCopyAttributeValue(node, attr, None)
         if err != kAXErrorSuccess or val is None:
             return default

@@ -76,11 +76,20 @@ class TaskEventStore:
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                event_id, task_id, correlation_id, task_id,
-                event_type, state, summary,
-                capability, operation, provider, tier,
+                event_id,
+                task_id,
+                correlation_id,
+                task_id,
+                event_type,
+                state,
+                summary,
+                capability,
+                operation,
+                provider,
+                tier,
                 1 if requires_approval else 0,
-                json.dumps(meta), ts,
+                json.dumps(meta),
+                ts,
             ),
         )
         await self._db.conn.commit()

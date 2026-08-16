@@ -27,7 +27,7 @@ import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Query, Request, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
@@ -41,6 +41,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Dependency singleton (set by lifespan)
 # ---------------------------------------------------------------------------
+
 
 class MemoryStreamDeps:
     """Shared dependencies injected by create_app() lifespan."""
@@ -65,8 +66,10 @@ def set_dependencies(manager: ConnectionManager, db: Database, atlas: Any) -> No
 # Pydantic response shapes
 # ---------------------------------------------------------------------------
 
+
 class EpisodeOut(BaseModel):
     """A single episodic memory entry."""
+
     id: int | None = None
     correlation_id: str
     task_id: str | None = None
@@ -83,6 +86,7 @@ class EpisodeOut(BaseModel):
 
 class FactOut(BaseModel):
     """A single semantic fact."""
+
     id: str
     version: int
     text: str
@@ -96,6 +100,7 @@ class FactOut(BaseModel):
 
 class KnowledgeDocOut(BaseModel):
     """A knowledge document with optional search score."""
+
     id: str
     title: str
     source_path: str
@@ -103,11 +108,12 @@ class KnowledgeDocOut(BaseModel):
     chunk_count: int
     indexed: bool
     created_ts: str
-    score: float | None = None         # populated only in search results
+    score: float | None = None  # populated only in search results
 
 
 class KnowledgeChunkOut(BaseModel):
     """A single knowledge chunk from search results."""
+
     chunk_id: str
     document_id: str
     document_title: str
@@ -120,6 +126,7 @@ class KnowledgeChunkOut(BaseModel):
 
 class MemoryStatsOut(BaseModel):
     """Aggregate counts across all memory layers."""
+
     episode_count: int
     fact_count: int
     document_count: int
@@ -132,6 +139,7 @@ class MemoryStatsOut(BaseModel):
 # ---------------------------------------------------------------------------
 # WebSocket: /ws/memory/live
 # ---------------------------------------------------------------------------
+
 
 @router.websocket("/ws/memory/live")
 async def memory_live_stream(websocket: WebSocket) -> None:
@@ -164,8 +172,7 @@ async def memory_live_stream(websocket: WebSocket) -> None:
             snapshot = await _build_snapshot(_deps.atlas)
             await websocket.send_json({"type": "snapshot", "_topic": "memory", **snapshot})
         except Exception as exc:
-            _log.warning("ws.memory_snapshot_failed", event_type="websocket",
-                         client_id=client_id, error=str(exc))
+            _log.warning("ws.memory_snapshot_failed", event_type="websocket", client_id=client_id, error=str(exc))
 
         # ── Keep connection alive; broadcasts come from MemoryBroadcaster ─
         while True:
@@ -178,49 +185,47 @@ async def memory_live_stream(websocket: WebSocket) -> None:
             except WebSocketDisconnect:
                 break
             except Exception as exc:
-                _log.error("ws.memory_receive_error", event_type="websocket",
-                           client_id=client_id, error=str(exc))
+                _log.error("ws.memory_receive_error", event_type="websocket", client_id=client_id, error=str(exc))
                 break
 
     finally:
         await _deps.manager.disconnect(client_id)
-        _log.info("ws.memory_live_disconnected", event_type="websocket",
-                  client_id=client_id)
+        _log.info("ws.memory_live_disconnected", event_type="websocket", client_id=client_id)
 
 
 async def _build_snapshot(atlas: Any) -> dict[str, Any]:
     """Build a lightweight initial-state snapshot for newly-connected clients."""
     try:
         recent_eps = await atlas.episodic.recent(limit=10)
-        facts      = await atlas.semantic.get_recent_facts(limit=10)
-        prefs      = await atlas.user_model.get_all_preferences()
-        docs       = await atlas.knowledge_store.list_documents(limit=5)
+        facts = await atlas.semantic.get_recent_facts(limit=10)
+        prefs = await atlas.user_model.get_all_preferences()
+        docs = await atlas.knowledge_store.list_documents(limit=5)
 
         return {
-            "episode_count":    len(recent_eps),
-            "fact_count":       len(facts),
-            "document_count":   len(docs),
+            "episode_count": len(recent_eps),
+            "fact_count": len(facts),
+            "document_count": len(docs),
             "preference_count": len(prefs),
             "recent_episode_kinds": [ep.kind.value for ep in recent_eps[:5]],
-            "recent_fact_texts":    [f.text[:80] for f in facts[:5]],
+            "recent_fact_texts": [f.text[:80] for f in facts[:5]],
         }
     except Exception as exc:
         _log.warning("memory.snapshot_build_error", event_type="memory", error=str(exc))
-        return {"episode_count": 0, "fact_count": 0, "document_count": 0,
-                "preference_count": 0}
+        return {"episode_count": 0, "fact_count": 0, "document_count": 0, "preference_count": 0}
 
 
 # ---------------------------------------------------------------------------
 # REST: GET /api/v1/memory/episodes
 # ---------------------------------------------------------------------------
 
+
 @router.get("/api/v1/memory/episodes", response_model=list[EpisodeOut])
 async def list_episodes(
     request: Request,
     task_id: str | None = Query(default=None),
-    kind:    str | None = Query(default=None),
+    kind: str | None = Query(default=None),
     min_salience: float = Query(default=0.0, ge=0.0, le=1.0),
-    limit:   int = Query(default=50, ge=1, le=500),
+    limit: int = Query(default=50, ge=1, le=500),
 ) -> list[EpisodeOut]:
     """
     Recent episodic memory entries.
@@ -263,12 +268,13 @@ async def list_episodes(
 # REST: GET /api/v1/memory/facts
 # ---------------------------------------------------------------------------
 
+
 @router.get("/api/v1/memory/facts", response_model=list[FactOut])
 async def list_facts(
     request: Request,
-    kind:           str | None = Query(default=None),
+    kind: str | None = Query(default=None),
     min_confidence: float = Query(default=0.0, ge=0.0, le=1.0),
-    limit:          int   = Query(default=50, ge=1, le=500),
+    limit: int = Query(default=50, ge=1, le=500),
 ) -> list[FactOut]:
     """
     Semantic facts (distilled knowledge).
@@ -307,10 +313,11 @@ async def list_facts(
 # REST: GET /api/v1/memory/knowledge
 # ---------------------------------------------------------------------------
 
+
 @router.get("/api/v1/memory/knowledge", response_model=list[KnowledgeDocOut])
 async def list_knowledge_docs(
     request: Request,
-    limit:  int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> list[KnowledgeDocOut]:
     """
@@ -337,7 +344,7 @@ async def list_knowledge_docs(
 @router.get("/api/v1/memory/knowledge/search", response_model=list[KnowledgeChunkOut])
 async def search_knowledge(
     request: Request,
-    q:     str = Query(..., min_length=1, max_length=500),
+    q: str = Query(..., min_length=1, max_length=500),
     limit: int = Query(default=10, ge=1, le=50),
 ) -> list[KnowledgeChunkOut]:
     """
@@ -366,6 +373,7 @@ async def search_knowledge(
 # REST: GET /api/v1/memory/preferences
 # ---------------------------------------------------------------------------
 
+
 @router.get("/api/v1/memory/preferences")
 async def list_preferences(request: Request) -> dict[str, str]:
     """
@@ -380,6 +388,7 @@ async def list_preferences(request: Request) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # REST: GET /api/v1/memory/stats
 # ---------------------------------------------------------------------------
+
 
 @router.get("/api/v1/memory/stats", response_model=MemoryStatsOut)
 async def memory_stats(request: Request) -> MemoryStatsOut:
@@ -407,10 +416,10 @@ async def memory_stats(request: Request) -> MemoryStatsOut:
     )
 
     counts = {
-        "episode_count":    ep_count,
-        "fact_count":       fact_count,
-        "document_count":   doc_count,
-        "chunk_count":      chunk_count,
+        "episode_count": ep_count,
+        "fact_count": fact_count,
+        "document_count": doc_count,
+        "chunk_count": chunk_count,
         "preference_count": len(prefs),
     }
     if _deps:
@@ -423,6 +432,7 @@ async def memory_stats(request: Request) -> MemoryStatsOut:
 # Private DB helpers
 # ---------------------------------------------------------------------------
 
+
 async def _count_episodes(db: Database) -> int:
     cur = await db.conn.execute("SELECT COUNT(*) FROM episodes")
     row = await cur.fetchone()
@@ -430,9 +440,7 @@ async def _count_episodes(db: Database) -> int:
 
 
 async def _count_facts(db: Database) -> int:
-    cur = await db.conn.execute(
-        "SELECT COUNT(*) FROM semantic_facts WHERE superseded_by IS NULL"
-    )
+    cur = await db.conn.execute("SELECT COUNT(*) FROM semantic_facts WHERE superseded_by IS NULL")
     row = await cur.fetchone()
     return int(row[0]) if row else 0
 

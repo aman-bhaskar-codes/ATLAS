@@ -34,14 +34,15 @@ class Capability(StrEnum):
 
 class CapabilitySpec(BaseModel):
     """Declared metadata for one capability."""
+
     model_config = {"frozen": True}
     capability: Capability
     version: int = 1
     description: str = ""
     # the manifest (tool, operation) this maps to, so L1 can classify it.
-    safety_tool: str                      # e.g. 'email'
-    operations: tuple[str, ...] = ()       # e.g. ('read','search','send')
-    default_tier: Tier = Tier.NOTIFY       # baseline; classifier still authoritative
+    safety_tool: str  # e.g. 'email'
+    operations: tuple[str, ...] = ()  # e.g. ('read','search','send')
+    default_tier: Tier = Tier.NOTIFY  # baseline; classifier still authoritative
     requires_auth: bool = False
     dependencies: tuple[Capability, ...] = ()
 

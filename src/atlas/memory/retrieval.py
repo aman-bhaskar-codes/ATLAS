@@ -12,7 +12,7 @@ Phase 3.8: RetrievalCache for sub-1ms repeated queries; invalidation on any memo
 from __future__ import annotations
 
 import time
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from atlas.infra.logging import get_logger
 from atlas.memory.cache import RetrievalCache
@@ -30,11 +30,15 @@ _RRF_K = 60  # standard RRF constant
 
 class Retriever:
     def __init__(
-        self, *, semantic: SemanticMemory, episodic: EpisodicMemory,
-        user_model: UserModel, knowledge_store: "KnowledgeStore | None" = None,
+        self,
+        *,
+        semantic: SemanticMemory,
+        episodic: EpisodicMemory,
+        user_model: UserModel,
+        knowledge_store: KnowledgeStore | None = None,
         token_budget: int = 1500,
         events: Any | None = None,  # EventPublisher - Any to avoid circular import
-        cache_ttl: float = 30.0,    # seconds; 0 disables caching
+        cache_ttl: float = 30.0,  # seconds; 0 disables caching
     ) -> None:
         self._sem = semantic
         self._epi = episodic
@@ -42,15 +46,13 @@ class Retriever:
         self._knowledge = knowledge_store
         self._budget = token_budget
         self._events = events
-        self._cache: RetrievalCache | None = (
-            RetrievalCache(ttl=cache_ttl) if cache_ttl > 0 else None
-        )
-    
+        self._cache: RetrievalCache | None = RetrievalCache(ttl=cache_ttl) if cache_ttl > 0 else None
+
     def set_events(self, events: Any) -> None:
         """Set EventPublisher after construction."""
         self._events = events
 
-    def set_knowledge_store(self, knowledge_store: "KnowledgeStore") -> None:
+    def set_knowledge_store(self, knowledge_store: KnowledgeStore) -> None:
         """Set KnowledgeStore after construction (avoids circular import)."""
         self._knowledge = knowledge_store
 
@@ -65,7 +67,7 @@ class Retriever:
         *,
         terms: list[str] | None = None,
         task_id: str | None = None,
-        correlation_id: str | None = None
+        correlation_id: str | None = None,
     ) -> RetrievedContext:
         """
         Hybrid retrieval with semantic search over facts, episodes, and knowledge store.
@@ -86,43 +88,26 @@ class Retriever:
                 return cached
 
         t0 = time.monotonic()
-        dense_task = asyncio.create_task(
-            self._sem.semantic_search(query, k=15)
-        )
-        sparse_task = asyncio.create_task(
-            self._epi.keyword_search(terms or query.split(), limit=15)
-        )
-        semantic_episodes_task = asyncio.create_task(
-            self._epi.semantic_search(query, limit=10, min_salience=0.3)
-        )
-        user_model_task = asyncio.create_task(
-            self._um.render()
-        )
-        
+        dense_task = asyncio.create_task(self._sem.semantic_search(query, k=15))
+        sparse_task = asyncio.create_task(self._epi.keyword_search(terms or query.split(), limit=15))
+        semantic_episodes_task = asyncio.create_task(self._epi.semantic_search(query, limit=10, min_salience=0.3))
+        user_model_task = asyncio.create_task(self._um.render())
+
         # Phase 3: Query knowledge store if available
         if self._knowledge:
-            knowledge_task = asyncio.create_task(
-                self._knowledge.search(query, limit=5)
-            )
+            knowledge_task = asyncio.create_task(self._knowledge.search(query, limit=5))
             dense, sparse, semantic_episodes, user_model, knowledge_results = await asyncio.gather(
-                dense_task,
-                sparse_task, 
-                semantic_episodes_task,
-                user_model_task,
-                knowledge_task
+                dense_task, sparse_task, semantic_episodes_task, user_model_task, knowledge_task
             )
         else:
             dense, sparse, semantic_episodes, user_model = await asyncio.gather(
-                dense_task,
-                sparse_task, 
-                semantic_episodes_task,
-                user_model_task
+                dense_task, sparse_task, semantic_episodes_task, user_model_task
             )
             knowledge_results = []
 
         # 3. fuse facts by RRF rank (dense list) + salience boost
         ranked_facts = self._rrf_facts(dense)
-        
+
         # 4. fuse episodes: semantic (vector) + sparse (keyword)
         ranked_episodes = self._fuse_episodes(semantic_episodes, sparse)
 
@@ -130,13 +115,13 @@ class Retriever:
         # Reserve up to 500 tokens for knowledge chunks
         knowledge_budget = min(500, self._budget // 3)
         memory_budget = self._budget - knowledge_budget
-        
+
         facts, epis, used = self._pack(ranked_facts, ranked_episodes, budget=memory_budget)
-        
+
         # 6. pack knowledge chunks within their budget
         knowledge_chunks, knowledge_tokens = self._pack_knowledge(knowledge_results, budget=knowledge_budget)
         used += knowledge_tokens
-        
+
         # Emit memory retrieval event
         if self._events and task_id and correlation_id:
             try:
@@ -150,12 +135,8 @@ class Retriever:
                     items=[f.text[:50] for f in facts[:5]],  # Sample of retrieved facts
                 )
             except Exception as exc:
-                _log.warning(
-                    "retrieval.emit_error",
-                    event_type="memory",
-                    error=str(exc)
-                )
-        
+                _log.warning("retrieval.emit_error", event_type="memory", error=str(exc))
+
         _log.debug(
             "retrieval.complete",
             event_type="memory",
@@ -163,9 +144,9 @@ class Retriever:
             episodes_count=len(epis),
             knowledge_count=len(knowledge_chunks),
             tokens_used=used,
-            query=query[:50]
+            query=query[:50],
         )
-        
+
         result = RetrievedContext(
             user_model=user_model,
             facts=tuple(facts),
@@ -201,35 +182,31 @@ class Retriever:
         scored.sort(key=lambda t: t[0], reverse=True)
         return [f for _, f in scored]
 
-    def _fuse_episodes(
-        self,
-        semantic: list[Episode],
-        sparse: list[Episode]
-    ) -> list[Episode]:
+    def _fuse_episodes(self, semantic: list[Episode], sparse: list[Episode]) -> list[Episode]:
         """Fuse semantic (vector) and sparse (keyword) episode rankings using RRF."""
         # Build rank maps
         semantic_ranks = {ep.id: i for i, ep in enumerate(semantic) if ep.id}
         sparse_ranks = {ep.id: i for i, ep in enumerate(sparse) if ep.id}
-        
+
         # Collect all unique episodes
         all_episodes = {ep.id: ep for ep in semantic + sparse if ep.id}
-        
+
         # Score by RRF
         scored: list[tuple[float, Episode]] = []
         for ep_id, ep in all_episodes.items():
             rrf_score = 0.0
-            
+
             if ep_id in semantic_ranks:
                 rrf_score += 1.0 / (_RRF_K + semantic_ranks[ep_id])
-            
+
             if ep_id in sparse_ranks:
                 rrf_score += 0.5 / (_RRF_K + sparse_ranks[ep_id])  # Weight sparse lower
-            
+
             # Boost by salience
             rrf_score += 0.1 * ep.salience
-            
+
             scored.append((rrf_score, ep))
-        
+
         scored.sort(key=lambda t: t[0], reverse=True)
         return [ep for _, ep in scored]
 
@@ -238,7 +215,11 @@ class Retriever:
         return max(1, len(text) // 4)  # coarse estimate; good enough for budgeting
 
     def _pack(
-        self, facts: list[SemanticFact], epis: list[Episode], *, budget: int,
+        self,
+        facts: list[SemanticFact],
+        epis: list[Episode],
+        *,
+        budget: int,
     ) -> tuple[list[SemanticFact], list[Episode], int]:
         used = 0
         chosen_f: list[SemanticFact] = []
@@ -258,15 +239,12 @@ class Retriever:
         return chosen_f, chosen_e, used
 
     def _pack_knowledge(
-        self, 
-        knowledge_results: list[dict[str, Any]], 
-        *, 
-        budget: int
+        self, knowledge_results: list[dict[str, Any]], *, budget: int
     ) -> tuple[list[dict[str, Any]], int]:
         """Pack knowledge chunks within token budget."""
         used = 0
         chosen: list[dict[str, Any]] = []
-        
+
         for chunk in knowledge_results:
             content = chunk.get("content", "")
             cost = self._tokens(content)
@@ -274,5 +252,5 @@ class Retriever:
                 break
             chosen.append(chunk)
             used += cost
-        
+
         return chosen, used

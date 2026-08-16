@@ -38,10 +38,8 @@ def manifest_dir(tmp_path: Path) -> Path:
         "allowed_commands": {"read_only": ["*"], "side_effect": ["*"]},
         "whatsapp": {"known_contacts": []},
         "safety": {"credential_dirs": ["/fake/ssh"], "mass_deletion_threshold": 5},
-        "rules": [
-            {"tool": "*", "operation": "*", "tier": 0}
-        ],
-        "hard_block": []
+        "rules": [{"tool": "*", "operation": "*", "tier": 0}],
+        "hard_block": [],
     }
     manifest_path = tmp_path / "permissions.yaml"
     manifest_path.write_text(yaml.dump(data))

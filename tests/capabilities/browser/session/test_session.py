@@ -17,6 +17,7 @@ def provider_registry():  # type: ignore
 @pytest.fixture
 def ids():  # type: ignore
     from atlas.infra.ids import UuidGenerator
+
     return UuidGenerator()
 
 
@@ -61,11 +62,12 @@ async def test_max_concurrent_sessions(session_manager, pool) -> None:  # type: 
     # Acquire up to max (2)
     s1 = await session_manager.acquire()
     s2 = await session_manager.acquire()
-    
+
     assert len(pool._sessions) == 2
 
     # Third should fail
     from atlas.capabilities.browser.errors import SessionError
+
     with pytest.raises(SessionError, match="Max concurrent browser sessions reached"):
         await session_manager.acquire()
 
@@ -76,7 +78,7 @@ async def test_max_concurrent_sessions(session_manager, pool) -> None:  # type: 
 @pytest.mark.asyncio
 async def test_page_manager(session_manager, page_manager, pool) -> None:  # type: ignore
     session = await session_manager.acquire()
-    
+
     handle = await page_manager.new_page(session.id)
     assert handle.session_id == session.id
     assert handle.tab_id is not None

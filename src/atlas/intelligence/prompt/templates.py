@@ -29,6 +29,6 @@ TEMPLATES: dict[str, TemplateDef] = {
                 kind=BlockKind.SAFETY,
                 body="Do not execute irreversible actions without confirmation.",
             ),
-        ]
+        ],
     )
 }

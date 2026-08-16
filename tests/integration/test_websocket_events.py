@@ -46,13 +46,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
-from typing import Any
 import tempfile
+from pathlib import Path
 
 import pytest
 
-from atlas.infra.bus import Event, MessageBus
+from atlas.infra.bus import MessageBus
 from atlas.infra.db import Database
 from atlas.interfaces.api.websocket import ConnectionManager, EventBroadcaster
 from atlas.orchestration.events import OrchestratorEvent
@@ -61,28 +60,28 @@ from atlas.orchestration.events import OrchestratorEvent
 @pytest.mark.asyncio
 async def test_connection_manager_basic():
     """Test ConnectionManager can track connections."""
-    from unittest.mock import AsyncMock, MagicMock
-    
+    from unittest.mock import AsyncMock
+
     manager = ConnectionManager()
-    
+
     # Mock WebSocket
     ws_mock = AsyncMock()
     ws_mock.accept = AsyncMock()
-    
+
     # Connect
     client_id = await manager.connect(ws_mock)
     assert client_id is not None
     assert len(manager._active) == 1
-    
+
     # Get stats
     stats = manager.get_stats()
     assert stats["total_connections"] == 1
     assert client_id in stats["clients"]
-    
+
     # Disconnect
     await manager.disconnect(client_id)
     assert len(manager._active) == 0
-    
+
     stats = manager.get_stats()
     assert stats["total_connections"] == 0
 
@@ -91,41 +90,37 @@ async def test_connection_manager_basic():
 async def test_connection_manager_filtering():
     """Test ConnectionManager filters events by task_id."""
     from unittest.mock import AsyncMock
-    
+
     manager = ConnectionManager()
-    
+
     ws1 = AsyncMock()
     ws1.accept = AsyncMock()
     ws1.send_json = AsyncMock()
-    
+
     ws2 = AsyncMock()
     ws2.accept = AsyncMock()
     ws2.send_json = AsyncMock()
-    
+
     # Connect two clients
     client1 = await manager.connect(ws1)
     client2 = await manager.connect(ws2)
-    
+
     # Set filter on client1 for specific task
     manager.set_filter(client1, task_id="task-123")
-    
+
     # Broadcast event for task-123
     event = OrchestratorEvent(
-        correlation_id="corr-1",
-        task_id="task-123",
-        kind="task.started",
-        state="running",
-        metadata={}
+        correlation_id="corr-1", task_id="task-123", kind="task.started", state="running", metadata={}
     )
-    
+
     await manager.broadcast(event)
-    
+
     # Client1 (filtered) should receive it
     ws1.send_json.assert_called_once()
-    
+
     # Client2 (no filter) should also receive it
     ws2.send_json.assert_called_once()
-    
+
     await manager.disconnect(client1)
     await manager.disconnect(client2)
 
@@ -135,32 +130,32 @@ async def test_event_broadcaster_subscribes():
     """Test EventBroadcaster subscribes to bus and broadcasts events."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = Path(tmp.name)
-    
+
     try:
         db = Database(db_path)
         await db.start()
-        
+
         bus = MessageBus(db)
         await bus.start()
-        
+
         # Register event type
         bus.register_type("orchestrator", OrchestratorEvent)
-        
+
         manager = ConnectionManager()
         broadcaster = EventBroadcaster(bus, manager)
         broadcaster.start()
-        
+
         # Give it time to start
         await asyncio.sleep(0.1)
-        
+
         # Verify broadcaster is active (has tasks)
         assert len(broadcaster._tasks) > 0
-        
+
         # Cleanup
         await broadcaster.stop()
         await bus.close()
         await db.stop()
-        
+
     finally:
         if db_path.exists():
             db_path.unlink()
@@ -171,46 +166,43 @@ async def test_event_persistence_to_log():
     """Test that events are persisted to event_log table."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = Path(tmp.name)
-    
+
     try:
         db = Database(db_path)
         await db.start()
-        
+
         bus = MessageBus(db)
         await bus.start()
-        
+
         # Register and publish event
         bus.register_type("orchestrator", OrchestratorEvent)
-        
+
         event = OrchestratorEvent(
             correlation_id="test-corr-1",
             task_id="test-task-1",
             kind="task.started",
             state="running",
-            metadata={"test": "data"}
+            metadata={"test": "data"},
         )
-        
+
         await bus.publish("orchestrator", event)
-        
+
         # Give bus time to process
         await asyncio.sleep(0.5)
-        
+
         # Check event_log table
-        cursor = await db.conn.execute(
-            "SELECT * FROM event_log WHERE task_id = ?",
-            ("test-task-1",)
-        )
+        cursor = await db.conn.execute("SELECT * FROM event_log WHERE task_id = ?", ("test-task-1",))
         rows = await cursor.fetchall()
-        
+
         assert len(rows) == 1
         assert rows[0]["topic"] == "orchestrator"
         assert rows[0]["task_id"] == "test-task-1"
         assert rows[0]["correlation_id"] == "test-corr-1"
-        
+
         # Cleanup
         await bus.close()
         await db.stop()
-        
+
     finally:
         if db_path.exists():
             db_path.unlink()
@@ -221,32 +213,32 @@ async def test_historical_replay_query():
     """Test querying historical events for replay."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = Path(tmp.name)
-    
+
     try:
         db = Database(db_path)
         await db.start()
-        
+
         bus = MessageBus(db)
         await bus.start()
-        
+
         bus.register_type("orchestrator", OrchestratorEvent)
-        
+
         # Publish multiple events for the same task
         task_id = "replay-test-task"
-        
+
         for i in range(3):
             event = OrchestratorEvent(
                 correlation_id=f"corr-{i}",
                 task_id=task_id,
                 kind=f"test.event.{i}",
                 state="running",
-                metadata={"sequence": i}
+                metadata={"sequence": i},
             )
             await bus.publish("orchestrator", event)
-        
+
         # Give bus time to process
         await asyncio.sleep(0.5)
-        
+
         # Query historical events
         cursor = await db.conn.execute(
             """
@@ -255,21 +247,21 @@ async def test_historical_replay_query():
             WHERE task_id = ?
             ORDER BY id ASC
             """,
-            (task_id,)
+            (task_id,),
         )
         rows = await cursor.fetchall()
-        
+
         assert len(rows) == 3
-        
+
         # Verify order
         for i, row in enumerate(rows):
             data = json.loads(row["payload_json"])
             assert data["metadata"]["sequence"] == i
-        
+
         # Cleanup
         await bus.close()
         await db.stop()
-        
+
     finally:
         if db_path.exists():
             db_path.unlink()
@@ -277,4 +269,3 @@ async def test_historical_replay_query():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

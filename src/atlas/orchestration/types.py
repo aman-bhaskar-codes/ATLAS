@@ -25,6 +25,7 @@ class RiskLevel(StrEnum):
 
 class Capabilities(BaseModel):
     """Router output: WHAT the task needs, not WHICH model/tool."""
+
     model_config = {"frozen": True}
     needs_memory: bool = True
     needs_retrieval: bool = True
@@ -38,11 +39,11 @@ class Capabilities(BaseModel):
 class PlanStep(BaseModel):
     model_config = {"frozen": True}
     index: int
-    intent: str                      # human-readable sub-goal
-    tool: str | None = None          # suggested tool name (registry resolves)
+    intent: str  # human-readable sub-goal
+    tool: str | None = None  # suggested tool name (registry resolves)
     operation: str | None = None
     args: dict[str, Any] = Field(default_factory=dict)
-    depends_on: tuple[int, ...] = () # step indices; enables DAG mode (Phase 12)
+    depends_on: tuple[int, ...] = ()  # step indices; enables DAG mode (Phase 12)
     expected_output: str | None = None
 
 
@@ -75,7 +76,7 @@ class Action(BaseModel):
     tool: str | None = None
     operation: str | None = None
     args: dict[str, Any] = Field(default_factory=dict)
-    final_text: str | None = None    # for final_answer / ask_user
+    final_text: str | None = None  # for final_answer / ask_user
 
 
 class Observation(BaseModel):
@@ -93,20 +94,21 @@ class TaskResult(BaseModel):
     answer: str | None = None
     steps_taken: int = 0
     error: str | None = None
-    replan_count: int = 0                             # Phase 1
-    verification_passed: bool | None = None           # Phase 1
-    verification_score: float | None = None           # Phase 1
+    replan_count: int = 0  # Phase 1
+    verification_passed: bool | None = None  # Phase 1
+    verification_score: float | None = None  # Phase 1
     # Phase 2: Trajectory data for Orchestrator to save
-    actions: tuple[Any, ...] = ()                     # ActionRecord list
-    observations: tuple[Any, ...] = ()                # ObservationRecord list
-    latency_ms: int = 0                               # Total execution time
-    tokens_used: int = 0                              # Total tokens
-    model_calls: int = 0                              # LLM invocations
-    tool_calls: int = 0                               # Tool invocations
+    actions: tuple[Any, ...] = ()  # ActionRecord list
+    observations: tuple[Any, ...] = ()  # ObservationRecord list
+    latency_ms: int = 0  # Total execution time
+    tokens_used: int = 0  # Total tokens
+    model_calls: int = 0  # LLM invocations
+    tool_calls: int = 0  # Tool invocations
 
 
 class Task(BaseModel):
     """The unit of work. Immutable; transitions produce copies via model_copy."""
+
     model_config = {"frozen": True}
     id: TaskId
     correlation_id: CorrelationId
@@ -117,13 +119,13 @@ class Task(BaseModel):
 
 
 class CritiqueVerdict(StrEnum):
-    OK = "ok"           # action is sound — proceed (tier UNCHANGED)
-    REVISE = "revise"   # regenerate once with the critique in mind
-    ABORT = "abort"     # do not attempt; surface reason to the user
+    OK = "ok"  # action is sound — proceed (tier UNCHANGED)
+    REVISE = "revise"  # regenerate once with the critique in mind
+    ABORT = "abort"  # do not attempt; surface reason to the user
 
 
 class Critique(BaseModel):
     model_config = {"frozen": True}
     verdict: CritiqueVerdict
     reason: str
-    suggestion: str | None = None   # guidance for the revise pass
+    suggestion: str | None = None  # guidance for the revise pass

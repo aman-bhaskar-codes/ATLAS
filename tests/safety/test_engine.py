@@ -18,16 +18,24 @@ from tests.fakes import FakeClock, FakeConfirmer, FakeKillSwitch, FakeTool
 @pytest.mark.asyncio
 async def test_engine_allow(memory_db: Any) -> None:
     m = Manifest(
-        version=1, allowed_paths={}, allowed_commands={}, whatsapp={}, safety={},
-        rules=[{"tool": "fs", "operation": "read", "tier": 0}], hard_block=[]  # type: ignore
+        version=1,
+        allowed_paths={},
+        allowed_commands={},
+        whatsapp={},
+        safety={},
+        rules=[{"tool": "fs", "operation": "read", "tier": 0}],
+        hard_block=[],  # type: ignore
     )
     audit = AuditLog(memory_db)
     ks = FakeKillSwitch(active=False)
     clf = TierClassifier(m, 2)
     engine = SafetyEngine(
-        classifier=clf, policy=PolicyEngine((KillSwitchPolicy(ks),)),  # type: ignore
-        audit=audit, killswitch=ks, clock=FakeClock(datetime.datetime.now()),  # type: ignore
-        cfg=SafetyCfg()
+        classifier=clf,
+        policy=PolicyEngine((KillSwitchPolicy(ks),)),  # type: ignore
+        audit=audit,
+        killswitch=ks,
+        clock=FakeClock(datetime.datetime.now()),  # type: ignore
+        cfg=SafetyCfg(),
     )
 
     req = ToolRequest(correlation_id="cid-1", tool="fs", operation="read")  # type: ignore
@@ -46,16 +54,24 @@ async def test_engine_allow(memory_db: Any) -> None:
 @pytest.mark.asyncio
 async def test_engine_killswitch(memory_db: Any) -> None:
     m = Manifest(
-        version=1, allowed_paths={}, allowed_commands={}, whatsapp={}, safety={},
-        rules=[{"tool": "fs", "operation": "read", "tier": 0}], hard_block=[]  # type: ignore
+        version=1,
+        allowed_paths={},
+        allowed_commands={},
+        whatsapp={},
+        safety={},
+        rules=[{"tool": "fs", "operation": "read", "tier": 0}],
+        hard_block=[],  # type: ignore
     )
     audit = AuditLog(memory_db)
     ks = FakeKillSwitch(active=True)
     clf = TierClassifier(m, 2)
     engine = SafetyEngine(
-        classifier=clf, policy=PolicyEngine((KillSwitchPolicy(ks),)),  # type: ignore
-        audit=audit, killswitch=ks, clock=FakeClock(datetime.datetime.now()),  # type: ignore
-        cfg=SafetyCfg()
+        classifier=clf,
+        policy=PolicyEngine((KillSwitchPolicy(ks),)),  # type: ignore
+        audit=audit,
+        killswitch=ks,
+        clock=FakeClock(datetime.datetime.now()),  # type: ignore
+        cfg=SafetyCfg(),
     )
 
     req = ToolRequest(correlation_id="cid-1", tool="fs", operation="read")  # type: ignore
@@ -68,17 +84,25 @@ async def test_engine_killswitch(memory_db: Any) -> None:
 @pytest.mark.asyncio
 async def test_engine_confirm_deny(memory_db: Any) -> None:
     m = Manifest(
-        version=1, allowed_paths={}, allowed_commands={}, whatsapp={}, safety={},
-        rules=[{"tool": "fs", "operation": "write", "tier": 2}], hard_block=[]  # type: ignore
+        version=1,
+        allowed_paths={},
+        allowed_commands={},
+        whatsapp={},
+        safety={},
+        rules=[{"tool": "fs", "operation": "write", "tier": 2}],
+        hard_block=[],  # type: ignore
     )
     audit = AuditLog(memory_db)
     ks = FakeKillSwitch(active=False)
     clf = TierClassifier(m, 2)
     engine = SafetyEngine(
-        classifier=clf, policy=PolicyEngine((KillSwitchPolicy(ks),)),  # type: ignore
-        audit=audit, killswitch=ks, clock=FakeClock(datetime.datetime.now()),  # type: ignore
+        classifier=clf,
+        policy=PolicyEngine((KillSwitchPolicy(ks),)),  # type: ignore
+        audit=audit,
+        killswitch=ks,
+        clock=FakeClock(datetime.datetime.now()),  # type: ignore
         cfg=SafetyCfg(),
-        confirmer=FakeConfirmer(response=False)  # User denies
+        confirmer=FakeConfirmer(response=False),  # User denies
     )
 
     req = ToolRequest(correlation_id="cid-1", tool="fs", operation="write")  # type: ignore

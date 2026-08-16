@@ -1,4 +1,5 @@
 """Implementation of the Trust Center plane."""
+
 from __future__ import annotations
 
 import json
@@ -81,8 +82,13 @@ class DefaultAtlasTrustPlane(AtlasTrustPlane):
         raise NotImplementedError()
 
     async def audit(
-        self, *, task_id: str | None, correlation_id: str | None,
-        execution_id: str | None, cursor: str | None, limit: int,
+        self,
+        *,
+        task_id: str | None,
+        correlation_id: str | None,
+        execution_id: str | None,
+        cursor: str | None,
+        limit: int,
     ) -> AuditPage:
         """Query the real audit_events table (safety.audit.AuditLog.record()
         is the single writer — see infra/db.py migration 001).
@@ -100,9 +106,7 @@ class DefaultAtlasTrustPlane(AtlasTrustPlane):
         """
         effective_correlation_id = correlation_id
         if task_id and not effective_correlation_id:
-            cur = await self._atlas.db.conn.execute(
-                "SELECT payload FROM tasks WHERE id = ?", (task_id,)
-            )
+            cur = await self._atlas.db.conn.execute("SELECT payload FROM tasks WHERE id = ?", (task_id,))
             row = await cur.fetchone()
             if row and row["payload"]:
                 try:

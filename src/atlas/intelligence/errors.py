@@ -48,6 +48,7 @@ class StreamingError(IntelligenceError):
 
 class FallbackError(IntelligenceError):
     """Every candidate in the fallback chain failed."""
+
     retryable = False
 
 

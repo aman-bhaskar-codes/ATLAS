@@ -6,9 +6,15 @@ from atlas.orchestration.state import TaskState, TaskStateMachine
 
 def test_legal_path() -> None:
     m = TaskStateMachine()
-    for s in (TaskState.READY, TaskState.BUILDING_CONTEXT, TaskState.PLANNING,
-              TaskState.REASONING, TaskState.VALIDATING, TaskState.COMPLETED,
-              TaskState.ARCHIVED):
+    for s in (
+        TaskState.READY,
+        TaskState.BUILDING_CONTEXT,
+        TaskState.PLANNING,
+        TaskState.REASONING,
+        TaskState.VALIDATING,
+        TaskState.COMPLETED,
+        TaskState.ARCHIVED,
+    ):
         m.transition(s)
     assert m.is_terminal()
 

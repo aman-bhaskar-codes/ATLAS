@@ -7,15 +7,20 @@ from atlas.infra.registry import ServiceRegistry
 
 
 class DummyService:
-    async def start(self) -> None: pass
-    async def stop(self) -> None: pass
-    async def health(self) -> bool: return True
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+    async def health(self) -> bool:
+        return True
 
 
 def test_registry_ordering() -> None:
     reg = ServiceRegistry()
     s1, s2, s3 = DummyService(), DummyService(), DummyService()
-    
+
     # s3 depends on s2 which depends on s1
     reg.register("s3", s3, deps=("s2",))
     reg.register("s1", s1)

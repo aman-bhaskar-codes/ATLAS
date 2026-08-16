@@ -13,10 +13,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _dummy_embedding() -> list[float]:
     """A 1024-dim zero vector — matches the OllamaEmbedder fallback."""
@@ -33,6 +33,7 @@ def _make_fake_docker() -> MagicMock:
 # ---------------------------------------------------------------------------
 # The test
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_build_and_start_wires_correctly(tmp_path: Path) -> None:
@@ -61,10 +62,13 @@ async def test_build_and_start_wires_correctly(tmp_path: Path) -> None:
             return_value=False,  # force NativeSandbox in dev
         ),
         # Override data_dir so test DB lands in tmp_path
-        patch.dict("os.environ", {
-            "ATLAS_DATA_DIR": str(tmp_path),
-            "ATLAS_ENV": "dev",
-        }),
+        patch.dict(
+            "os.environ",
+            {
+                "ATLAS_DATA_DIR": str(tmp_path),
+                "ATLAS_ENV": "dev",
+            },
+        ),
     ):
         from atlas.app import build
 
@@ -75,18 +79,14 @@ async def test_build_and_start_wires_correctly(tmp_path: Path) -> None:
             assert atlas is not None, "build() must return an Atlas instance"
 
             # ── Phase 0.1: EmbeddingWorker is wired ────────────────────
-            assert atlas.embedding_worker is not None, (
-                "EmbeddingWorker must be constructed (Phase 0.1)"
-            )
+            assert atlas.embedding_worker is not None, "EmbeddingWorker must be constructed (Phase 0.1)"
             assert atlas.episodic._embedding_worker is atlas.embedding_worker, (
                 "EpisodicMemory must receive the same EmbeddingWorker"
             )
 
             # ── Phase 0.2: bus wiring happens in start() ───────────────
             # Bus must NOT be connected yet before start()
-            assert atlas.episodic._bus is None, (
-                "Bus must NOT be wired before Atlas.start()"
-            )
+            assert atlas.episodic._bus is None, "Bus must NOT be wired before Atlas.start()"
 
             await atlas.start()
 
@@ -97,9 +97,7 @@ async def test_build_and_start_wires_correctly(tmp_path: Path) -> None:
             assert atlas.semantic._bus is atlas.bus, (
                 "SemanticMemory must be bus-connected after Atlas.start() (Phase 0.2)"
             )
-            assert atlas.user_model._bus is atlas.bus, (
-                "UserModel must be bus-connected after Atlas.start() (Phase 0.2)"
-            )
+            assert atlas.user_model._bus is atlas.bus, "UserModel must be bus-connected after Atlas.start() (Phase 0.2)"
             assert atlas.knowledge_store._bus is atlas.bus, (
                 "KnowledgeStore must be bus-connected after Atlas.start() (Phase 0.2)"
             )
@@ -110,11 +108,8 @@ async def test_build_and_start_wires_correctly(tmp_path: Path) -> None:
             )
 
             # ── Phase 0.3: LLMCallTracker is wired ─────────────────────
-            assert atlas.llm_tracker is not None, (
-                "LLMCallTracker must be constructed (Phase 0.3)"
-            )
+            assert atlas.llm_tracker is not None, "LLMCallTracker must be constructed (Phase 0.3)"
             # The InferenceRuntime should have received the tracker
-            from atlas.bootstrap.intelligence import IntelligenceComponents
             # Access via gateway's internal runtime
             runtime = atlas.gateway._runtime  # type: ignore[attr-defined]
             assert runtime._tracker is atlas.llm_tracker, (
@@ -123,9 +118,7 @@ async def test_build_and_start_wires_correctly(tmp_path: Path) -> None:
 
             # ── Phase 0.6: WorkingMemory is wired into ReasoningLoop ───
             reasoning = atlas.orchestrator._reasoning  # type: ignore[attr-defined]
-            assert reasoning._working is atlas.working, (
-                "ReasoningLoop must hold WorkingMemory (Phase 0.6)"
-            )
+            assert reasoning._working is atlas.working, "ReasoningLoop must hold WorkingMemory (Phase 0.6)"
 
             # ── Phase 0.7: Consolidation job registered ─────────────────
             assert atlas.scheduler is not None, "CronScheduler must be constructed"
@@ -133,15 +126,11 @@ async def test_build_and_start_wires_correctly(tmp_path: Path) -> None:
                 "Consolidation cron job must be registered (Phase 0.7)"
             )
             cron_expr = atlas.scheduler._jobs["memory_consolidation"][0]
-            assert cron_expr == "0 2 * * *", (
-                f"Consolidation job cron must be '0 2 * * *', got {cron_expr!r}"
-            )
+            assert cron_expr == "0 2 * * *", f"Consolidation job cron must be '0 2 * * *', got {cron_expr!r}"
 
             # ── Phase 0.8: bootstrap modules used ─────────────────────
             # Verify retriever cache is present (from bootstrap/memory.py)
-            assert atlas.retriever._cache is not None, (
-                "Retriever cache must be configured (Phase 3 / bootstrap)"
-            )
+            assert atlas.retriever._cache is not None, "Retriever cache must be configured (Phase 3 / bootstrap)"
 
         finally:
             await atlas.close()
@@ -153,14 +142,13 @@ async def test_bus_not_double_wired_on_restart(tmp_path: Path) -> None:
     config_dir = Path(__file__).resolve().parents[1] / "config"
 
     with (
-        patch("atlas.memory.embedder.OllamaEmbedder.embed",
-              new_callable=AsyncMock, return_value=_dummy_embedding()),
-        patch("atlas.intelligence.providers.ollama.OllamaProvider.complete",
-              new_callable=AsyncMock,
-              return_value=MagicMock(text="ok",
-                                     usage=MagicMock(input_tokens=1, output_tokens=1, usd=0.0))),
-        patch("atlas.safety.sandbox_docker.DockerSandbox.health",
-              new_callable=AsyncMock, return_value=False),
+        patch("atlas.memory.embedder.OllamaEmbedder.embed", new_callable=AsyncMock, return_value=_dummy_embedding()),
+        patch(
+            "atlas.intelligence.providers.ollama.OllamaProvider.complete",
+            new_callable=AsyncMock,
+            return_value=MagicMock(text="ok", usage=MagicMock(input_tokens=1, output_tokens=1, usd=0.0)),
+        ),
+        patch("atlas.safety.sandbox_docker.DockerSandbox.health", new_callable=AsyncMock, return_value=False),
         patch.dict("os.environ", {"ATLAS_DATA_DIR": str(tmp_path), "ATLAS_ENV": "dev"}),
     ):
         from atlas.app import build
@@ -182,19 +170,19 @@ async def test_bus_not_double_wired_on_restart(tmp_path: Path) -> None:
 async def test_memory_bus_event_on_episode_record(tmp_path: Path) -> None:
     """Recording an episode must publish a MemoryBusEvent to the 'memory' topic."""
     import asyncio
+
     from atlas.infra.bus import MemoryBusEvent
 
     config_dir = Path(__file__).resolve().parents[1] / "config"
 
     with (
-        patch("atlas.memory.embedder.OllamaEmbedder.embed",
-              new_callable=AsyncMock, return_value=_dummy_embedding()),
-        patch("atlas.intelligence.providers.ollama.OllamaProvider.complete",
-              new_callable=AsyncMock,
-              return_value=MagicMock(text="ok",
-                                     usage=MagicMock(input_tokens=1, output_tokens=1, usd=0.0))),
-        patch("atlas.safety.sandbox_docker.DockerSandbox.health",
-              new_callable=AsyncMock, return_value=False),
+        patch("atlas.memory.embedder.OllamaEmbedder.embed", new_callable=AsyncMock, return_value=_dummy_embedding()),
+        patch(
+            "atlas.intelligence.providers.ollama.OllamaProvider.complete",
+            new_callable=AsyncMock,
+            return_value=MagicMock(text="ok", usage=MagicMock(input_tokens=1, output_tokens=1, usd=0.0)),
+        ),
+        patch("atlas.safety.sandbox_docker.DockerSandbox.health", new_callable=AsyncMock, return_value=False),
         patch.dict("os.environ", {"ATLAS_DATA_DIR": str(tmp_path), "ATLAS_ENV": "dev"}),
     ):
         from atlas.app import build
@@ -211,8 +199,9 @@ async def test_memory_bus_event_on_episode_record(tmp_path: Path) -> None:
         atlas.bus.subscribe("memory", _capture)
 
         # Record an episode directly
-        from atlas.memory.types import Episode, EpisodeKind
         from datetime import UTC, datetime
+
+        from atlas.memory.types import Episode, EpisodeKind
 
         ep = Episode(
             correlation_id="test-corr",
@@ -230,8 +219,6 @@ async def test_memory_bus_event_on_episode_record(tmp_path: Path) -> None:
 
         await atlas.close()
 
-        assert len(received) >= 1, (
-            "Recording an episode must publish a MemoryBusEvent (Phase 0.2)"
-        )
+        assert len(received) >= 1, "Recording an episode must publish a MemoryBusEvent (Phase 0.2)"
         assert received[0].kind == "memory.stored"
         assert received[0].memory_type == "episodic"

@@ -30,22 +30,27 @@ class GeminiProvider:
                 continue
             role = "user" if m.role == Role.USER else "model"
             chat_msgs.append({"role": role, "parts": [{"text": m.content}]})
-            
+
         payload: dict[str, Any] = {
             "contents": chat_msgs,
             "generationConfig": {
                 "temperature": temperature,
                 "maxOutputTokens": max_tokens,
-            }
+            },
         }
         if system_msg:
             payload["systemInstruction"] = {"parts": [{"text": system_msg}]}
         return payload
 
     async def complete(
-        self, *, model: str, messages: Sequence[Message],
-        max_tokens: int, temperature: float,
-        usd_in: float, usd_out: float,
+        self,
+        *,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
+        usd_in: float,
+        usd_out: float,
     ) -> ProviderCompletion:
         try:
             r = await self._client.post(
@@ -60,7 +65,7 @@ class GeminiProvider:
             raise ProviderError(f"{self.name} http {exc.response.status_code}") from exc
         except httpx.HTTPError as exc:
             raise ProviderError(f"{self.name} transport: {exc}") from exc
-            
+
         data = r.json()
         try:
             text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -72,12 +77,17 @@ class GeminiProvider:
         return ProviderCompletion(str(text), Usage(input_tokens=it, output_tokens=ot, usd=usd))
 
     async def stream(
-        self, *, model: str, messages: Sequence[Message],
-        max_tokens: int, temperature: float,
+        self,
+        *,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
     ) -> AsyncIterator[StreamChunk]:
         try:
             async with self._client.stream(
-                "POST", f"{self._base}/{model}:streamGenerateContent",
+                "POST",
+                f"{self._base}/{model}:streamGenerateContent",
                 params={"key": self._key, "alt": "sse"},
                 json=self._payload(messages, max_tokens, temperature),
             ) as r:
@@ -92,14 +102,14 @@ class GeminiProvider:
                         data = json.loads(body)
                     except json.JSONDecodeError:
                         continue
-                        
+
                     try:
                         delta = data["candidates"][0]["content"]["parts"][0]["text"]
                         if delta:
                             yield StreamChunk(delta=delta, done=False)
                     except (KeyError, IndexError):
                         pass
-                        
+
                 yield StreamChunk(delta="", done=True)
         except httpx.HTTPStatusError as exc:
             raise ProviderError(f"{self.name} stream http {exc.response.status_code}") from exc

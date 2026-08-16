@@ -10,6 +10,7 @@ class Region(BaseModel):
     width: int
     height: int
 
+
 class Screenshot(BaseModel):
     model_config = {"frozen": True}
     data: bytes
@@ -17,15 +18,19 @@ class Screenshot(BaseModel):
     viewport_only: bool = True
     clip: Region | None = None
 
+
 class VisualElement(BaseModel):
     """Detected element via vision/OCR (independent of DOM)."""
+
     model_config = {"frozen": True}
     label: str
     region: Region
     confidence: float
 
+
 class GroundingResult(BaseModel):
     """Result of mapping a semantic intent to a visual element coordinate."""
+
     model_config = {"frozen": True}
     intent: str
     element: VisualElement | None = None

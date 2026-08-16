@@ -1,4 +1,5 @@
 """Screenshot engine handles visual capture and redaction."""
+
 from __future__ import annotations
 
 from atlas.capabilities.browser.domain.page import PageHandle
@@ -13,13 +14,10 @@ class ScreenshotEngine:
 
     async def capture(self, handle: PageHandle, full_page: bool, cid: CorrelationId) -> Screenshot:
         provider, provider_session_id, tab_id = self._pages.get_provider(handle)
-        
+
         # In a real implementation we would check the sensitive-app blocklist here
         # before capturing.
-        
+
         data = await provider.screenshot(provider_session_id, tab_id, full_page=full_page, clip=None)
-        
-        return Screenshot(
-            data=data,
-            viewport_only=not full_page
-        )
+
+        return Screenshot(data=data, viewport_only=not full_page)

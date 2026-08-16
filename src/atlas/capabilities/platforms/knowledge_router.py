@@ -21,12 +21,24 @@ from atlas.intelligence.gateway import ModelGateway
 
 _log = get_logger("atlas.knowledge.router")
 
-_LIVE_CUES = ("today", "this week", "latest", "recent", "now", "current", "just announced",
-              "yesterday", "this month", "breaking")
+_LIVE_CUES = (
+    "today",
+    "this week",
+    "latest",
+    "recent",
+    "now",
+    "current",
+    "just announced",
+    "yesterday",
+    "this month",
+    "breaking",
+)
 
-_CLASSIFY = ("Classify how to answer this query. Output ONLY JSON: "
-             '{"intent":"static|memory|live|mixed"}. static=timeless fact; '
-             "memory=about the user's own past/data; live=needs current info.")
+_CLASSIFY = (
+    "Classify how to answer this query. Output ONLY JSON: "
+    '{"intent":"static|memory|live|mixed"}. static=timeless fact; '
+    "memory=about the user's own past/data; live=needs current info."
+)
 
 
 class KnowledgeRouter:
@@ -38,18 +50,26 @@ class KnowledgeRouter:
         if any(c in low for c in _LIVE_CUES) or query.freshness_days is not None:
             return KnowledgeIntent.LIVE
         try:
-            resp = await self._gw.complete(ModelRequest(
-                correlation_id=correlation_id, system=_CLASSIFY, prompt=query.text,
-                required_capabilities=frozenset({
-                    ModelCapability.CLASSIFICATION,
-                    ModelCapability.JSON_GENERATION,
-                }),
-                max_tokens=40, temperature=0.0))
+            resp = await self._gw.complete(
+                ModelRequest(
+                    correlation_id=correlation_id,
+                    system=_CLASSIFY,
+                    prompt=query.text,
+                    required_capabilities=frozenset(
+                        {
+                            ModelCapability.CLASSIFICATION,
+                            ModelCapability.JSON_GENERATION,
+                        }
+                    ),
+                    max_tokens=40,
+                    temperature=0.0,
+                )
+            )
             intent = json.loads(self._json(resp.text)).get("intent", "live")
             return KnowledgeIntent(intent)
         except Exception as exc:
             _log.warning("krouter.classify_failed", event_type="knowledge", error=repr(exc))
-            return KnowledgeIntent.LIVE   # fail toward gathering evidence, not guessing
+            return KnowledgeIntent.LIVE  # fail toward gathering evidence, not guessing
 
     @staticmethod
     def _json(text: str) -> str:

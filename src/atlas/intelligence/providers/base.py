@@ -24,14 +24,23 @@ class Provider(Protocol):
     is_local: bool
 
     async def complete(
-        self, *, model: str, messages: Sequence[Message],
-        max_tokens: int, temperature: float,
-        usd_in: float, usd_out: float,
+        self,
+        *,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
+        usd_in: float,
+        usd_out: float,
     ) -> ProviderCompletion: ...
 
     def stream(
-        self, *, model: str, messages: Sequence[Message],
-        max_tokens: int, temperature: float,
+        self,
+        *,
+        model: str,
+        messages: Sequence[Message],
+        max_tokens: int,
+        temperature: float,
     ) -> AsyncIterator[StreamChunk]: ...
 
     async def health(self) -> bool: ...

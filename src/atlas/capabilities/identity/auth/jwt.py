@@ -23,10 +23,7 @@ class JwtStrategy:
         # generate a new JWT, and sign it. Since we only use OAuth2 for now, this is
         # a placeholder that we will flesh out when we integrate a JWT-based API.
         new_expires = datetime.now(UTC) + timedelta(hours=1)
-        return credential.model_copy(update={
-            "expires_at": new_expires,
-            "rotated_ts": datetime.now(UTC)
-        })
+        return credential.model_copy(update={"expires_at": new_expires, "rotated_ts": datetime.now(UTC)})
 
     async def usable_secret(self, credential: Credential) -> str:
         # In a real implementation, this would return the generated JWT string.

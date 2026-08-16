@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from atlas.intelligence.governance.circuit_breaker import BreakerState, CircuitBreaker
+from atlas.infra.circuit_breaker import BreakerState, CircuitBreaker
 
 
 def test_starts_closed_and_allows() -> None:
@@ -27,9 +27,9 @@ def test_success_resets_failures_and_closes() -> None:
     cb = CircuitBreaker(fail_threshold=3, cooldown_s=30.0)
     cb.record_failure()
     cb.record_failure()
-    cb.record_success()       # resets counter
-    cb.record_failure()       # 1 failure only
-    cb.record_failure()       # 2 failures — still closed (reset earlier)
+    cb.record_success()  # resets counter
+    cb.record_failure()  # 1 failure only
+    cb.record_failure()  # 2 failures — still closed (reset earlier)
     assert cb.state is BreakerState.CLOSED
     assert cb.allow() is True
 
@@ -65,7 +65,7 @@ def test_half_open_reopens_on_failure() -> None:
     assert cb.state is BreakerState.OPEN
     # Manually expire the cooldown so allow() transitions to HALF_OPEN
     cb._opened_at = time.perf_counter() - 61.0
-    assert cb.allow() is True          # → HALF_OPEN
+    assert cb.allow() is True  # → HALF_OPEN
     assert cb.state is BreakerState.HALF_OPEN  # type: ignore
     # A failure in HALF_OPEN re-opens it
     cb.record_failure()

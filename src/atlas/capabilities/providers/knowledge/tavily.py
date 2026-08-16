@@ -21,8 +21,7 @@ class TavilySearchProvider:
     requires_auth = True
     source_kind = "web"
 
-    def __init__(self, identity: IdentityPlatform, credential_id: str,
-                 timeout_s: float = 15.0) -> None:
+    def __init__(self, identity: IdentityPlatform, credential_id: str, timeout_s: float = 15.0) -> None:
         self.name = "tavily"
         self._identity = identity
         self._credential_id = credential_id
@@ -45,29 +44,36 @@ class TavilySearchProvider:
             key = await self._identity.get_usable_secret(self._credential_id)
         except Exception as exc:
             raise IdentityError(f"tavily key unavailable: {exc}") from exc
-            
+
         try:
             r = await self._client.post(
                 "https://api.tavily.com/search",
                 headers={"Content-Type": "application/json"},
-                json={"api_key": key, "query": query, "max_results": limit, "include_answer": False}
+                json={"api_key": key, "query": query, "max_results": limit, "include_answer": False},
             )
             r.raise_for_status()
             out: list[KnowledgeItem] = []
             for res in r.json().get("results", [])[:limit]:
-                out.append(KnowledgeItem(
-                    title=res.get("title", ""), snippet=res.get("content", "")[:500],
-                    url=res.get("url"),
-                    published=None,
-                    provenance=Provenance(provider=self.name, source_kind=SourceKind.WEB,
-                                          uri=res.get("url"), retrieved_ts=datetime.now(UTC))))
+                out.append(
+                    KnowledgeItem(
+                        title=res.get("title", ""),
+                        snippet=res.get("content", "")[:500],
+                        url=res.get("url"),
+                        published=None,
+                        provenance=Provenance(
+                            provider=self.name,
+                            source_kind=SourceKind.WEB,
+                            uri=res.get("url"),
+                            retrieved_ts=datetime.now(UTC),
+                        ),
+                    )
+                )
             return out
         except (httpx.HTTPError, Exception):
             return []
 
     async def execute(self, request: CapabilityRequest) -> Any:
-        return await self.search(str(request.args.get("query", "")),
-                                 limit=int(request.args.get("limit", 6)))
+        return await self.search(str(request.args.get("query", "")), limit=int(request.args.get("limit", 6)))
 
     def normalize(self, raw: Any) -> Any:
         return raw

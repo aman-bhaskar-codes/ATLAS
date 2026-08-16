@@ -20,12 +20,11 @@ Source = Literal["cli", "file", "whatsapp", "api", "scheduler", "system"]
 
 
 class Tier(IntEnum):
-    AUTO = 0       # Vamos Tier 1: read-only, no side effects — auto-approve
-    NOTIFY = 1     # Vamos Tier 2: reversible side effects — auto-approve with notification
-    CONFIRM = 2    # Vamos Tier 3: irreversible/external — require explicit user approval
+    AUTO = 0  # Vamos Tier 1: read-only, no side effects — auto-approve
+    NOTIFY = 1  # Vamos Tier 2: reversible side effects — auto-approve with notification
+    CONFIRM = 2  # Vamos Tier 3: irreversible/external — require explicit user approval
     DANGEROUS = 3  # Vamos Tier 4: high-impact (delete DB, spend money, access creds) — approval + confirmation code
-    BLOCK = 4      # Hard-blocked: never executed
-
+    BLOCK = 4  # Hard-blocked: never executed
 
 
 class _Frozen(BaseModel):
@@ -137,6 +136,7 @@ class AuditRecord(_Frozen):
 
 class InboundEvent(BaseModel):
     """An inbound request from any transport (CLI, API, scheduler)."""
+
     model_config = ConfigDict(frozen=True)
     correlation_id: CorrelationId
     source: Source

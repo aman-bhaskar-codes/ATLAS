@@ -1,4 +1,5 @@
 """Source ranker for research capability."""
+
 from __future__ import annotations
 
 import urllib.parse
@@ -13,7 +14,7 @@ class SourceRanker:
             "docs.python.org",
             "developer.mozilla.org",
             "en.wikipedia.org",
-            "arxiv.org"
+            "arxiv.org",
         }
 
     def score_url(self, url: str) -> float:
@@ -33,13 +34,13 @@ class SourceRanker:
 
         if domain in self.official_domains or any(domain.endswith(f".{d}") for d in self.official_domains):
             return 1.0  # Official source
-            
+
         if domain.endswith(".edu") or domain.endswith(".gov"):
             return 0.9  # High authority
-            
+
         if domain.endswith(".org"):
             return 0.7  # Moderate authority
-            
+
         return 0.5  # General web
 
     def rank(self, urls: list[str]) -> list[str]:

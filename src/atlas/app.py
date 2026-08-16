@@ -191,6 +191,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     # ── Infrastructure ────────────────────────────────────────────── #
     from atlas.bootstrap.infrastructure import build_infrastructure
+
     infra = build_infrastructure(settings, config)
     ids, clock, metrics, tracer = infra.ids, infra.clock, infra.metrics, infra.tracer
     db, registry, lifecycle, bus = infra.db, infra.registry, infra.lifecycle, infra.bus
@@ -198,9 +199,14 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     # ── Safety ───────────────────────────────────────────────────── #
     from atlas.bootstrap.safety import build_safety
+
     saf = build_safety(
-        config=config, manifest=manifest, audit=audit,
-        killswitch=killswitch, clock=clock, ids=ids,
+        config=config,
+        manifest=manifest,
+        audit=audit,
+        killswitch=killswitch,
+        clock=clock,
+        ids=ids,
     )
     classifier, safety, cap_audit = saf.classifier, saf.safety, saf.cap_audit
 
@@ -208,7 +214,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     master_key = resolve_master_key(settings)
     secret_store = SecretStore(db, master_key)
     identity_platform = IdentityPlatform(
-        store=secret_store, db=db,
+        store=secret_store,
+        db=db,
         strategies={
             CredentialKind.API_KEY: ApiKeyStrategy(),
             CredentialKind.JWT: JwtStrategy(),
@@ -219,9 +226,15 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     # ── Intelligence ──────────────────────────────────────────────── #
     from atlas.bootstrap.intelligence import build_intelligence
+
     intel = await build_intelligence(
-        settings=settings, config=config, config_dir=config_dir,
-        db=db, ids=ids, clock=clock, audit=audit,
+        settings=settings,
+        config=config,
+        config_dir=config_dir,
+        db=db,
+        ids=ids,
+        clock=clock,
+        audit=audit,
     )
     gateway, embedder, llm_tracker = intel.gateway, intel.embedder, intel.llm_tracker
 
@@ -234,21 +247,34 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
         async def notify(self, title: str, body: str, *, priority: int = 3) -> None:
             from atlas.capabilities.notification.domain.models import (
-                Notification, NotificationKind, NotificationPriority,
+                Notification,
+                NotificationKind,
+                NotificationPriority,
             )
+
             p = NotificationPriority(priority) if priority in (0, 1, 2, 3) else NotificationPriority.NORMAL
             n = Notification(
-                id=self._ids.execution_id(), correlation_id=self._ids.correlation_id(),
-                kind=NotificationKind.WARNING, priority=p,
-                title=title, body=body, urgent=True, created_ts=self._clock.now()
+                id=self._ids.execution_id(),
+                correlation_id=self._ids.correlation_id(),
+                kind=NotificationKind.WARNING,
+                priority=p,
+                title=title,
+                body=body,
+                urgent=True,
+                created_ts=self._clock.now(),
             )
             await self._platform.notify(n)
 
         async def ask(self, title: str, body: str, *, timeout_s: float) -> bool | None:
             from atlas.capabilities.notification.domain.models import ApprovalRequest
+
             req = ApprovalRequest(
-                id=self._ids.execution_id(), correlation_id=self._ids.correlation_id(),
-                prompt=title, detail=body, timeout_s=timeout_s, default_on_timeout=False
+                id=self._ids.execution_id(),
+                correlation_id=self._ids.correlation_id(),
+                prompt=title,
+                detail=body,
+                timeout_s=timeout_s,
+                default_on_timeout=False,
             )
             decision = await self._platform.request_approval(req, channels=())
             if decision.timed_out:
@@ -256,14 +282,17 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
             return bool(decision.approved)
 
     notification_platform = build_notification_platform(
-        config_dir=config_dir, db=db, clock=clock, ids=ids, gateway=gateway,
-        identity=identity_platform, callback_base=settings.ntfy_callback_base
+        config_dir=config_dir,
+        db=db,
+        clock=clock,
+        ids=ids,
+        gateway=gateway,
+        identity=identity_platform,
+        callback_base=settings.ntfy_callback_base,
     )
     notifier_adapter = NotificationPlatformAdapter(notification_platform, clock, ids)
     active_notifier = notifier_adapter if settings.ntfy_topic else None
-    safety.set_confirmer(
-        CompositeConfirmer(active_notifier, CliConfirmer(), config.notify.confirm_timeout_s)
-    )
+    safety.set_confirmer(CompositeConfirmer(active_notifier, CliConfirmer(), config.notify.confirm_timeout_s))
 
     # ── Capability infrastructure ─────────────────────────────────── #
     cap_registry = CapabilityRegistry()
@@ -272,28 +301,37 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     ext_cap_router = ExtCapabilityRouter(gateway)
     cap_telemetry = CapabilityTelemetry(cap_audit)
     cap_dispatcher = CapabilityDispatcher(
-        registry=cap_registry, providers=cap_providers, health=cap_health,
-        safety=safety, telemetry=cap_telemetry,
+        registry=cap_registry,
+        providers=cap_providers,
+        health=cap_health,
+        safety=safety,
+        telemetry=cap_telemetry,
     )
 
     # ── Sandboxed tools ───────────────────────────────────────────── #
-    docker_sandbox = DockerSandbox(SandboxSpec(
-        image=config.sandbox.image, cpus=config.sandbox.cpus,
-        memory=config.sandbox.memory, pids_limit=config.sandbox.pids_limit,
-        workdir=config.sandbox.workdir,
-    ))
+    docker_sandbox = DockerSandbox(
+        SandboxSpec(
+            image=config.sandbox.image,
+            cpus=config.sandbox.cpus,
+            memory=config.sandbox.memory,
+            pids_limit=config.sandbox.pids_limit,
+            workdir=config.sandbox.workdir,
+        )
+    )
     _docker_ok = await docker_sandbox.health()
     if _docker_ok:
         sandbox = docker_sandbox
         _log.info("sandbox.docker", event_type="lifecycle", detail="Docker available")
     elif settings.env == "dev":
         sandbox = NativeSandbox(env=settings.env)  # type: ignore[assignment]
-        _log.warning("sandbox.native", event_type="lifecycle",
-                     detail="Docker unavailable — using native sandbox (dev only)")
+        _log.warning(
+            "sandbox.native", event_type="lifecycle", detail="Docker unavailable — using native sandbox (dev only)"
+        )
     else:
         sandbox = docker_sandbox
-        _log.error("sandbox.docker_required", event_type="lifecycle",
-                   detail="Docker is required in non-dev environments")
+        _log.error(
+            "sandbox.docker_required", event_type="lifecycle", detail="Docker is required in non-dev environments"
+        )
 
     ws = str(_REPO_ROOT)
     tools: dict[str, Tool] = {
@@ -305,14 +343,21 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         "shell": ShellTool(
             read_only=manifest.allowed_commands.get("read_only", []),
             side_effect=manifest.allowed_commands.get("side_effect", []),
-            sandbox=sandbox, mounts={ws: "/work"},
+            sandbox=sandbox,
+            mounts={ws: "/work"},
         ),
     }
 
     # ── Memory ────────────────────────────────────────────────────── #
     from atlas.bootstrap.memory import build_memory
+
     mem = build_memory(
-        settings=settings, db=db, ids=ids, clock=clock, embedder=embedder, gateway=gateway,
+        settings=settings,
+        db=db,
+        ids=ids,
+        clock=clock,
+        embedder=embedder,
+        gateway=gateway,
     )
     vectors = mem.vectors
     embedding_worker = mem.embedding_worker
@@ -323,10 +368,16 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     trajectory_store, experience_extractor = mem.trajectory_store, mem.experience_extractor  # Phase 2
 
     # ── Knowledge platform providers ──────────────────────────────── #
-    cap_registry.register(CapabilitySpec(
-        capability=Capability.KNOWLEDGE, safety_tool="knowledge",
-        operations=("search",), default_tier=Tier.AUTO, requires_auth=False,
-        description="Obtain knowledge from memory + official + web sources"))
+    cap_registry.register(
+        CapabilitySpec(
+            capability=Capability.KNOWLEDGE,
+            safety_tool="knowledge",
+            operations=("search",),
+            default_tier=Tier.AUTO,
+            requires_auth=False,
+            description="Obtain knowledge from memory + official + web sources",
+        )
+    )
 
     try:
         ksrc = yaml.safe_load((config_dir / "knowledge_sources.yaml").read_text())
@@ -352,6 +403,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     parametric = ParametricKnowledgeSource(gateway)
 
     prefs = ksrc.get("provider_preferences", {})
+
     def _pref(p_dict: dict[str, int], name: str) -> int:
         if name in p_dict:
             return p_dict[name]
@@ -365,18 +417,31 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     knowledge_router = KnowRouter(gateway)
     knowledge_platform = KnowledgePlatform(
-        router=knowledge_router, gateway=gateway, episodic=episodic, ids=ids, clock=clock,
-        official=official, web=web, memory_source=memory_source, parametric=parametric)
+        router=knowledge_router,
+        gateway=gateway,
+        episodic=episodic,
+        ids=ids,
+        clock=clock,
+        official=official,
+        web=web,
+        memory_source=memory_source,
+        parametric=parametric,
+    )
 
     # ── Email platform ────────────────────────────────────────────── #
     from atlas.capabilities.platforms.email_platform import EmailPlatform
     from atlas.capabilities.providers.email.gmail import GmailProvider
 
-    cap_registry.register(CapabilitySpec(
-        capability=Capability.EMAIL, safety_tool="email",
-        operations=("read", "search", "compose", "send"),
-        default_tier=Tier.NOTIFY, requires_auth=True,
-        description="Read/search/compose/send email; send is Tier-2 previewed"))
+    cap_registry.register(
+        CapabilitySpec(
+            capability=Capability.EMAIL,
+            safety_tool="email",
+            operations=("read", "search", "compose", "send"),
+            default_tier=Tier.NOTIFY,
+            requires_auth=True,
+            description="Read/search/compose/send email; send is Tier-2 previewed",
+        )
+    )
 
     try:
         email_cfg: dict[str, Any] = yaml.safe_load((config_dir / "email.yaml").read_text())
@@ -385,44 +450,64 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     gmail = GmailProvider(identity_platform, credential_id=email_cfg.get("accounts", [{}])[0].get("credential_id", ""))
     email_platform = EmailPlatform(
-        provider=gmail, notifications=notification_platform, ids=ids,
+        provider=gmail,
+        notifications=notification_platform,
+        ids=ids,
         known_contacts=set(email_cfg.get("known_contacts", [])),
-        approval_channels=tuple(email_cfg.get("send", {}).get("approval_channels", [])))
+        approval_channels=tuple(email_cfg.get("send", {}).get("approval_channels", [])),
+    )
 
     # ── Calendar & Contacts ───────────────────────────────────────── #
     from atlas.capabilities.domain.contacts import KnownContacts
     from atlas.capabilities.providers.calendar.google_calendar import GoogleCalendarProvider
     from atlas.capabilities.providers.contacts.google_people import GooglePeopleProvider
 
-    cap_registry.register(CapabilitySpec(
-        capability=Capability.CONTACTS, safety_tool="contacts",
-        operations=("read", "search", "create", "update"),
-        default_tier=Tier.NOTIFY, requires_auth=True,
-        description="Read/search/create/update contacts; writes Tier-2 previewed"))
-    cap_registry.register(CapabilitySpec(
-        capability=Capability.CALENDAR, safety_tool="calendar",
-        operations=("read", "search", "freebusy", "compose", "create", "update", "delete"),
-        default_tier=Tier.NOTIFY, requires_auth=True,
-        description="Read/search/free-busy + create/update/delete; writes Tier-2 previewed"))
+    cap_registry.register(
+        CapabilitySpec(
+            capability=Capability.CONTACTS,
+            safety_tool="contacts",
+            operations=("read", "search", "create", "update"),
+            default_tier=Tier.NOTIFY,
+            requires_auth=True,
+            description="Read/search/create/update contacts; writes Tier-2 previewed",
+        )
+    )
+    cap_registry.register(
+        CapabilitySpec(
+            capability=Capability.CALENDAR,
+            safety_tool="calendar",
+            operations=("read", "search", "freebusy", "compose", "create", "update", "delete"),
+            default_tier=Tier.NOTIFY,
+            requires_auth=True,
+            description="Read/search/free-busy + create/update/delete; writes Tier-2 previewed",
+        )
+    )
 
     try:
         cal_cfg: dict[str, Any] = yaml.safe_load((config_dir / "calendar.yaml").read_text())
     except Exception:
-        cal_cfg = {"accounts": [{"credential_id": "google:anti@gmail.com"}],
-                   "default_calendar": "primary", "commit": {"approval_channels": []}}
+        cal_cfg = {
+            "accounts": [{"credential_id": "google:anti@gmail.com"}],
+            "default_calendar": "primary",
+            "commit": {"approval_channels": []},
+        }
     try:
         con_cfg: dict[str, Any] = yaml.safe_load((config_dir / "contacts.yaml").read_text())
     except Exception:
-        con_cfg = {"accounts": [{"credential_id": "google:anti@gmail.com"}],
-                   "known_contacts": {"sync_on_start": False, "seed": []}}
+        con_cfg = {
+            "accounts": [{"credential_id": "google:anti@gmail.com"}],
+            "known_contacts": {"sync_on_start": False, "seed": []},
+        }
 
-    people = GooglePeopleProvider(
-        identity_platform, credential_id=con_cfg["accounts"][0]["credential_id"])
+    people = GooglePeopleProvider(identity_platform, credential_id=con_cfg["accounts"][0]["credential_id"])
     approval_channels = tuple(cal_cfg.get("commit", {}).get("approval_channels", []))
     contacts_platform = ContactsPlatform(
-        provider=people, notifications=notification_platform, ids=ids,
+        provider=people,
+        notifications=notification_platform,
+        ids=ids,
         approval_channels=approval_channels,
-        seed=set(con_cfg.get("known_contacts", {}).get("seed", [])))
+        seed=set(con_cfg.get("known_contacts", {}).get("seed", [])),
+    )
 
     kc_cfg = con_cfg.get("known_contacts", {})
     if kc_cfg.get("sync_on_start", False):
@@ -432,28 +517,44 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     email_platform.set_known_contacts(known)
 
-    gcal = GoogleCalendarProvider(
-        identity_platform, credential_id=cal_cfg["accounts"][0]["credential_id"])
+    gcal = GoogleCalendarProvider(identity_platform, credential_id=cal_cfg["accounts"][0]["credential_id"])
     calendar_platform = CalendarPlatform(
-        provider=gcal, notifications=notification_platform, ids=ids, known=known,
+        provider=gcal,
+        notifications=notification_platform,
+        ids=ids,
+        known=known,
         approval_channels=approval_channels,
-        default_calendar=cal_cfg.get("default_calendar", "primary"))
+        default_calendar=cal_cfg.get("default_calendar", "primary"),
+    )
 
     # ── Browser platform (optional) ───────────────────────────────── #
     browser_platform: BrowserPlatform | None = None
     if config.browser.enabled:
         browser_platform = build_browser_platform(
-            ids=ids, notifications=notification_platform,
+            ids=ids,
+            notifications=notification_platform,
             approval_channels=tuple(approval_channels),
         )
 
     # ── Orchestration ─────────────────────────────────────────────── #
     from atlas.bootstrap.orchestration import build_orchestration
+
     orch = build_orchestration(
-        config=config, ids=ids, clock=clock, db=db, audit=audit,
-        classifier=classifier, killswitch=killswitch, safety=safety,
-        gateway=gateway, retriever=retriever, working=working, semantic=semantic,
-        bus=bus, tools=tools, episodic=episodic,
+        config=config,
+        ids=ids,
+        clock=clock,
+        db=db,
+        audit=audit,
+        classifier=classifier,
+        killswitch=killswitch,
+        safety=safety,
+        gateway=gateway,
+        retriever=retriever,
+        working=working,
+        semantic=semantic,
+        bus=bus,
+        tools=tools,
+        episodic=episodic,
         trajectory_store=trajectory_store,  # Phase 2
         experience_extractor=experience_extractor,  # Phase 2
     )
@@ -477,23 +578,52 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     _log.info("core.ready", event_type="lifecycle", providers=str(type(gateway)))
     return Atlas(
-        settings=settings, config=config, manifest=manifest, db=db, registry=registry,
-        lifecycle=lifecycle, ids=ids, clock=clock, metrics=metrics, tracer=tracer,
-        audit=audit, killswitch=killswitch, classifier=classifier, safety=safety,
-        tools=tools, gateway=gateway, notification_platform=notification_platform,
-        vectors=vectors, embedder=embedder, embedding_worker=embedding_worker,
-        episodic=episodic, semantic=semantic,
-        user_model=user_model, working=working, retriever=retriever,
-        consolidator=consolidator, pruner=pruner, knowledge_store=knowledge_store,
-        trajectory_store=trajectory_store, experience_extractor=experience_extractor,  # Phase 2
-        bus=bus, orchestrator=orchestrator,
-        cap_registry=cap_registry, cap_health=cap_health, cap_providers=cap_providers,
-        ext_cap_router=ext_cap_router, cap_dispatcher=cap_dispatcher,
-        cap_telemetry=cap_telemetry, identity=identity_platform,
-        knowledge_platform=knowledge_platform, email_platform=email_platform,
-        calendar_platform=calendar_platform, contacts_platform=contacts_platform,
+        settings=settings,
+        config=config,
+        manifest=manifest,
+        db=db,
+        registry=registry,
+        lifecycle=lifecycle,
+        ids=ids,
+        clock=clock,
+        metrics=metrics,
+        tracer=tracer,
+        audit=audit,
+        killswitch=killswitch,
+        classifier=classifier,
+        safety=safety,
+        tools=tools,
+        gateway=gateway,
+        notification_platform=notification_platform,
+        vectors=vectors,
+        embedder=embedder,
+        embedding_worker=embedding_worker,
+        episodic=episodic,
+        semantic=semantic,
+        user_model=user_model,
+        working=working,
+        retriever=retriever,
+        consolidator=consolidator,
+        pruner=pruner,
+        knowledge_store=knowledge_store,
+        trajectory_store=trajectory_store,
+        experience_extractor=experience_extractor,  # Phase 2
+        bus=bus,
+        orchestrator=orchestrator,
+        cap_registry=cap_registry,
+        cap_health=cap_health,
+        cap_providers=cap_providers,
+        ext_cap_router=ext_cap_router,
+        cap_dispatcher=cap_dispatcher,
+        cap_telemetry=cap_telemetry,
+        identity=identity_platform,
+        knowledge_platform=knowledge_platform,
+        email_platform=email_platform,
+        calendar_platform=calendar_platform,
+        contacts_platform=contacts_platform,
         browser_platform=browser_platform,
-        feedback=feedback_store, scheduler=cron_scheduler,
-        llm_tracker=llm_tracker, workflows=workflow_store,
+        feedback=feedback_store,
+        scheduler=cron_scheduler,
+        llm_tracker=llm_tracker,
+        workflows=workflow_store,
     )
-

@@ -48,20 +48,20 @@ def _calendar_today(_: dict[str, str]) -> str:
     return (
         'set output to ""\n'
         'tell application "Calendar"\n'
-        '  set todayStart to current date\n'
-        '  set hours of todayStart to 0\n'
-        '  set minutes of todayStart to 0\n'
-        '  set seconds of todayStart to 0\n'
-        '  set todayEnd to todayStart + (1 * days)\n'
-        '  repeat with c in calendars\n'
-        '    set evs to (every event of c whose start date ≥ todayStart '
-        'and start date < todayEnd)\n'
-        '    repeat with e in evs\n'
+        "  set todayStart to current date\n"
+        "  set hours of todayStart to 0\n"
+        "  set minutes of todayStart to 0\n"
+        "  set seconds of todayStart to 0\n"
+        "  set todayEnd to todayStart + (1 * days)\n"
+        "  repeat with c in calendars\n"
+        "    set evs to (every event of c whose start date ≥ todayStart "
+        "and start date < todayEnd)\n"
+        "    repeat with e in evs\n"
         '      set output to output & (summary of e) & " @ " & (start date of e as string) & "\n"\n'
-        '    end repeat\n'
-        '  end repeat\n'
-        'end tell\n'
-        'return output'
+        "    end repeat\n"
+        "  end repeat\n"
+        "end tell\n"
+        "return output"
     )
 
 
@@ -70,15 +70,14 @@ def _notification(p: dict[str, str]) -> str:
 
 
 _TEMPLATES: dict[str, ScriptTemplate] = {
-    t.name: t for t in (
+    t.name: t
+    for t in (
         ScriptTemplate("open_app", _open_app, ("app",), True, "Activate/launch an application"),
         ScriptTemplate("music_current", _music_current, (), False, "Name of current Music track"),
         ScriptTemplate("music_play", _music_play, (), True, "Start Music playback"),
         ScriptTemplate("music_pause", _music_pause, (), True, "Pause Music playback"),
         ScriptTemplate("calendar_today", _calendar_today, (), False, "Today's calendar events"),
-        ScriptTemplate(
-            "notification", _notification, ("title", "body"), True, "Show a notification"
-        ),
+        ScriptTemplate("notification", _notification, ("title", "body"), True, "Show a notification"),
     )
 }
 

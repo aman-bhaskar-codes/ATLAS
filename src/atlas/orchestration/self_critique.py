@@ -59,11 +59,15 @@ class SelfCritique:
     """
 
     def __init__(
-        self, *, gateway: ModelGateway, estimator: TierEstimator,
-        parser: ResponseParser, validator: OutputValidator,
+        self,
+        *,
+        gateway: ModelGateway,
+        estimator: TierEstimator,
+        parser: ResponseParser,
+        validator: OutputValidator,
         correlation_id_provider: Callable[[], CorrelationId],
         audit: CritiqueAudit | None = None,
-        memory: "SemanticMemory | None" = None,
+        memory: SemanticMemory | None = None,
     ) -> None:
         self._gw = gateway
         self._estimator = estimator
@@ -87,10 +91,10 @@ class SelfCritique:
         if verdict.verdict is CritiqueVerdict.OK:
             return action  # tier UNCHANGED — Safety Engine still gates it
         if verdict.verdict is CritiqueVerdict.ABORT:
-            _log.info("critique.abort", event_type="critique",
-                      correlation_id=corr, reason=verdict.reason)
+            _log.info("critique.abort", event_type="critique", correlation_id=corr, reason=verdict.reason)
             return Action(
-                step=action.step, kind="ask_user",
+                step=action.step,
+                kind="ask_user",
                 final_text=f"I held off: {verdict.reason} Want me to proceed anyway?",
             )
         # REVISE: regenerate once, bounded
@@ -98,7 +102,10 @@ class SelfCritique:
         return revised
 
     async def reflect(
-        self, action: Action, observation: Observation, context: str,
+        self,
+        action: Action,
+        observation: Observation,
+        context: str,
     ) -> ReflectionResult:
         """Post-action OTAR Reflect step: evaluate observation outcome."""
         succeeded = observation.ok
@@ -110,6 +117,7 @@ class SelfCritique:
         # Phase 0: Persist learnings from failures into semantic memory
         if self._memory and not observation.ok and learnings:
             from atlas.memory.types import FactKind
+
             for learning in learnings[:3]:  # cap at 3 per reflection
                 asyncio.create_task(
                     self._memory.add_fact(
@@ -126,28 +134,28 @@ class SelfCritique:
             learnings=learnings,
             should_adjust_plan=not succeeded,
             adjustment_reason=(
-                f"Action failed: {observation.error or 'observation reported failure'}"
-                if not succeeded
-                else None
+                f"Action failed: {observation.error or 'observation reported failure'}" if not succeeded else None
             ),
         )
 
-    async def _run_critique(
-        self, action: Action, context: str, corr: CorrelationId
-    ) -> Critique:
-        prompt = (
-            f"USER CONTEXT:\n{context[:2000]}\n\n"
-            f"PROPOSED ACTION:\n{action.model_dump_json()}"
-        )
+    async def _run_critique(self, action: Action, context: str, corr: CorrelationId) -> Critique:
+        prompt = f"USER CONTEXT:\n{context[:2000]}\n\nPROPOSED ACTION:\n{action.model_dump_json()}"
         try:
-            resp = await self._gw.complete(ModelRequest(
-                correlation_id=corr, system=_CRITIQUE_SYSTEM, prompt=prompt,
-                required_capabilities=frozenset({
-                    ModelCapability.REFLECTION,
-                    ModelCapability.JSON_GENERATION,
-                }),
-                max_tokens=512, temperature=0.0,  # thinking off: fast + cheap
-            ))
+            resp = await self._gw.complete(
+                ModelRequest(
+                    correlation_id=corr,
+                    system=_CRITIQUE_SYSTEM,
+                    prompt=prompt,
+                    required_capabilities=frozenset(
+                        {
+                            ModelCapability.REFLECTION,
+                            ModelCapability.JSON_GENERATION,
+                        }
+                    ),
+                    max_tokens=512,
+                    temperature=0.0,  # thinking off: fast + cheap
+                )
+            )
             data = json.loads(self._json(resp.text))
             return Critique(
                 verdict=self._verdict(data.get("verdict")),
@@ -158,13 +166,10 @@ class SelfCritique:
             # fail-safe: if the critic itself fails, do NOT abort or revise blindly.
             # Return OK so the action proceeds to the Safety Engine, which is the
             # authoritative gate. Critique is an ADDITIONAL check, never the only one.
-            _log.warning("critique.failed_open_to_safety", event_type="critique",
-                         correlation_id=corr, error=repr(exc))
+            _log.warning("critique.failed_open_to_safety", event_type="critique", correlation_id=corr, error=repr(exc))
             return Critique(verdict=CritiqueVerdict.OK, reason="critic unavailable")
 
-    async def _revise(
-        self, action: Action, context: str, critique: Critique, corr: CorrelationId
-    ) -> Action:
+    async def _revise(self, action: Action, context: str, critique: Critique, corr: CorrelationId) -> Action:
         prompt = (
             f"CONTEXT:\n{context[:2000]}\n\n"
             f"ORIGINAL ACTION:\n{action.model_dump_json()}\n\n"
@@ -172,27 +177,33 @@ class SelfCritique:
             f"SUGGESTION: {critique.suggestion or '(none)'}"
         )
         try:
-            resp = await self._gw.complete(ModelRequest(
-                correlation_id=corr, system=_REVISE_SYSTEM, prompt=prompt,
-                required_capabilities=frozenset({
-                    ModelCapability.REASONING,
-                    ModelCapability.TOOL_CALLING,
-                    ModelCapability.JSON_GENERATION,
-                }),
-                max_tokens=1024, temperature=0.1,
-            ))
+            resp = await self._gw.complete(
+                ModelRequest(
+                    correlation_id=corr,
+                    system=_REVISE_SYSTEM,
+                    prompt=prompt,
+                    required_capabilities=frozenset(
+                        {
+                            ModelCapability.REASONING,
+                            ModelCapability.TOOL_CALLING,
+                            ModelCapability.JSON_GENERATION,
+                        }
+                    ),
+                    max_tokens=1024,
+                    temperature=0.1,
+                )
+            )
             _thought, revised = self._parser.parse(resp.text, action.step)
             self._validator.validate(revised)
             return revised
         except Exception as exc:
             # revision failed -> safest fallback is to ask the human, not to run
             # the un-revised risky action.
-            _log.info("critique.revise_failed_to_ask", event_type="critique",
-                      correlation_id=corr, error=repr(exc))
+            _log.info("critique.revise_failed_to_ask", event_type="critique", correlation_id=corr, error=repr(exc))
             return Action(
-                step=action.step, kind="ask_user",
-                final_text=f"I wanted to adjust this action ({critique.reason}) "
-                           f"but couldn't. How should I proceed?",
+                step=action.step,
+                kind="ask_user",
+                final_text=f"I wanted to adjust this action ({critique.reason}) but couldn't. How should I proceed?",
             )
 
     @staticmethod
@@ -208,4 +219,3 @@ class SelfCritique:
         if s == -1 or e == -1:
             raise ValueError("no JSON")
         return text[s : e + 1]
-

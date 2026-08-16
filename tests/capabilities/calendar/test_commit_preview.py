@@ -1,4 +1,5 @@
 """Tests for CalendarPlatform Tier-2 commit gate — mirrors test_send_preview.py from 6.5."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -26,24 +27,34 @@ class FakeCalProvider:
 
     async def initialize(self) -> None: ...
     async def authenticate(self) -> None: ...
-    async def health(self) -> bool: return True
-    async def list_events(self, cal_id: str, *, start: datetime,
-                          end: datetime, limit: int) -> list[CalendarEvent]:
+    async def health(self) -> bool:
+        return True
+
+    async def list_events(self, cal_id: str, *, start: datetime, end: datetime, limit: int) -> list[CalendarEvent]:
         return []
-    async def search(self, query: str, *, limit: int) -> list[CalendarEvent]: return []
+
+    async def search(self, query: str, *, limit: int) -> list[CalendarEvent]:
+        return []
+
     async def get_event(self, calendar_id: str, event_id: str) -> CalendarEvent:
         raise NotImplementedError
+
     async def free_busy(self, cal_id: str, *, start: datetime, end: datetime):  # type: ignore
         from atlas.capabilities.domain.calendar import Availability
+
         return Availability(calendar_id=cal_id, window_start=start, window_end=end)
+
     async def create_event(self, draft: EventDraft) -> str:
         self.created = draft
         return "evt-001"
+
     async def update_event(self, draft: EventDraft) -> str:
         self.created = draft
         return draft.event_id or "evt-001"
+
     async def delete_event(self, calendar_id: str, event_id: str) -> None:
         self.deleted = (calendar_id, event_id)
+
     async def shutdown(self) -> None: ...
 
 
@@ -53,28 +64,33 @@ class FakeNotify:
         self.previewed: str | None = None
         self.prompt: str | None = None
 
-    async def request_approval(self, req: ApprovalRequest,
-                               channels: tuple[str, ...]) -> ApprovalDecision:
+    async def request_approval(self, req: ApprovalRequest, channels: tuple[str, ...]) -> ApprovalDecision:
         self.previewed = req.detail
         self.prompt = req.prompt
-        return ApprovalDecision(
-            request_id=req.id, approved=self._a,
-            decided_ts=datetime.now(UTC))
+        return ApprovalDecision(request_id=req.id, approved=self._a, decided_ts=datetime.now(UTC))
 
 
 class FakeIds:
-    def execution_id(self) -> str: return "e1"
-    def correlation_id(self) -> CorrelationId: return CorrelationId("c")
-    def task_id(self) -> str: return "t1"
+    def execution_id(self) -> str:
+        return "e1"
+
+    def correlation_id(self) -> CorrelationId:
+        return CorrelationId("c")
+
+    def task_id(self) -> str:
+        return "t1"
 
 
-def _platform(approved: bool,
-              known: tuple[str, ...] = ()) -> tuple[CalendarPlatform, FakeCalProvider, FakeNotify]:
+def _platform(approved: bool, known: tuple[str, ...] = ()) -> tuple[CalendarPlatform, FakeCalProvider, FakeNotify]:
     prov = FakeCalProvider()
     notify = FakeNotify(approved)
     platform = CalendarPlatform(
-        provider=prov, notifications=notify, ids=FakeIds(),  # type: ignore[arg-type]
-        known=KnownContacts(set(known)), approval_channels=("ntfy:atlas",))
+        provider=prov,
+        notifications=notify,
+        ids=FakeIds(),  # type: ignore[arg-type]
+        known=KnownContacts(set(known)),
+        approval_channels=("ntfy:atlas",),
+    )
     return platform, prov, notify
 
 
@@ -136,9 +152,7 @@ async def test_preview_contains_real_title_and_time() -> None:
 @pytest.mark.asyncio
 async def test_delete_calls_provider_after_approval() -> None:
     """Approved delete -> provider.delete_event called; no conflict check."""
-    draft = EventDraft(
-        title="Old Meeting", event_id="evt-old",
-        when=EventTime(start_dt=_NOW, end_dt=_END))
+    draft = EventDraft(title="Old Meeting", event_id="evt-old", when=EventTime(start_dt=_NOW, end_dt=_END))
     platform, prov, _ = _platform(approved=True)
     result = await platform.commit(draft, CorrelationId("c"), delete=True)
     assert result is None

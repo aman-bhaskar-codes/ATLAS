@@ -29,6 +29,9 @@ class AXPerceptionTool:
         return ToolResult(
             ok=True,
             output=state.model_dump(),
-            side_effects=(SideEffect(kind="screen_read", target=state.app_name or "unknown",
-                                     detail=state.source.value, reversible=True),),
+            side_effects=(
+                SideEffect(
+                    kind="screen_read", target=state.app_name or "unknown", detail=state.source.value, reversible=True
+                ),
+            ),
         )

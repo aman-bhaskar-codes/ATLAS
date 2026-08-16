@@ -32,9 +32,7 @@ class AuditLog:
 
     async def _last_hash(self) -> str:
         """Retrieve the row_hash of the most recent audit entry (or genesis)."""
-        cur = await self._db.conn.execute(
-            "SELECT row_hash FROM audit_events ORDER BY id DESC LIMIT 1"
-        )
+        cur = await self._db.conn.execute("SELECT row_hash FROM audit_events ORDER BY id DESC LIMIT 1")
         row = await cur.fetchone()
         return str(row["row_hash"]) if row else _GENESIS_HASH
 
@@ -42,9 +40,7 @@ class AuditLog:
         payload_json = json.dumps(rec.payload, default=str) if rec.payload else "{}"
         payload_id: int | None = None
         if rec.payload is not None:
-            cur = await self._db.conn.execute(
-                "INSERT INTO payloads(body) VALUES (?)", (payload_json,)
-            )
+            cur = await self._db.conn.execute("INSERT INTO payloads(body) VALUES (?)", (payload_json,))
             payload_id = int(cur.lastrowid) if cur.lastrowid is not None else None
 
         # Hash chain: link to previous row
@@ -57,10 +53,19 @@ class AuditLog:
             "decision, outcome, payload_id, cost_tokens, cost_usd, prev_hash, row_hash) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
-                rec.correlation_id, ts_iso, rec.actor, rec.action, rec.tool,
+                rec.correlation_id,
+                ts_iso,
+                rec.actor,
+                rec.action,
+                rec.tool,
                 int(rec.tier) if rec.tier is not None else None,
-                rec.decision, rec.outcome, payload_id, rec.cost_tokens, rec.cost_usd,
-                prev_hash, row_hash,
+                rec.decision,
+                rec.outcome,
+                payload_id,
+                rec.cost_tokens,
+                rec.cost_usd,
+                prev_hash,
+                row_hash,
             ),
         )
         await self._db.conn.commit()
@@ -83,8 +88,10 @@ class AuditLog:
             if str(row["prev_hash"]) != expected_prev:
                 return False, i
             expected_hash = _compute_row_hash(
-                str(row["prev_hash"]), str(row["action"]),
-                str(row["payload_json"]), str(row["ts"]),
+                str(row["prev_hash"]),
+                str(row["action"]),
+                str(row["payload_json"]),
+                str(row["ts"]),
             )
             if str(row["row_hash"]) != expected_hash:
                 return False, i
@@ -92,9 +99,7 @@ class AuditLog:
         return True, len(rows)
 
     async def tail(self, limit: int = 50) -> list[dict[str, object]]:
-        cur = await self._db.conn.execute(
-            "SELECT * FROM audit_events ORDER BY id DESC LIMIT ?", (limit,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM audit_events ORDER BY id DESC LIMIT ?", (limit,))
         rows = list(await cur.fetchall())
         return [dict(r) for r in reversed(rows)]
 
@@ -106,25 +111,21 @@ class AuditLog:
 
     async def cost_today(self) -> float:
         cur = await self._db.conn.execute(
-            "SELECT COALESCE(SUM(cost_usd),0) AS s FROM audit_events "
-            "WHERE ts >= date('now','start of day')"
+            "SELECT COALESCE(SUM(cost_usd),0) AS s FROM audit_events WHERE ts >= date('now','start of day')"
         )
         row = await cur.fetchone()
         return float(row["s"]) if row else 0.0
 
     async def cost_this_week(self) -> float:
         cur = await self._db.conn.execute(
-            "SELECT COALESCE(SUM(cost_usd),0) AS s FROM audit_events "
-            "WHERE ts >= date('now','weekday 0','-6 days')"
+            "SELECT COALESCE(SUM(cost_usd),0) AS s FROM audit_events WHERE ts >= date('now','weekday 0','-6 days')"
         )
         row = await cur.fetchone()
         return float(row["s"]) if row else 0.0
 
     async def cost_this_month(self) -> float:
         cur = await self._db.conn.execute(
-            "SELECT COALESCE(SUM(cost_usd),0) AS s FROM audit_events "
-            "WHERE ts >= date('now','start of month')"
+            "SELECT COALESCE(SUM(cost_usd),0) AS s FROM audit_events WHERE ts >= date('now','start of month')"
         )
         row = await cur.fetchone()
         return float(row["s"]) if row else 0.0
-

@@ -13,18 +13,21 @@ class FakeRetr:
 
             def render(self) -> str:
                 return self.user_model
+
         return R()
 
 
 class FakeWorking:
-    def recent(self, n: int) -> tuple[Any, ...]: return ()
+    def recent(self, n: int) -> tuple[Any, ...]:
+        return ()
 
 
 async def test_budget_trims_negotiable_layers() -> None:
     cb = ContextBuilder(
         retriever=FakeRetr(),  # type: ignore[arg-type]
         working=FakeWorking(),  # type: ignore[arg-type]
-        system_prompt="SYS", token_budget=5,
+        system_prompt="SYS",
+        token_budget=5,
     )
     out = await cb.build("hi", safety_constraints="deny-by-default", tool_catalog="tools: x")
     assert "SYS" in out  # priority-0 system layer always kept

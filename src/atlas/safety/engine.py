@@ -30,11 +30,25 @@ _log = get_logger("atlas.safety.engine")
 
 
 # ---- Secret redaction policy ---------------------------------------- #
-_SECRET_FIELDS = frozenset({
-    "password", "secret", "token", "api_key", "apikey", "authorization",
-    "bearer", "cookie", "credentials", "private_key", "access_token",
-    "refresh_token", "client_secret", "passphrase", "master_key",
-})
+_SECRET_FIELDS = frozenset(
+    {
+        "password",
+        "secret",
+        "token",
+        "api_key",
+        "apikey",
+        "authorization",
+        "bearer",
+        "cookie",
+        "credentials",
+        "private_key",
+        "access_token",
+        "refresh_token",
+        "client_secret",
+        "passphrase",
+        "master_key",
+    }
+)
 _SECRET_PATTERN = re.compile(
     r"(Bearer\s+\S+|eyJ[A-Za-z0-9_-]+\.eyJ|sk-[A-Za-z0-9]+|ghp_[A-Za-z0-9]+)",
     re.IGNORECASE,
@@ -74,8 +88,14 @@ class DeniedError(AtlasError):
 
 class SafetyEngine:
     def __init__(
-        self, *, classifier: TierClassifier, policy: PolicyEngine,
-        audit: AuditLog, killswitch: KillSwitch, clock: Clock, cfg: SafetyCfg,
+        self,
+        *,
+        classifier: TierClassifier,
+        policy: PolicyEngine,
+        audit: AuditLog,
+        killswitch: KillSwitch,
+        clock: Clock,
+        cfg: SafetyCfg,
         confirmer: Confirmer | None = None,
         events: Any | None = None,  # EventPublisher - Any to avoid circular import
     ) -> None:
@@ -90,7 +110,7 @@ class SafetyEngine:
 
     def set_confirmer(self, confirmer: Confirmer) -> None:
         self._confirmer = confirmer
-    
+
     def set_events(self, events: Any) -> None:
         """Set the EventPublisher after construction (avoids circular dependency)."""
         self._events = events
@@ -101,7 +121,7 @@ class SafetyEngine:
             raise HaltedError("kill switch active")
 
         decision = self._policy.evaluate(self._clf.classify(req))
-        
+
         # Emit tier classification event
         if self._events:
             await self._events.emit_safety(
@@ -113,7 +133,7 @@ class SafetyEngine:
                 tool=req.tool,
                 requires_approval=(decision.decision == "require_confirm"),
             )
-        
+
         await self._audit_decision(req, decision)
 
         if decision.decision == "deny":
@@ -132,7 +152,7 @@ class SafetyEngine:
 
         if decision.decision == "require_confirm":
             needs_code = decision.tier >= Tier.DANGEROUS
-            
+
             # Emit approval requested event
             if self._events:
                 await self._events.emit_safety(
@@ -145,9 +165,9 @@ class SafetyEngine:
                     requires_approval=True,
                     reason=decision.reason,
                 )
-            
+
             confirmed = await self._confirm(req, decision, tool, require_code=needs_code)
-            
+
             if not confirmed:
                 if self._events:
                     await self._events.emit_safety(
@@ -162,7 +182,7 @@ class SafetyEngine:
                     )
                 await self._audit_decision(req, decision, outcome="denied")
                 raise DeniedError(decision)
-            
+
             # Emit approval granted event
             if self._events:
                 await self._events.emit_safety(
@@ -188,61 +208,88 @@ class SafetyEngine:
             result = await tool.execute(req.args)
         except Exception as exc:
             await self._audit_decision(req, decision, outcome="error")
-            _log.error("tool.execute_failed", event_type="safety",
-                       correlation_id=req.correlation_id, tool=req.tool, error=repr(exc))
+            _log.error(
+                "tool.execute_failed",
+                event_type="safety",
+                correlation_id=req.correlation_id,
+                tool=req.tool,
+                error=repr(exc),
+            )
             raise
         dur = int((time.perf_counter() - start) * 1000)
-        await self._audit.record(AuditRecord(
-            correlation_id=req.correlation_id, ts=self._clock.now(), actor="safety",
-            action="tool.result", tool=req.tool, tier=decision.tier, decision=decision.decision,
-            outcome="ok" if result.ok else "error",
-            payload={"duration_ms": dur, "error": result.error,
-                     "side_effects": [se.model_dump() for se in result.side_effects]},
-        ))
+        await self._audit.record(
+            AuditRecord(
+                correlation_id=req.correlation_id,
+                ts=self._clock.now(),
+                actor="safety",
+                action="tool.result",
+                tool=req.tool,
+                tier=decision.tier,
+                decision=decision.decision,
+                outcome="ok" if result.ok else "error",
+                payload={
+                    "duration_ms": dur,
+                    "error": result.error,
+                    "side_effects": [se.model_dump() for se in result.side_effects],
+                },
+            )
+        )
         return result
 
     async def _confirm(
-        self, req: ToolRequest, decision: SafetyDecision, tool: Tool,
-        *, require_code: bool = False,
+        self,
+        req: ToolRequest,
+        decision: SafetyDecision,
+        tool: Tool,
+        *,
+        require_code: bool = False,
     ) -> bool:
         if self._confirmer is None:
-            _log.warning("safety.no_confirmer", event_type="safety",
-                         correlation_id=req.correlation_id)
+            _log.warning("safety.no_confirmer", event_type="safety", correlation_id=req.correlation_id)
             return False
         preview = tool.dry_run(req.args)
         tier_label = "DANGEROUS" if require_code else f"TIER {int(decision.tier)}"
-        prompt = (
-            f"[{tier_label}] {req.tool}.{req.operation}\n"
-            f"reason: {decision.reason}\nwould do: {preview}"
-        )
+        prompt = f"[{tier_label}] {req.tool}.{req.operation}\nreason: {decision.reason}\nwould do: {preview}"
         if require_code:
             import secrets
+
             code = f"{secrets.randbelow(10000):04d}"
             prompt += f"\n⚠️  HIGH-IMPACT ACTION. Type confirmation code [{code}] to proceed."
-            _log.warning("safety.dangerous_confirm", event_type="safety",
-                         correlation_id=req.correlation_id, tool=req.tool,
-                         detail="confirmation code required")
+            _log.warning(
+                "safety.dangerous_confirm",
+                event_type="safety",
+                correlation_id=req.correlation_id,
+                tool=req.tool,
+                detail="confirmation code required",
+            )
         try:
             return await asyncio.wait_for(
                 self._confirmer.confirm(prompt, decision, req),
                 timeout=self._cfg.confirm_timeout_s,
             )
         except TimeoutError:
-            _log.info("safety.confirm_timeout", event_type="safety",
-                      correlation_id=req.correlation_id)
+            _log.info("safety.confirm_timeout", event_type="safety", correlation_id=req.correlation_id)
             return False
 
     async def _audit_decision(
         self, req: ToolRequest, decision: SafetyDecision | None, outcome: str | None = None
     ) -> None:
-        raw_payload = {"operation": req.operation, "args": req.args,
-                     "reason": decision.reason if decision else "halted",
-                     "matched_rule": decision.matched_rule if decision else None}
-        await self._audit.record(AuditRecord(
-            correlation_id=req.correlation_id, ts=self._clock.now(), actor="safety",
-            action="decision", tool=req.tool,
-            tier=decision.tier if decision else None,
-            decision=decision.decision if decision else None,
-            outcome=outcome,
-            payload=_redact_payload(raw_payload),
-        ))
+        raw_payload = {
+            "operation": req.operation,
+            "args": req.args,
+            "reason": decision.reason if decision else "halted",
+            "matched_rule": decision.matched_rule if decision else None,
+        }
+        await self._audit.record(
+            AuditRecord(
+                correlation_id=req.correlation_id,
+                ts=self._clock.now(),
+                actor="safety",
+                action="decision",
+                tool=req.tool,
+                tier=decision.tier if decision else None,
+                decision=decision.decision if decision else None,
+                outcome=outcome,
+                payload=_redact_payload(raw_payload),
+            )
+        )

@@ -24,7 +24,7 @@ from atlas.infra.logging import get_logger
 from atlas.memory.types import Episode, EpisodeKind
 
 if TYPE_CHECKING:
-    from atlas.infra.bus import MessageBus, Event
+    from atlas.infra.bus import Event, MessageBus
     from atlas.memory.embedder import EmbeddingWorker
 
 _log = get_logger("atlas.memory.episodic")
@@ -32,31 +32,31 @@ _log = get_logger("atlas.memory.episodic")
 
 class EpisodicMemory:
     """Real-time episodic memory with instant writes and async embedding."""
-    
+
     def __init__(
         self,
         db: Database,
         clock: Clock,
-        embedding_worker: "EmbeddingWorker | None" = None,
+        embedding_worker: EmbeddingWorker | None = None,
     ) -> None:
         self._db = db
         self._clock = clock
         self._embedding_worker = embedding_worker
-        self._bus: "MessageBus | None" = None
+        self._bus: MessageBus | None = None
 
-    def set_bus(self, bus: "MessageBus") -> None:
+    def set_bus(self, bus: MessageBus) -> None:
         """Connect to event bus for real-time streaming."""
         self._bus = bus
         # Subscribe to all orchestrator events
         bus.subscribe("orchestrator", self._on_orchestrator_event)
         _log.info("episodic.bus_connected", event_type="memory")
 
-    async def _on_orchestrator_event(self, event: "Event") -> None:
+    async def _on_orchestrator_event(self, event: Event) -> None:
         """Real-time event handler - writes episode instantly (< 10ms)."""
         # Duck-type check: OrchestratorEvent has task_id, state, kind, metadata attributes
         if not (hasattr(event, "task_id") and hasattr(event, "kind") and hasattr(event, "state")):
             return
-        
+
         try:
             # Calculate salience based on event kind (fast, rule-based)
             salience = self._calculate_salience(event)
@@ -65,7 +65,6 @@ class EpisodicMemory:
             event_metadata: dict[str, object] = getattr(event, "metadata", {})
             event_task_id: str | None = getattr(event, "task_id", None)
             event_kind: str = getattr(event, "kind", "unknown")
-            event_state: str = getattr(event, "state", "unknown")
 
             # Extract episode data
             episode = Episode(
@@ -81,16 +80,14 @@ class EpisodicMemory:
                 salience=salience,
                 tokens=int(str(event_metadata.get("tokens", 0) or 0)),
             )
-            
+
             # CRITICAL: Instant write to DB (< 10ms)
             episode_id = await self.record(episode)
-            
+
             # Async: Queue for embedding (doesn't block)
             if self._embedding_worker and episode_id > 0:
-                asyncio.create_task(
-                    self._embedding_worker.embed_episode(episode_id, episode.content)
-                )
-            
+                asyncio.create_task(self._embedding_worker.embed_episode(episode_id, episode.content))
+
             _log.debug(
                 "episodic.recorded",
                 event_type="memory",
@@ -98,7 +95,7 @@ class EpisodicMemory:
                 kind=episode.kind.value,
                 salience=salience,
             )
-            
+
         except Exception as exc:
             _log.error(
                 "episodic.record_error",
@@ -107,7 +104,7 @@ class EpisodicMemory:
                 event_kind=event.kind,
             )
 
-    def _calculate_salience(self, event: "Event") -> float:
+    def _calculate_salience(self, event: Event) -> float:
         """Fast, rule-based salience scoring (no LLM call)."""
         # Duck-type: OrchestratorEvent fields
         if not hasattr(event, "kind"):
@@ -147,7 +144,7 @@ class EpisodicMemory:
             return EpisodeKind.OBSERVATION
         return EpisodeKind.MESSAGE
 
-    def _extract_content(self, event: "Event") -> str:
+    def _extract_content(self, event: Event) -> str:
         """Extract meaningful content from event for episode storage."""
         metadata = getattr(event, "metadata", {})
         state = getattr(event, "state", "unknown")
@@ -172,40 +169,61 @@ class EpisodicMemory:
             "INSERT INTO episodes(correlation_id, task_id, step, ts, kind, role, "
             "content, tool, outcome, salience, consolidated, tokens) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,0,?)",
-            (ep.correlation_id, ep.task_id, ep.step, ep.ts.isoformat(), ep.kind.value,
-             ep.role, ep.content, ep.tool, ep.outcome, ep.salience, ep.tokens),
+            (
+                ep.correlation_id,
+                ep.task_id,
+                ep.step,
+                ep.ts.isoformat(),
+                ep.kind.value,
+                ep.role,
+                ep.content,
+                ep.tool,
+                ep.outcome,
+                ep.salience,
+                ep.tokens,
+            ),
         )
         await self._db.conn.commit()
         episode_id = int(cur.lastrowid) if cur.lastrowid is not None else -1
-        
+
         # Emit memory event for WebSocket broadcast — use MemoryBusEvent from infra
         # so atlas.memory does not import atlas.orchestration (layer boundary)
         if self._bus and episode_id > 0:
             from atlas.infra.bus import MemoryBusEvent
-            asyncio.create_task(self._bus.publish("memory", MemoryBusEvent(
-                correlation_id=ep.correlation_id,
-                task_id=ep.task_id or "unknown",
-                kind="memory.stored",
-                memory_type="episodic",
-                count=1,
-                items=[f"Episode {episode_id}: {ep.kind.value}"],
-                metadata={"salience": ep.salience},
-            )))
-        
+
+            asyncio.create_task(
+                self._bus.publish(
+                    "memory",
+                    MemoryBusEvent(
+                        correlation_id=ep.correlation_id,
+                        task_id=ep.task_id or "unknown",
+                        kind="memory.stored",
+                        memory_type="episodic",
+                        count=1,
+                        items=[f"Episode {episode_id}: {ep.kind.value}"],
+                        metadata={"salience": ep.salience},
+                    ),
+                )
+            )
+
         return episode_id
 
     async def record_correction(self, correlation_id: str, content: str) -> int:
         """Corrections get max salience — this is how the agent learns you."""
-        return await self.record(Episode(
-            correlation_id=correlation_id, ts=self._clock.now(),
-            kind=EpisodeKind.CORRECTION, role="user", content=content, salience=1.0,
-        ))
+        return await self.record(
+            Episode(
+                correlation_id=correlation_id,
+                ts=self._clock.now(),
+                kind=EpisodeKind.CORRECTION,
+                role="user",
+                content=content,
+                salience=1.0,
+            )
+        )
 
     async def recent(self, limit: int = 50) -> list[Episode]:
         """Get recent episodes (< 10ms with index)."""
-        cur = await self._db.conn.execute(
-            "SELECT * FROM episodes ORDER BY id DESC LIMIT ?", (limit,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM episodes ORDER BY id DESC LIMIT ?", (limit,))
         rows = list(await cur.fetchall())
         return [self._row(r) for r in reversed(rows)]
 
@@ -219,22 +237,22 @@ class EpisodicMemory:
         """Fast retrieval with filters (< 50ms with indexes)."""
         conditions = []
         params: list[str | float] = []
-        
+
         if task_id:
             conditions.append("task_id = ?")
             params.append(task_id)
-        
+
         if kind:
             conditions.append("kind = ?")
             params.append(kind.value)
-        
+
         if min_salience > 0:
             conditions.append("salience >= ?")
             params.append(min_salience)
-        
+
         where_clause = " AND ".join(conditions) if conditions else "1=1"
         params.append(limit)
-        
+
         # Optimized query: Uses idx_episodes_task_salience
         cur = await self._db.conn.execute(
             f"""
@@ -243,9 +261,9 @@ class EpisodicMemory:
             ORDER BY salience DESC, ts DESC
             LIMIT ?
             """,
-            tuple(params)
+            tuple(params),
         )
-        
+
         return [self._row(r) for r in await cur.fetchall()]
 
     async def get_by_task(self, task_id: str, limit: int = 100) -> list[Episode]:
@@ -257,7 +275,7 @@ class EpisodicMemory:
             ORDER BY id ASC
             LIMIT ?
             """,
-            (task_id, limit)
+            (task_id, limit),
         )
         return [self._row(r) for r in await cur.fetchall()]
 
@@ -270,7 +288,7 @@ class EpisodicMemory:
             ORDER BY id ASC
             LIMIT ?
             """,
-            (correlation_id, limit)
+            (correlation_id, limit),
         )
         return [self._row(r) for r in await cur.fetchall()]
 
@@ -283,7 +301,7 @@ class EpisodicMemory:
             ORDER BY salience DESC, ts DESC
             LIMIT ?
             """,
-            (min_salience, limit)
+            (min_salience, limit),
         )
         return [self._row(r) for r in await cur.fetchall()]
 
@@ -297,16 +315,16 @@ class EpisodicMemory:
         if not self._embedding_worker:
             # Fallback to keyword search if no embeddings
             return await self.keyword_search([query], limit=limit)
-        
+
         # Get query embedding
         query_embedding = await self._embedding_worker._embedder.embed(query)
-        
+
         # Search vector store
-        from atlas.memory.vectorstore import VectorHit
         hits = await self._embedding_worker._vector_store.search_episodes(
-            query_embedding, k=limit * 2  # Over-fetch for filtering
+            query_embedding,
+            k=limit * 2,  # Over-fetch for filtering
         )
-        
+
         # Extract episode IDs from hits
         episode_ids = []
         for hit in hits:
@@ -316,21 +334,21 @@ class EpisodicMemory:
                     episode_ids.append(ep_id)
                 except ValueError:
                     continue
-        
+
         if not episode_ids:
             return []
-        
+
         # Fetch full episodes from DB with salience filter
         placeholders = ",".join("?" * len(episode_ids))
         conditions = [f"id IN ({placeholders})"]
         params: list[int | float] = list(episode_ids)
-        
+
         if min_salience > 0:
             conditions.append("salience >= ?")
             params.append(min_salience)
-        
+
         where_clause = " AND ".join(conditions)
-        
+
         cur = await self._db.conn.execute(
             f"""
             SELECT * FROM episodes
@@ -338,15 +356,13 @@ class EpisodicMemory:
             ORDER BY salience DESC
             LIMIT ?
             """,
-            params + [limit]
+            [*params, limit],
         )
-        
+
         return [self._row(r) for r in await cur.fetchall()]
 
     async def unconsolidated(self, limit: int = 500) -> list[Episode]:
-        cur = await self._db.conn.execute(
-            "SELECT * FROM episodes WHERE consolidated=0 ORDER BY id LIMIT ?", (limit,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM episodes WHERE consolidated=0 ORDER BY id LIMIT ?", (limit,))
         return [self._row(r) for r in await cur.fetchall()]
 
     async def keyword_search(self, terms: list[str], limit: int = 20) -> list[Episode]:
@@ -365,18 +381,23 @@ class EpisodicMemory:
         if not ids:
             return
         qs = ",".join("?" for _ in ids)
-        await self._db.conn.execute(
-            f"UPDATE episodes SET consolidated=1 WHERE id IN ({qs})", ids
-        )
+        await self._db.conn.execute(f"UPDATE episodes SET consolidated=1 WHERE id IN ({qs})", ids)
         await self._db.conn.commit()
 
     @staticmethod
     def _row(r: object) -> Episode:
-        from datetime import datetime
         d = dict(r)  # type: ignore[call-overload]
         return Episode(
-            id=d["id"], correlation_id=d["correlation_id"], task_id=d["task_id"],
-            step=d["step"], ts=datetime.fromisoformat(d["ts"]),
-            kind=EpisodeKind(d["kind"]), role=d["role"], content=d["content"],
-            tool=d["tool"], outcome=d["outcome"], salience=d["salience"], tokens=d["tokens"],
+            id=d["id"],
+            correlation_id=d["correlation_id"],
+            task_id=d["task_id"],
+            step=d["step"],
+            ts=datetime.fromisoformat(d["ts"]),
+            kind=EpisodeKind(d["kind"]),
+            role=d["role"],
+            content=d["content"],
+            tool=d["tool"],
+            outcome=d["outcome"],
+            salience=d["salience"],
+            tokens=d["tokens"],
         )

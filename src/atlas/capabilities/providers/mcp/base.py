@@ -26,10 +26,10 @@ from atlas.capabilities.registry.capability import Capability
 class MCPServerConfig(BaseModel):
     model_config = {"frozen": True}
     name: str
-    transport: str            # 'stdio' | 'http'
-    command: tuple[str, ...] = ()   # for stdio, e.g. ('npx','-y','@modelcontextprotocol/server-filesystem')
-    url: str | None = None          # for http
-    tool_map: dict[str, str] = {}   # capability operation -> MCP tool name
+    transport: str  # 'stdio' | 'http'
+    command: tuple[str, ...] = ()  # for stdio, e.g. ('npx','-y','@modelcontextprotocol/server-filesystem')
+    url: str | None = None  # for http
+    tool_map: dict[str, str] = {}  # capability operation -> MCP tool name
 
 
 class MCPProvider:
@@ -37,14 +37,14 @@ class MCPProvider:
     is_local reflects whether the MCP server runs on-device (stdio) vs remote.
     """
 
-    requires_auth = False   # most local MCP servers are unauthenticated; override if not
+    requires_auth = False  # most local MCP servers are unauthenticated; override if not
 
     def __init__(self, config: MCPServerConfig, capability: Capability) -> None:
         self.name = f"mcp:{config.name}"
         self.capability = capability
         self._config = config
         self.is_local = config.transport == "stdio"
-        self._client: Any = None   # JSON-RPC client, opened in initialize()
+        self._client: Any = None  # JSON-RPC client, opened in initialize()
 
     async def initialize(self) -> None:
         # 6.9 fills in the JSON-RPC client (stdio subprocess or HTTP session)
@@ -61,8 +61,7 @@ class MCPProvider:
     async def execute(self, request: CapabilityRequest) -> Any:
         tool = self._config.tool_map.get(request.operation)
         if tool is None:
-            raise ProviderExecutionError(
-                f"{self.name}: no MCP tool mapped for operation {request.operation!r}")
+            raise ProviderExecutionError(f"{self.name}: no MCP tool mapped for operation {request.operation!r}")
         return await self._client.call_tool(tool, request.args)
 
     def normalize(self, raw: Any) -> BaseModel:
@@ -88,6 +87,8 @@ class _NullMCPClient:
     async def open(self) -> None: ...
     async def ping(self) -> bool:
         return True
+
     async def call_tool(self, tool: str, args: dict[str, Any]) -> Any:
         raise ProviderExecutionError("MCP client not implemented until Part 6.9")
+
     async def close(self) -> None: ...

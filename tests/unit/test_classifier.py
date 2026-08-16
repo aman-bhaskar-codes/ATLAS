@@ -52,14 +52,17 @@ def _policy_manifest() -> Manifest:
 def test_classifier_rule_match() -> None:
     m = Manifest(
         version=1,
-        allowed_paths={}, allowed_commands={}, whatsapp={}, safety={},
+        allowed_paths={},
+        allowed_commands={},
+        whatsapp={},
+        safety={},
         rules=[
             {"tool": "fs", "operation": "read", "tier": 0},  # type: ignore
             {"tool": "fs", "operation": "write", "tier": 1},  # type: ignore
             {"tool": "db", "operation": "drop", "tier": 3},  # type: ignore  — DANGEROUS
             {"tool": "nuke", "operation": "all", "tier": 4},  # type: ignore  — BLOCK
         ],
-        hard_block=[]
+        hard_block=[],
     )
     clf = TierClassifier(m, default_tier_on_error=2)
 
@@ -104,9 +107,9 @@ def test_classifier_hard_blocks_every_declared_matcher() -> None:
     )
 
     for matcher, tool, operation, args in cases:
-        decision = classifier.classify(ToolRequest(
-            correlation_id=CorrelationId("hard-block-test"), tool=tool, operation=operation, args=args
-        ))
+        decision = classifier.classify(
+            ToolRequest(correlation_id=CorrelationId("hard-block-test"), tool=tool, operation=operation, args=args)
+        )
         assert decision.tier == Tier.BLOCK
         assert decision.decision == "deny"
         assert decision.matched_rule == f"hard_block:{matcher}"
@@ -128,9 +131,9 @@ def test_classifier_confirmation_matchers_require_approval() -> None:
     )
 
     for matcher, tool, operation, args in cases:
-        decision = classifier.classify(ToolRequest(
-            correlation_id=CorrelationId("confirmation-test"), tool=tool, operation=operation, args=args
-        ))
+        decision = classifier.classify(
+            ToolRequest(correlation_id=CorrelationId("confirmation-test"), tool=tool, operation=operation, args=args)
+        )
         assert decision.tier == Tier.CONFIRM
         assert decision.decision == "require_confirm"
         assert decision.matched_rule == f"require_confirm:{matcher}"
@@ -146,9 +149,8 @@ def test_classifier_confirmation_matchers_do_not_match_safe_inputs() -> None:
     )
 
     for tool, operation, args, expected_tier in cases:
-        decision = classifier.classify(ToolRequest(
-            correlation_id=CorrelationId("non-match-test"), tool=tool, operation=operation, args=args
-        ))
+        decision = classifier.classify(
+            ToolRequest(correlation_id=CorrelationId("non-match-test"), tool=tool, operation=operation, args=args)
+        )
         assert decision.tier == expected_tier
         assert decision.matched_rule == f"{tool}.{operation}"
-

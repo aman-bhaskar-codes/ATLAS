@@ -3,6 +3,7 @@
 These schemas intentionally do not expose internal task payloads, model prompts,
 provider responses, secrets, or raw audit arguments.
 """
+
 from __future__ import annotations
 
 from datetime import datetime

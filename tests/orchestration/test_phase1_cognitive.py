@@ -7,23 +7,29 @@ test suite.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
 from atlas.orchestration.goal import (
-    GoalState, GoalVerifier, NullVerifier, VerificationResult,
+    GoalState,
+    GoalVerifier,
+    NullVerifier,
+    VerificationResult,
 )
 from atlas.orchestration.replanner import Replanner
 from atlas.orchestration.types import (
-    Action, Capabilities, Observation, Plan, PlanStep, RiskLevel, TaskResult,
+    Observation,
+    Plan,
+    PlanStep,
+    RiskLevel,
+    TaskResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------
+
 
 class _FakeGateway:
     """Fake ModelGateway that returns scripted responses."""
@@ -34,7 +40,11 @@ class _FakeGateway:
 
     async def complete(self, req: Any) -> Any:
         self._calls.append(req)
-        text = self._responses.pop(0) if self._responses else '{"passed":true,"score":1.0,"criteria_results":{},"failure_reason":null,"suggestions":[]}'
+        text = (
+            self._responses.pop(0)
+            if self._responses
+            else '{"passed":true,"score":1.0,"criteria_results":{},"failure_reason":null,"suggestions":[]}'
+        )
 
         class _Resp:
             cost = type("c", (), {"input_tokens": 10, "output_tokens": 5})()
@@ -59,6 +69,7 @@ def _obs(ok: bool, error: str | None = None, content: Any = None) -> Observation
 # ---------------------------------------------------------------------------
 # GoalState
 # ---------------------------------------------------------------------------
+
 
 def test_goal_state_can_replan_within_budget() -> None:
     goal = GoalState(objective="test", max_replans=3)
@@ -86,15 +97,16 @@ def test_goal_state_update_progress() -> None:
     goal.update_progress(0.5, "halfway")
     assert goal.progress == 0.5
     assert goal.current_state == "halfway"
-    goal.update_progress(1.5)          # clamped to 1.0
+    goal.update_progress(1.5)  # clamped to 1.0
     assert goal.progress == 1.0
-    goal.update_progress(-0.1)         # clamped to 0.0
+    goal.update_progress(-0.1)  # clamped to 0.0
     assert goal.progress == 0.0
 
 
 # ---------------------------------------------------------------------------
 # NullVerifier
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_null_verifier_always_passes() -> None:
@@ -109,12 +121,12 @@ async def test_null_verifier_always_passes() -> None:
 # GoalVerifier
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_goal_verifier_parses_passed_response() -> None:
-    gw = _FakeGateway([
-        '{"passed":true,"score":0.9,"criteria_results":{"tests pass":true},'
-        '"failure_reason":null,"suggestions":[]}'
-    ])
+    gw = _FakeGateway(
+        ['{"passed":true,"score":0.9,"criteria_results":{"tests pass":true},"failure_reason":null,"suggestions":[]}']
+    )
     v = GoalVerifier(gw)
     goal = GoalState(objective="test", success_criteria=["tests pass"])
     result = await v.verify(goal, "all 10 tests passed", "")
@@ -125,10 +137,12 @@ async def test_goal_verifier_parses_passed_response() -> None:
 
 @pytest.mark.asyncio
 async def test_goal_verifier_parses_failed_response() -> None:
-    gw = _FakeGateway([
-        '{"passed":false,"score":0.2,"criteria_results":{"tests pass":false},'
-        '"failure_reason":"Tests are still failing","suggestions":["Fix test_foo"]}'
-    ])
+    gw = _FakeGateway(
+        [
+            '{"passed":false,"score":0.2,"criteria_results":{"tests pass":false},'
+            '"failure_reason":"Tests are still failing","suggestions":["Fix test_foo"]}'
+        ]
+    )
     v = GoalVerifier(gw)
     goal = GoalState(objective="test", success_criteria=["tests pass"])
     result = await v.verify(goal, "I tried but tests still fail", "")
@@ -163,6 +177,7 @@ async def test_goal_verifier_skips_when_no_criteria() -> None:
 # VerificationResult
 # ---------------------------------------------------------------------------
 
+
 def test_verification_result_to_prompt_fragment_pass() -> None:
     r = VerificationResult(passed=True, score=0.95)
     assert "PASSED" in r.to_prompt_fragment()
@@ -171,7 +186,8 @@ def test_verification_result_to_prompt_fragment_pass() -> None:
 
 def test_verification_result_to_prompt_fragment_fail() -> None:
     r = VerificationResult(
-        passed=False, score=0.3,
+        passed=False,
+        score=0.3,
         failure_reason="Missing edge case",
         suggestions=["Handle None input"],
     )
@@ -184,6 +200,7 @@ def test_verification_result_to_prompt_fragment_fail() -> None:
 # ---------------------------------------------------------------------------
 # Replanner
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_replanner_should_replan_on_tool_failure() -> None:
@@ -267,6 +284,7 @@ async def test_replanner_falls_back_to_original_on_bad_json() -> None:
 # ---------------------------------------------------------------------------
 # TaskResult Phase 1 fields
 # ---------------------------------------------------------------------------
+
 
 def test_task_result_has_phase1_fields() -> None:
     """TaskResult must carry replan_count and verification fields."""

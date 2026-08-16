@@ -24,9 +24,7 @@ from atlas.infra.errors import ConfigError, ManifestError
 class Settings(BaseSettings):
     """Secrets + environment. Sourced ONLY from env / .env."""
 
-    model_config = SettingsConfigDict(
-        env_prefix="ATLAS_", env_file=".env", extra="ignore", frozen=True
-    )
+    model_config = SettingsConfigDict(env_prefix="ATLAS_", env_file=".env", extra="ignore", frozen=True)
 
     env: str = "dev"
     data_dir: Path = Path("./.atlas")
@@ -117,6 +115,7 @@ class CritiqueCfg(BaseModel):
 
 class BrowserCfg(BaseModel):
     """Optional browser automation platform config."""
+
     model_config = {"frozen": True}
     enabled: bool = False
     headless: bool = True
@@ -166,26 +165,27 @@ def load_app_config(config_dir: Path) -> AppConfig:
 def load_permissions(config_dir: Path) -> dict[str, Any]:
     raw = _read_yaml(config_dir / "permissions.yaml")
     if not raw:
-        raise ManifestError(
-            "permissions.yaml missing or empty — refusing to run deny-by-default with no manifest"
-        )
+        raise ManifestError("permissions.yaml missing or empty — refusing to run deny-by-default with no manifest")
     return raw
+
 
 def resolve_master_key(settings: Settings) -> str:
     """macOS Keychain first, env fallback. WHY: never store the key on disk."""
     if sys.platform == "darwin":
-        r = subprocess.run(["security", "find-generic-password", "-s", "atlas-master",
-                            "-w"], capture_output=True, text=True)
+        r = subprocess.run(
+            ["security", "find-generic-password", "-s", "atlas-master", "-w"], capture_output=True, text=True
+        )
         if r.returncode == 0 and r.stdout.strip():
             return r.stdout.strip()
-    
-    if settings.master_key:            # ATLAS_MASTER_KEY env fallback (dev/CI)
+
+    if settings.master_key:  # ATLAS_MASTER_KEY env fallback (dev/CI)
         return settings.master_key
-        
+
     if settings.env == "dev":
         import hashlib
         import platform
+
         print("WARNING: No master key found; generating stable dev key. DO NOT USE IN PRODUCTION.", file=sys.stderr)
         return hashlib.sha256(f"dev-atlas-{platform.node()}".encode()).hexdigest()
-        
+
     raise ConfigError("no master key: set it in Keychain (atlas-master) or ATLAS_MASTER_KEY")

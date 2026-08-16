@@ -1,4 +1,5 @@
 """Tests for ContactsPlatform and KnownContacts — the single source of truth."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -22,18 +23,25 @@ class FakePeopleProvider:
 
     async def initialize(self) -> None: ...
     async def authenticate(self) -> None: ...
-    async def health(self) -> bool: return True
+    async def health(self) -> bool:
+        return True
+
     async def search(self, query: str, *, limit: int) -> list[Contact]:
         return [c for c in self._contacts if query.lower() in c.name.lower()]
+
     async def get(self, contact_id: str) -> Contact:
         return next(c for c in self._contacts if c.id == contact_id)
+
     async def list_all(self, *, limit: int) -> list[Contact]:
         return self._contacts[:limit]
+
     async def create(self, draft: ContactDraft) -> str:
         self.created = draft
         return "people/new-001"
+
     async def update(self, draft: ContactDraft) -> str:
         return draft.contact_id or "people/upd-001"
+
     async def shutdown(self) -> None: ...
 
 
@@ -41,34 +49,39 @@ class ApproveNotify:
     def __init__(self, approved: bool) -> None:
         self._a = approved
         self.previewed: str | None = None
-    async def request_approval(self, req: ApprovalRequest,
-                               channels: tuple[str, ...]) -> ApprovalDecision:
+
+    async def request_approval(self, req: ApprovalRequest, channels: tuple[str, ...]) -> ApprovalDecision:
         self.previewed = req.detail
-        return ApprovalDecision(
-            request_id=req.id, approved=self._a,
-            decided_ts=datetime.now(UTC))
+        return ApprovalDecision(request_id=req.id, approved=self._a, decided_ts=datetime.now(UTC))
 
 
 class FakeIds:
-    def execution_id(self) -> str: return "e1"
-    def correlation_id(self) -> CorrelationId: return CorrelationId("c")
-    def task_id(self) -> str: return "t1"
+    def execution_id(self) -> str:
+        return "e1"
+
+    def correlation_id(self) -> CorrelationId:
+        return CorrelationId("c")
+
+    def task_id(self) -> str:
+        return "t1"
 
 
-_ALICE = Contact(id="people/c1", name="Alice",
-                 emails=(EmailRef(address="alice@example.com", primary=True),))
-_BOB = Contact(id="people/c2", name="Bob",
-               emails=(EmailRef(address="bob@example.com", primary=True),))
+_ALICE = Contact(id="people/c1", name="Alice", emails=(EmailRef(address="alice@example.com", primary=True),))
+_BOB = Contact(id="people/c2", name="Bob", emails=(EmailRef(address="bob@example.com", primary=True),))
 
 
-def _platform(approved: bool = True,
-              contacts: list[Contact] | None = None,
-              seed: set[str] | None = None) -> tuple[ContactsPlatform, FakePeopleProvider, ApproveNotify]:
+def _platform(
+    approved: bool = True, contacts: list[Contact] | None = None, seed: set[str] | None = None
+) -> tuple[ContactsPlatform, FakePeopleProvider, ApproveNotify]:
     people = FakePeopleProvider(contacts or [_ALICE, _BOB])
     notify = ApproveNotify(approved)
     platform = ContactsPlatform(
-        provider=people, notifications=notify, ids=FakeIds(),  # type: ignore[arg-type]
-        approval_channels=("ntfy:atlas",), seed=seed)
+        provider=people,
+        notifications=notify,
+        ids=FakeIds(),  # type: ignore[arg-type]
+        approval_channels=("ntfy:atlas",),
+        seed=seed,
+    )
     return platform, people, notify
 
 

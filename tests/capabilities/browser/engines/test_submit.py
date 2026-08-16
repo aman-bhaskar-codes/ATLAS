@@ -21,34 +21,36 @@ async def test_submit_engine_approval() -> None:
     ids = UuidGenerator()
     state_builder = AsyncMock()
     state_builder.build_state.return_value = None
-    
+
     engine = SubmitEngine(
         dispatcher=dispatcher,
         notifications=notifications,
         ids=ids,
         approval_channels=("test",),
-        state_builder=state_builder
+        state_builder=state_builder,
     )
-    
+
     handle = PageHandle(session_id="test", tab_id="test")
-    form = FormModel(id="login", action_url="https://example.com/login", fields=(
-        FormField(name="username"),
-        FormField(name="password", kind="password")
-    ))
+    form = FormModel(
+        id="login",
+        action_url="https://example.com/login",
+        fields=(FormField(name="username"), FormField(name="password", kind="password")),
+    )
     values = {"username": "user", "password": "secret_password"}
-    
+
     result = await engine.submit(handle, form, values, CorrelationId("cid_123"))
-    
+
     assert result.ok
     assert result.action.kind == "submit"
-    
+
     # Check that approval was requested
     notifications.request_approval.assert_called_once()
     req = notifications.request_approval.call_args[0][0]
-    
+
     # Check password redaction
     assert "secret_password" not in req.detail
     assert "••••" in req.detail
+
 
 @pytest.mark.asyncio
 async def test_submit_engine_denial() -> None:
@@ -59,18 +61,18 @@ async def test_submit_engine_denial() -> None:
     )
     ids = UuidGenerator()
     state_builder = AsyncMock()
-    
+
     engine = SubmitEngine(
         dispatcher=dispatcher,
         notifications=notifications,
         ids=ids,
         approval_channels=("test",),
-        state_builder=state_builder
+        state_builder=state_builder,
     )
-    
+
     handle = PageHandle(session_id="test", tab_id="test")
     form = FormModel(id="login", action_url="https://example.com/login", fields=())
     values = {}  # type: ignore
-    
+
     with pytest.raises(CapabilityDenied, match="form submit not approved"):
         await engine.submit(handle, form, values, CorrelationId("cid_123"))

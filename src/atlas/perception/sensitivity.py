@@ -8,11 +8,26 @@ place.
 
 from __future__ import annotations
 
-_SENSITIVE_BUNDLE_HINTS: frozenset[str] = frozenset({
-    "1password", "bitwarden", "keychain", "lastpass", "dashlane",
-    "bank", "banking", "wallet", "messages", "mail", "whatsapp",
-    "signal", "telegram", "venmo", "paypal", "coinbase",
-})
+_SENSITIVE_BUNDLE_HINTS: frozenset[str] = frozenset(
+    {
+        "1password",
+        "bitwarden",
+        "keychain",
+        "lastpass",
+        "dashlane",
+        "bank",
+        "banking",
+        "wallet",
+        "messages",
+        "mail",
+        "whatsapp",
+        "signal",
+        "telegram",
+        "venmo",
+        "paypal",
+        "coinbase",
+    }
+)
 
 
 def is_sensitive_app(app_name: str | None) -> bool:

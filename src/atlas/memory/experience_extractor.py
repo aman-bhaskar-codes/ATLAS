@@ -77,10 +77,10 @@ _MIN_CONFIDENCE_TO_SAVE = 0.5  # Don't save low-confidence guesses
 
 class ExperienceExtractor:
     """Extracts experiences from completed trajectories using LLM analysis.
-    
+
     Performance target: < 3s per trajectory (async, doesn't block task execution).
     """
-    
+
     def __init__(
         self,
         *,
@@ -99,18 +99,15 @@ class ExperienceExtractor:
         trajectory: Trajectory,
     ) -> list[Experience]:
         """Extract experiences from a single trajectory.
-        
+
         Returns list of extracted experiences (may be empty if no clear lessons).
         Saves experiences to store automatically.
         """
         # Build extraction prompt
         actions_text = self._format_actions(trajectory.actions)
         observations_text = self._format_observations(trajectory.observations)
-        outcome_text = (
-            f"SUCCESS: {trajectory.answer}" if trajectory.success
-            else f"FAILED: {trajectory.error}"
-        )
-        
+        outcome_text = f"SUCCESS: {trajectory.answer}" if trajectory.success else f"FAILED: {trajectory.error}"
+
         prompt = _EXTRACT_PROMPT.format(
             goal=trajectory.goal,
             success="✓" if trajectory.success else "✗",
@@ -121,25 +118,29 @@ class ExperienceExtractor:
             observations=observations_text,
             outcome=outcome_text,
         )
-        
+
         # LLM extraction with structured output
         try:
-            resp = await self._gw.complete(ModelRequest(
-                correlation_id=trajectory.correlation_id,
-                system="You extract structured lessons from task trajectories. Output ONLY valid JSON.",
-                prompt=prompt,
-                required_capabilities=frozenset({
-                    ModelCapability.REASONING,
-                    ModelCapability.SUMMARIZATION,
-                    ModelCapability.JSON_GENERATION,
-                }),
-                needs_deep_reasoning=True,  # This is analytical work, use o1/thinking
-                max_tokens=1500,
-            ))
-            
+            resp = await self._gw.complete(
+                ModelRequest(
+                    correlation_id=trajectory.correlation_id,
+                    system="You extract structured lessons from task trajectories. Output ONLY valid JSON.",
+                    prompt=prompt,
+                    required_capabilities=frozenset(
+                        {
+                            ModelCapability.REASONING,
+                            ModelCapability.SUMMARIZATION,
+                            ModelCapability.JSON_GENERATION,
+                        }
+                    ),
+                    needs_deep_reasoning=True,  # This is analytical work, use o1/thinking
+                    max_tokens=1500,
+                )
+            )
+
             # Parse JSON response
             parsed = json.loads(self._extract_json(resp.text))
-            
+
         except (json.JSONDecodeError, ValueError) as exc:
             _log.error(
                 "experience.parse_failed",
@@ -148,7 +149,7 @@ class ExperienceExtractor:
                 trajectory_id=trajectory.id,
             )
             return []
-        
+
         # Convert parsed JSON to Experience objects
         experiences: list[Experience] = []
         for exp_data in parsed.get("experiences", []):
@@ -158,7 +159,7 @@ class ExperienceExtractor:
                 applicability_context = str(exp_data.get("applicability_context", "")).strip()
                 confidence = float(exp_data.get("confidence", 0.5))
                 supporting_steps = tuple(int(s) for s in exp_data.get("supporting_steps", []))
-                
+
                 # Filter low-quality extractions
                 if not lesson_text or not applicability_context:
                     continue
@@ -166,7 +167,7 @@ class ExperienceExtractor:
                     continue
                 if len(lesson_text) < 20:  # Too short to be useful
                     continue
-                
+
                 # Create Experience object
                 experience = Experience(
                     id=self._ids.execution_id(),
@@ -188,11 +189,11 @@ class ExperienceExtractor:
                     last_applied_ts=None,
                     superseded_by=None,
                 )
-                
+
                 # Save to store
                 await self._store.save_experience(experience)
                 experiences.append(experience)
-                
+
                 _log.info(
                     "experience.extracted",
                     event_type="memory",
@@ -201,7 +202,7 @@ class ExperienceExtractor:
                     confidence=confidence,
                     trajectory_id=trajectory.id,
                 )
-                
+
             except (ValueError, KeyError) as exc:
                 _log.warning(
                     "experience.item_invalid",
@@ -210,7 +211,7 @@ class ExperienceExtractor:
                     item=exp_data,
                 )
                 continue
-        
+
         if experiences:
             _log.info(
                 "experience.extraction_complete",
@@ -226,7 +227,7 @@ class ExperienceExtractor:
                 trajectory_id=trajectory.id,
                 reason="No high-quality lessons extracted",
             )
-        
+
         return experiences
 
     async def extract_batch(
@@ -235,13 +236,13 @@ class ExperienceExtractor:
         max_concurrency: int = 3,
     ) -> dict[str, int]:
         """Extract experiences from multiple trajectories with concurrency control.
-        
+
         Returns stats: {"processed": N, "extracted": M, "failed": K}
         """
         import asyncio
-        
+
         semaphore = asyncio.Semaphore(max_concurrency)
-        
+
         async def _extract_one(traj: Trajectory) -> int:
             async with semaphore:
                 try:
@@ -255,12 +256,12 @@ class ExperienceExtractor:
                         trajectory_id=traj.id,
                     )
                     return -1  # Mark as failed
-        
+
         results = await asyncio.gather(*[_extract_one(t) for t in trajectories])
-        
+
         extracted = sum(r for r in results if r >= 0)
         failed = sum(1 for r in results if r < 0)
-        
+
         return {
             "processed": len(trajectories),
             "extracted": extracted,
@@ -273,23 +274,23 @@ class ExperienceExtractor:
         only_successful: bool = False,
     ) -> dict[str, int]:
         """Extract experiences from recent trajectories.
-        
+
         Useful for periodic batch processing (e.g., nightly consolidation job).
         """
         # Query recent trajectories
         from atlas.memory.trajectory import TrajectoryQuery
-        
+
         query = TrajectoryQuery(
             success=True if only_successful else None,
             limit=limit,
         )
-        
+
         trajectories = await self._store.query_trajectories(query)
-        
+
         if not trajectories:
             _log.info("experience.no_recent_trajectories", event_type="memory")
             return {"processed": 0, "extracted": 0, "failed": 0}
-        
+
         # Extract in batch
         return await self.extract_batch(trajectories)
 
@@ -302,14 +303,14 @@ class ExperienceExtractor:
         """Format actions for prompt (truncate for context budget)."""
         if not actions:
             return "(no actions recorded)"
-        
+
         lines = []
         for action in actions[:20]:  # Limit to first 20 actions
             # Duck-type ActionRecord attributes
             step = getattr(action, "step", "?")
             kind = getattr(action, "kind", "unknown")
             tool = getattr(action, "tool", None)
-            
+
             if kind == "tool_call" and tool:
                 args = getattr(action, "args", {})
                 args_str = str(args)[:100]  # Truncate long args
@@ -320,10 +321,10 @@ class ExperienceExtractor:
                 lines.append(f"  Step {step}: {kind} → {text_preview}")
             else:
                 lines.append(f"  Step {step}: {kind}")
-        
+
         if len(actions) > 20:
             lines.append(f"  ... and {len(actions) - 20} more actions")
-        
+
         return "\n".join(lines)
 
     @staticmethod
@@ -331,13 +332,13 @@ class ExperienceExtractor:
         """Format observations for prompt (truncate for context budget)."""
         if not observations:
             return "(no observations recorded)"
-        
+
         lines = []
         for obs in observations[:20]:  # Limit to first 20 observations
             # Duck-type ObservationRecord attributes
             step = getattr(obs, "step", "?")
             ok = getattr(obs, "ok", False)
-            
+
             if ok:
                 content = getattr(obs, "content", "")
                 content_preview = str(content)[:150]
@@ -345,10 +346,10 @@ class ExperienceExtractor:
             else:
                 error = getattr(obs, "error", "unknown error")
                 lines.append(f"  Step {step}: ✗ {error}")
-        
+
         if len(observations) > 20:
             lines.append(f"  ... and {len(observations) - 20} more observations")
-        
+
         return "\n".join(lines)
 
     @staticmethod
@@ -357,8 +358,8 @@ class ExperienceExtractor:
         # Try to find JSON object boundaries
         start = text.find("{")
         end = text.rfind("}")
-        
+
         if start == -1 or end == -1:
             raise ValueError("no JSON object in model output")
-        
+
         return text[start : end + 1]

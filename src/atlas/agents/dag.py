@@ -14,11 +14,12 @@ from dataclasses import dataclass, field
 @dataclass
 class SubTask:
     """A single unit of work in the task DAG."""
+
     id: str
     description: str
-    agent_type: str                                 # which specialist handles this
+    agent_type: str  # which specialist handles this
     dependencies: list[str] = field(default_factory=list)  # subtask IDs that must complete first
-    inputs: dict[str, str] = field(default_factory=dict)   # maps param → dependency_id
+    inputs: dict[str, str] = field(default_factory=dict)  # maps param → dependency_id
 
 
 @dataclass
@@ -28,6 +29,7 @@ class TaskDAG:
     The Supervisor generates this from an LLM call. The orchestrator executes
     it in topological order.
     """
+
     goal: str
     subtasks: list[SubTask] = field(default_factory=list)
 
@@ -54,16 +56,11 @@ class TaskDAG:
 
         while len(completed) < len(self.subtasks):
             # Find all tasks with in_degree 0 that aren't completed
-            batch_ids = [
-                tid for tid, deg in in_degree.items()
-                if deg == 0 and tid not in completed
-            ]
+            batch_ids = [tid for tid, deg in in_degree.items() if deg == 0 and tid not in completed]
             if not batch_ids:
                 # Cycle detected or invalid DAG
                 remaining = [tid for tid in task_map if tid not in completed]
-                raise ValueError(
-                    f"Cycle detected in task DAG. Remaining: {remaining}"
-                )
+                raise ValueError(f"Cycle detected in task DAG. Remaining: {remaining}")
 
             batch = [task_map[tid] for tid in batch_ids]
             batches.append(batch)

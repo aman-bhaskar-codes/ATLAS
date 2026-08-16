@@ -17,10 +17,10 @@ from atlas.infra.ids import CorrelationId
 
 
 class NotificationPriority(IntEnum):
-    LOW = 0        # Tier-0 routine
-    NORMAL = 1     # Tier-1 notify
-    HIGH = 2       # Tier-2 confirm/approve
-    CRITICAL = 3   # Tier-3 safety
+    LOW = 0  # Tier-0 routine
+    NORMAL = 1  # Tier-1 notify
+    HIGH = 2  # Tier-2 confirm/approve
+    CRITICAL = 3  # Tier-3 safety
 
 
 class NotificationKind(StrEnum):
@@ -37,9 +37,9 @@ class NotificationKind(StrEnum):
 
 class Channel(BaseModel):
     model_config = {"frozen": True}
-    name: str                       # 'telegram:primary', 'ntfy:atlas', 'desktop'
-    provider: str                   # provider adapter name
-    address: str                    # chat id / topic / webhook / email
+    name: str  # 'telegram:primary', 'ntfy:atlas', 'desktop'
+    provider: str  # provider adapter name
+    address: str  # chat id / topic / webhook / email
     priority_floor: NotificationPriority = NotificationPriority.LOW
 
 
@@ -51,7 +51,7 @@ class Notification(BaseModel):
     priority: NotificationPriority
     title: str
     body: str
-    urgent: bool = False            # Tier-1 escape hatch from digest
+    urgent: bool = False  # Tier-1 escape hatch from digest
     template: str | None = None
     template_vars: dict[str, Any] = Field(default_factory=dict)
     channels: tuple[str, ...] = ()  # explicit channel names; empty = router decides
@@ -89,7 +89,7 @@ class ApprovalRequest(BaseModel):
     prompt: str
     detail: str
     timeout_s: float = 300.0
-    default_on_timeout: bool = False   # deny by default (safety)
+    default_on_timeout: bool = False  # deny by default (safety)
 
 
 class ApprovalDecision(BaseModel):

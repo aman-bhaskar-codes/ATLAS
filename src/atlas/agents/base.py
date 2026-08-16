@@ -18,19 +18,21 @@ from atlas.infra.ids import CorrelationId
 @dataclass(frozen=True)
 class AgentConfig:
     """Static configuration for a specialist agent type."""
-    agent_type: str                              # "researcher", "writer", "coder", etc.
-    system_prompt: str                           # Loaded from prompts/system/
-    allowed_tools: tuple[str, ...] = ()          # Subset of all tools this agent can use
-    preferred_model: str = "auto"                # "auto" lets the router decide
-    fallback_models: tuple[str, ...] = ()        # Ordered fallback chain
-    max_steps: int = 20                          # Reasoning loop step limit
-    temperature: float = 0.2                     # LLM temperature
-    context_window: int = 4096                   # Max tokens to feed
+
+    agent_type: str  # "researcher", "writer", "coder", etc.
+    system_prompt: str  # Loaded from prompts/system/
+    allowed_tools: tuple[str, ...] = ()  # Subset of all tools this agent can use
+    preferred_model: str = "auto"  # "auto" lets the router decide
+    fallback_models: tuple[str, ...] = ()  # Ordered fallback chain
+    max_steps: int = 20  # Reasoning loop step limit
+    temperature: float = 0.2  # LLM temperature
+    context_window: int = 4096  # Max tokens to feed
 
 
 @dataclass
 class SubTaskInput:
     """Data flowing into a subtask from its dependencies."""
+
     description: str
     context: dict[str, Any] = field(default_factory=dict)
     dependency_results: dict[str, Any] = field(default_factory=dict)
@@ -39,6 +41,7 @@ class SubTaskInput:
 @dataclass
 class SubTaskResult:
     """Outcome of a specialist agent executing a subtask."""
+
     subtask_id: str
     agent_type: str
     ok: bool
@@ -68,7 +71,10 @@ class BaseAgent(ABC):
 
     @abstractmethod
     async def execute(
-        self, *, subtask_id: str, description: str,
+        self,
+        *,
+        subtask_id: str,
+        description: str,
         context: dict[str, Any],
         dependency_results: dict[str, Any],
         correlation_id: CorrelationId,

@@ -1,4 +1,5 @@
 """Crawler engine for autonomous research."""
+
 from __future__ import annotations
 
 import urllib.parse
@@ -31,7 +32,7 @@ class CrawlerEngine:
         nav_engine: NavigationEngine,
         extract_engine: ExtractionEngine,
         page_manager: PageManager,
-        ranker: SourceRanker | None = None
+        ranker: SourceRanker | None = None,
     ) -> None:
         self._nav = nav_engine
         self._extract = extract_engine
@@ -39,43 +40,38 @@ class CrawlerEngine:
         self._ranker = ranker or SourceRanker()
 
     async def crawl(
-        self,
-        session_id: str,
-        seed_url: str,
-        depth: int,
-        budget: int,
-        cid: CorrelationId
+        self, session_id: str, seed_url: str, depth: int, budget: int, cid: CorrelationId
     ) -> ResearchResult:
         """Crawl starting from seed_url, returning extracted articles."""
         visited: set[str] = set()
         articles: list[Article] = []
-        
+
         handle = await self._pages.new_page(session_id)
-        
+
         frontier = [(seed_url, 0)]
         cost = 0
-        
+
         try:
             while frontier and cost < budget:
                 # Rank frontier before popping, to always explore highest value first
                 # (Simplistic BFS with ranking)
                 frontier.sort(key=lambda item: self._ranker.score_url(item[0]), reverse=True)
                 current_url, current_depth = frontier.pop(0)
-                
+
                 if current_url in visited:
                     continue
-                    
+
                 _log.info("crawler.visit", url=current_url, depth=current_depth, cost=cost)
                 visited.add(current_url)
                 cost += 1
-                
+
                 # Navigate
                 try:
                     await self._nav.goto(handle, current_url, cid)
                 except Exception as exc:
                     _log.warning("crawler.nav_failed", url=current_url, error=str(exc))
                     continue
-                
+
                 # Extract
                 try:
                     article = await self._extract.extract_article(handle, cid)
@@ -83,13 +79,14 @@ class CrawlerEngine:
                 except Exception as exc:
                     _log.warning("crawler.extract_failed", url=current_url, error=str(exc))
                     continue
-                    
+
                 if current_depth < depth:
                     # Extract links to add to frontier
                     try:
                         provider, provider_session_id, tab_id = self._pages.get_provider(handle)
                         html = await provider.content_html(provider_session_id, tab_id)
                         import re
+
                         links = re.findall(r'<a\s+(?:[^>]*?\s+)?href="([^"]*)"', html, re.IGNORECASE)
                         for link in links:
                             link = urllib.parse.urljoin(current_url, link)
@@ -100,23 +97,18 @@ class CrawlerEngine:
                                     frontier.append((link, current_depth + 1))
                     except Exception as exc:
                         _log.debug("crawler.link_extraction_failed", url=current_url, error=str(exc))
-                        
+
         finally:
             await self._pages.close_page(handle)
-            
+
         # Calculate simplistic confidence based on average source rank
         avg_score = 0.5
         if articles:
-            scores = [self._ranker.score_url(a.url) for a in articles if getattr(a, 'url', None)]  # type: ignore
-            scores = [s for s in scores if s is not None] # Fallback if url is stored in provenance
+            scores = [self._ranker.score_url(a.url) for a in articles if getattr(a, "url", None)]  # type: ignore
+            scores = [s for s in scores if s is not None]  # Fallback if url is stored in provenance
             if not scores:
                 scores = [self._ranker.score_url(a.provenance.uri) for a in articles if a.provenance.uri]
             if scores:
                 avg_score = sum(scores) / len(scores)
-            
-        return ResearchResult(
-            seed_url=seed_url,
-            articles=articles,
-            visited_urls=visited,
-            confidence=avg_score
-        )
+
+        return ResearchResult(seed_url=seed_url, articles=articles, visited_urls=visited, confidence=avg_score)

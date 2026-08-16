@@ -32,15 +32,14 @@ class OsascriptRunner:
         if not is_macos():
             return ScriptResult(False, "", "osascript unavailable: not macOS", 127)
         proc = await asyncio.create_subprocess_exec(
-            "osascript", "-",
+            "osascript",
+            "-",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            out, err = await asyncio.wait_for(
-                proc.communicate(script.encode()), timeout=timeout_s
-            )
+            out, err = await asyncio.wait_for(proc.communicate(script.encode()), timeout=timeout_s)
         except TimeoutError:
             proc.kill()
             return ScriptResult(False, "", f"timed out after {timeout_s}s", 124)

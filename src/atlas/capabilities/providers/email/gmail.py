@@ -54,22 +54,19 @@ class GmailProvider:
 
     async def search(self, query: str, *, limit: int) -> list[EmailMessage]:
         h = await self._headers()
-        r = await self._client.get(f"{_API}/messages", headers=h,
-                                   params={"q": query, "maxResults": limit})
+        r = await self._client.get(f"{_API}/messages", headers=h, params={"q": query, "maxResults": limit})
         r.raise_for_status()
         ids = [m["id"] for m in r.json().get("messages", [])]
         out: list[EmailMessage] = []
         for mid in ids:
-            mr = await self._client.get(f"{_API}/messages/{mid}", headers=h,
-                                        params={"format": "full"})
+            mr = await self._client.get(f"{_API}/messages/{mid}", headers=h, params={"format": "full"})
             mr.raise_for_status()
             out.append(self._to_message(mr.json()))
         return out
 
     async def get_thread(self, thread_id: str) -> Thread:
         h = await self._headers()
-        r = await self._client.get(f"{_API}/threads/{thread_id}", headers=h,
-                                   params={"format": "full"})
+        r = await self._client.get(f"{_API}/threads/{thread_id}", headers=h, params={"format": "full"})
         r.raise_for_status()
         data = r.json()
         msgs = tuple(self._to_message(m) for m in data.get("messages", []))
@@ -95,22 +92,23 @@ class GmailProvider:
             lines.append(f"Cc: {', '.join(a.render() for a in draft.cc)}")
         if draft.bcc:
             lines.append(f"Bcc: {', '.join(a.render() for a in draft.bcc)}")
-        lines += [f"Subject: {draft.subject}", "Content-Type: text/plain; charset=utf-8", "",
-                  draft.body_text]
+        lines += [f"Subject: {draft.subject}", "Content-Type: text/plain; charset=utf-8", "", draft.body_text]
         return "\r\n".join(lines)
 
     def _to_message(self, data: dict[str, Any]) -> EmailMessage:
-        headers = {h["name"].lower(): h["value"] for h in
-                   data.get("payload", {}).get("headers", [])}
+        headers = {h["name"].lower(): h["value"] for h in data.get("payload", {}).get("headers", [])}
         return EmailMessage(
-            id=data["id"], thread_id=data.get("threadId"),
+            id=data["id"],
+            thread_id=data.get("threadId"),
             sender=_parse_addr(headers.get("from", "")),
             to=tuple(_parse_addr(a) for a in headers.get("to", "").split(",") if a.strip()),
             cc=tuple(_parse_addr(a) for a in headers.get("cc", "").split(",") if a.strip()),
-            subject=headers.get("subject", ""), snippet=data.get("snippet", ""),
+            subject=headers.get("subject", ""),
+            snippet=data.get("snippet", ""),
             body_text=_extract_body(data.get("payload", {})),
             labels=tuple(data.get("labelIds", [])),
-            unread="UNREAD" in data.get("labelIds", []))
+            unread="UNREAD" in data.get("labelIds", []),
+        )
 
     async def shutdown(self) -> None:
         await self._client.aclose()
@@ -129,6 +127,7 @@ def _parse_addr(raw: str) -> EmailAddress:
 
 def _extract_body(payload: dict[str, Any]) -> str:
     import base64 as b64
+
     if payload.get("mimeType") == "text/plain" and payload.get("body", {}).get("data"):
         return b64.urlsafe_b64decode(payload["body"]["data"]).decode(errors="replace")
     for part in payload.get("parts", []):

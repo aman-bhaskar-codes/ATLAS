@@ -6,6 +6,7 @@ ONE owner and ONE sync path. sync_known() rebuilds the canonical KnownContacts i
 from the provider; app.py feeds the SAME instance to EmailPlatform and CalendarPlatform
 after calling sync_known(), so 'known' is consistent across every outbound capability.
 """
+
 from __future__ import annotations
 
 from atlas.capabilities.domain.contacts import Contact, ContactDraft, KnownContacts
@@ -21,8 +22,12 @@ _log = get_logger("atlas.contacts")
 
 class ContactsPlatform:
     def __init__(
-        self, *, provider: ContactsProvider, notifications: NotificationPlatform,
-        ids: IdGenerator, approval_channels: tuple[str, ...],
+        self,
+        *,
+        provider: ContactsProvider,
+        notifications: NotificationPlatform,
+        ids: IdGenerator,
+        approval_channels: tuple[str, ...],
         seed: set[str] | None = None,
     ) -> None:
         self._provider = provider
@@ -50,7 +55,7 @@ class ContactsPlatform:
         Call this on startup and periodically thereafter."""
         contacts = await self._provider.list_all(limit=2000)
         addrs = {str(e.address) for c in contacts for e in c.emails}
-        addrs |= self._seed          # always-known addresses from config
+        addrs |= self._seed  # always-known addresses from config
         self._known = KnownContacts(addrs)
         _log.info("contacts.known_synced", count=len(addrs))
         return self._known
@@ -63,38 +68,40 @@ class ContactsPlatform:
     async def create(self, draft: ContactDraft, correlation_id: CorrelationId) -> str:
         preview = self._render_preview(draft, "create")
         req = ApprovalRequest(
-            id=self._ids.execution_id(), correlation_id=correlation_id,
+            id=self._ids.execution_id(),
+            correlation_id=correlation_id,
             prompt=f"Create contact '{draft.name}'?",
-            detail=preview, timeout_s=300.0, default_on_timeout=False)
+            detail=preview,
+            timeout_s=300.0,
+            default_on_timeout=False,
+        )
         decision = await self._notify.request_approval(req, self._approval_channels)
         if not decision.approved:
-            _log.info("contacts.create_denied", correlation_id=str(correlation_id),
-                      timed_out=decision.timed_out)
-            raise CapabilityDenied("contact create not approved"
-                                   + (" (timed out)" if decision.timed_out else ""))
+            _log.info("contacts.create_denied", correlation_id=str(correlation_id), timed_out=decision.timed_out)
+            raise CapabilityDenied("contact create not approved" + (" (timed out)" if decision.timed_out else ""))
         contact_id = await self._provider.create(draft)
         # eagerly add to known set so subsequent outbound gates see the new contact
         for e in draft.emails:
             self._known.add(str(e.address))
-        _log.info("contacts.created", correlation_id=str(correlation_id),
-                  contact_id=contact_id)
+        _log.info("contacts.created", correlation_id=str(correlation_id), contact_id=contact_id)
         return contact_id
 
     async def update(self, draft: ContactDraft, correlation_id: CorrelationId) -> str:
         preview = self._render_preview(draft, "update")
         req = ApprovalRequest(
-            id=self._ids.execution_id(), correlation_id=correlation_id,
+            id=self._ids.execution_id(),
+            correlation_id=correlation_id,
             prompt=f"Update contact '{draft.name}'?",
-            detail=preview, timeout_s=300.0, default_on_timeout=False)
+            detail=preview,
+            timeout_s=300.0,
+            default_on_timeout=False,
+        )
         decision = await self._notify.request_approval(req, self._approval_channels)
         if not decision.approved:
-            _log.info("contacts.update_denied", correlation_id=str(correlation_id),
-                      timed_out=decision.timed_out)
-            raise CapabilityDenied("contact update not approved"
-                                   + (" (timed out)" if decision.timed_out else ""))
+            _log.info("contacts.update_denied", correlation_id=str(correlation_id), timed_out=decision.timed_out)
+            raise CapabilityDenied("contact update not approved" + (" (timed out)" if decision.timed_out else ""))
         contact_id = await self._provider.update(draft)
-        _log.info("contacts.updated", correlation_id=str(correlation_id),
-                  contact_id=contact_id)
+        _log.info("contacts.updated", correlation_id=str(correlation_id), contact_id=contact_id)
         return contact_id
 
     def _render_preview(self, draft: ContactDraft, action: str) -> str:

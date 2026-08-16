@@ -24,8 +24,7 @@ class RoutingDecision:
 
 
 class NotificationRouter:
-    def __init__(self, *, priority: PriorityEngine, quiet: QuietHoursEngine,
-                 channels: ChannelResolver) -> None:
+    def __init__(self, *, priority: PriorityEngine, quiet: QuietHoursEngine, channels: ChannelResolver) -> None:
         self._priority = priority
         self._quiet = quiet
         self._channels = channels
@@ -34,5 +33,6 @@ class NotificationRouter:
         behavior = self._priority.behavior(n.kind)
         chosen = self._channels.resolve(n, multi=behavior.multi_channel)
         interrupt = self._quiet.should_interrupt(n) and not n.deliver_in_digest
-        return RoutingDecision(channels=chosen, interrupt_now=interrupt,
-                               multi_channel=behavior.multi_channel, retry=behavior.retry)
+        return RoutingDecision(
+            channels=chosen, interrupt_now=interrupt, multi_channel=behavior.multi_channel, retry=behavior.retry
+        )

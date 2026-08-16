@@ -34,7 +34,7 @@ class RetryEngine:
                 if not exc.retryable:
                     raise
                 if i < self._max - 1:
-                    sleep_s = self._backoff * (2 ** i)
-                    _log.info("retry.wait", attempt=i+1, wait=sleep_s, error=repr(exc))
+                    sleep_s = self._backoff * (2**i)
+                    _log.info("retry.wait", attempt=i + 1, wait=sleep_s, error=repr(exc))
                     await asyncio.sleep(sleep_s)
         raise last or RuntimeError("unreachable")

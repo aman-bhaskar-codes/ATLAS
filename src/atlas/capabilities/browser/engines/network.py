@@ -1,4 +1,5 @@
 """Network engine captures HAR and events."""
+
 from __future__ import annotations
 
 from atlas.capabilities.browser.domain.network import NetworkEvent

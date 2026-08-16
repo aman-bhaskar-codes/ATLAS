@@ -1,4 +1,5 @@
 """FastAPI transport for Trust Center projections and commands."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
@@ -84,6 +85,9 @@ async def audit(
     plane: AtlasTrustPlane = Depends(get_trust_plane),
 ) -> AuditPage:
     return await plane.audit(
-        task_id=task_id, correlation_id=correlation_id,
-        execution_id=execution_id, cursor=cursor, limit=limit,
+        task_id=task_id,
+        correlation_id=correlation_id,
+        execution_id=execution_id,
+        cursor=cursor,
+        limit=limit,
     )

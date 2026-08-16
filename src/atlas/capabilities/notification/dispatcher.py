@@ -30,9 +30,15 @@ _log = get_logger("atlas.notify.dispatch")
 
 class NotificationDispatcher:
     def __init__(
-        self, *, registry: NotificationRegistry, formatter: Formatter,
-        health: ProviderHealth, limiter: RateLimiterRegistry, retry: RetryEngine,
-        tracker: DeliveryTracker, clock: Clock,
+        self,
+        *,
+        registry: NotificationRegistry,
+        formatter: Formatter,
+        health: ProviderHealth,
+        limiter: RateLimiterRegistry,
+        retry: RetryEngine,
+        tracker: DeliveryTracker,
+        clock: Clock,
     ) -> None:
         self._registry = registry
         self._formatter = formatter
@@ -42,9 +48,15 @@ class NotificationDispatcher:
         self._tracker = tracker
         self._clock = clock
 
-    async def deliver(self, n: Notification, channels: tuple[str, ...],
-                      *, multi: bool, retry: bool,
-                      actions: tuple[tuple[str, str], ...] = ()) -> DeliveryReceipt:
+    async def deliver(
+        self,
+        n: Notification,
+        channels: tuple[str, ...],
+        *,
+        multi: bool,
+        retry: bool,
+        actions: tuple[tuple[str, str], ...] = (),
+    ) -> DeliveryReceipt:
         rendered = self._formatter.render(n)
         attempts: list[DeliveryAttempt] = []
         ordered = self._registry.rank_channels(channels)
@@ -55,25 +67,32 @@ class NotificationDispatcher:
             provider = self._registry.provider_for(channel_name)
             if not channel or not provider or not self._health.is_available(provider.name):
                 continue
-            ok = await self._attempt(n, channel, provider, rendered, actions, attempts,
-                                     allow_retry=retry)
+            ok = await self._attempt(n, channel, provider, rendered, actions, attempts, allow_retry=retry)
             if ok and not multi:
                 break
-                
+
         delivered = any(a.ok for a in attempts)
         receipt = DeliveryReceipt(
-            notification_id=n.id, delivered=delivered,
+            notification_id=n.id,
+            delivered=delivered,
             provider=attempts[-1].provider if attempts else "",
             channel=attempts[-1].channel if attempts else "",
             attempts=tuple(attempts),
-            final_error=None if delivered else "all channels failed")
+            final_error=None if delivered else "all channels failed",
+        )
         await self._tracker.record(n, receipt)
         return receipt
 
     async def _attempt(
-        self, n: Notification, channel: Channel, provider: Any, rendered: Any, 
-        actions: tuple[tuple[str, str], ...], attempts: list[DeliveryAttempt], *,
-        allow_retry: bool
+        self,
+        n: Notification,
+        channel: Channel,
+        provider: Any,
+        rendered: Any,
+        actions: tuple[tuple[str, str], ...],
+        attempts: list[DeliveryAttempt],
+        *,
+        allow_retry: bool,
     ) -> bool:
         policy = self._retry.policy(allow_retry)
         attempt = 0
@@ -85,17 +104,32 @@ class NotificationDispatcher:
                 ok = await provider.send(channel, rendered.title, rendered.body, actions=actions)
                 latency = int((time.perf_counter() - start) * 1000)
                 self._health.record(provider.name, ok=ok, latency_ms=latency)
-                attempts.append(DeliveryAttempt(attempt=attempt, provider=provider.name,
-                                                channel=channel.name, ts=self._clock.now(),
-                                                ok=ok, latency_ms=latency))
+                attempts.append(
+                    DeliveryAttempt(
+                        attempt=attempt,
+                        provider=provider.name,
+                        channel=channel.name,
+                        ts=self._clock.now(),
+                        ok=ok,
+                        latency_ms=latency,
+                    )
+                )
                 if ok or not self._retry.should_retry(attempt, policy):
                     return ok  # type: ignore
             except Exception as exc:
                 latency = int((time.perf_counter() - start) * 1000)
                 self._health.record(provider.name, ok=False, latency_ms=latency)
-                attempts.append(DeliveryAttempt(attempt=attempt, provider=provider.name,
-                                                channel=channel.name, ts=self._clock.now(),
-                                                ok=False, latency_ms=latency, error=repr(exc)))
+                attempts.append(
+                    DeliveryAttempt(
+                        attempt=attempt,
+                        provider=provider.name,
+                        channel=channel.name,
+                        ts=self._clock.now(),
+                        ok=False,
+                        latency_ms=latency,
+                        error=repr(exc),
+                    )
+                )
                 if not self._retry.should_retry(attempt, policy):
                     return False
             await self._retry.backoff(attempt, policy)

@@ -11,5 +11,4 @@ class NullPerceptionBackend:
         return False
 
     def capture_frontmost(self) -> ScreenState:
-        return ScreenState(source=PerceptionSource.UNSUPPORTED,
-                           note="perception unsupported on this platform")
+        return ScreenState(source=PerceptionSource.UNSUPPORTED, note="perception unsupported on this platform")

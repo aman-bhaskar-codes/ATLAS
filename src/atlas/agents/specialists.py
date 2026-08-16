@@ -33,7 +33,10 @@ class SimpleSpecialist(BaseAgent):
         self._gw = gateway
 
     async def execute(
-        self, *, subtask_id: str, description: str,
+        self,
+        *,
+        subtask_id: str,
+        description: str,
         context: dict[str, Any],
         dependency_results: dict[str, Any],
         correlation_id: CorrelationId,
@@ -42,39 +45,45 @@ class SimpleSpecialist(BaseAgent):
             # Build prompt with dependency context
             parts = [f"TASK: {description}"]
             if dependency_results:
-                dep_context = "\n".join(
-                    f"- {k}: {str(v)[:1000]}" for k, v in dependency_results.items()
-                )
+                dep_context = "\n".join(f"- {k}: {str(v)[:1000]}" for k, v in dependency_results.items())
                 parts.append(f"\nPRIOR RESULTS:\n{dep_context}")
             if context:
                 parts.append(f"\nCONTEXT: {context}")
 
             prompt = "\n".join(parts)
-            resp = await self._gw.complete(ModelRequest(
-                correlation_id=correlation_id,
-                system=self._config.system_prompt,
-                prompt=prompt,
-                required_capabilities=frozenset({
-                    ModelCapability.CODING
-                    if self.agent_type == "coder"
-                    else ModelCapability.REASONING
-                }),
-                max_tokens=self._config.context_window,
-                temperature=self._config.temperature,
-            ))
+            resp = await self._gw.complete(
+                ModelRequest(
+                    correlation_id=correlation_id,
+                    system=self._config.system_prompt,
+                    prompt=prompt,
+                    required_capabilities=frozenset(
+                        {ModelCapability.CODING if self.agent_type == "coder" else ModelCapability.REASONING}
+                    ),
+                    max_tokens=self._config.context_window,
+                    temperature=self._config.temperature,
+                )
+            )
 
             return SubTaskResult(
-                subtask_id=subtask_id, agent_type=self.agent_type,
-                ok=True, output=resp.text,
+                subtask_id=subtask_id,
+                agent_type=self.agent_type,
+                ok=True,
+                output=resp.text,
                 cost_usd=resp.cost.usd,
             )
         except Exception as exc:
-            _log.error("specialist.failed", event_type="agents",
-                       agent_type=self.agent_type, subtask_id=subtask_id,
-                       error=repr(exc))
+            _log.error(
+                "specialist.failed",
+                event_type="agents",
+                agent_type=self.agent_type,
+                subtask_id=subtask_id,
+                error=repr(exc),
+            )
             return SubTaskResult(
-                subtask_id=subtask_id, agent_type=self.agent_type,
-                ok=False, error=str(exc),
+                subtask_id=subtask_id,
+                agent_type=self.agent_type,
+                ok=False,
+                error=str(exc),
             )
 
 

@@ -1,4 +1,5 @@
 """Locator engine converts Domain locators to provider-specific selectors."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -14,7 +15,7 @@ class LocatorEngine:
 
     async def resolve(self, handle: PageHandle, locator: Locator) -> list[Any]:
         provider, provider_session_id, tab_id = self._pages.get_provider(handle)
-        
-        # Passes the Locator to the provider to resolve. 
+
+        # Passes the Locator to the provider to resolve.
         # In Playwright this calls `page.locator(...)`.
         return await provider.query(provider_session_id, tab_id, locator)  # type: ignore

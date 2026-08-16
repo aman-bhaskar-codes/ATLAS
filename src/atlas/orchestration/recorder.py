@@ -19,24 +19,39 @@ class ExecutionRecorder:
         self._clock = clock
 
     async def record_thought(self, correlation_id: str, t: Thought) -> None:
-        await self._epi.record(Episode(
-            correlation_id=correlation_id, ts=self._clock.now(),
-            kind=EpisodeKind.MESSAGE, role="agent", content=f"thought: {t.content}",
-            step=t.step,
-        ))
+        await self._epi.record(
+            Episode(
+                correlation_id=correlation_id,
+                ts=self._clock.now(),
+                kind=EpisodeKind.MESSAGE,
+                role="agent",
+                content=f"thought: {t.content}",
+                step=t.step,
+            )
+        )
 
     async def record_action(self, correlation_id: str, a: Action) -> None:
-        await self._epi.record(Episode(
-            correlation_id=correlation_id, ts=self._clock.now(),
-            kind=EpisodeKind.ACTION, role="agent",
-            content=f"{a.kind} {a.tool or ''}.{a.operation or ''} {a.args}",
-            tool=a.tool, step=a.step,
-        ))
+        await self._epi.record(
+            Episode(
+                correlation_id=correlation_id,
+                ts=self._clock.now(),
+                kind=EpisodeKind.ACTION,
+                role="agent",
+                content=f"{a.kind} {a.tool or ''}.{a.operation or ''} {a.args}",
+                tool=a.tool,
+                step=a.step,
+            )
+        )
 
     async def record_observation(self, correlation_id: str, o: Observation) -> None:
-        await self._epi.record(Episode(
-            correlation_id=correlation_id, ts=self._clock.now(),
-            kind=EpisodeKind.OBSERVATION, role="system",
-            content=str(o.content)[:1000] if o.ok else (o.error or "error"),
-            outcome="ok" if o.ok else "error", step=o.step,
-        ))
+        await self._epi.record(
+            Episode(
+                correlation_id=correlation_id,
+                ts=self._clock.now(),
+                kind=EpisodeKind.OBSERVATION,
+                role="system",
+                content=str(o.content)[:1000] if o.ok else (o.error or "error"),
+                outcome="ok" if o.ok else "error",
+                step=o.step,
+            )
+        )

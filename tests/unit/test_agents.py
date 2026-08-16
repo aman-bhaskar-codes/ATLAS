@@ -10,12 +10,16 @@ from atlas.agents.registry import AgentRegistry
 
 # ── TaskDAG tests ──────────────────────────────────────────────────── #
 
+
 def test_dag_topological_batches_linear() -> None:
-    dag = TaskDAG(goal="test", subtasks=[
-        SubTask(id="a", description="first", agent_type="general"),
-        SubTask(id="b", description="second", agent_type="general", dependencies=["a"]),
-        SubTask(id="c", description="third", agent_type="general", dependencies=["b"]),
-    ])
+    dag = TaskDAG(
+        goal="test",
+        subtasks=[
+            SubTask(id="a", description="first", agent_type="general"),
+            SubTask(id="b", description="second", agent_type="general", dependencies=["a"]),
+            SubTask(id="c", description="third", agent_type="general", dependencies=["b"]),
+        ],
+    )
     batches = dag.topological_batches()
     assert len(batches) == 3
     assert [st.id for st in batches[0]] == ["a"]
@@ -24,11 +28,14 @@ def test_dag_topological_batches_linear() -> None:
 
 
 def test_dag_topological_batches_parallel() -> None:
-    dag = TaskDAG(goal="test", subtasks=[
-        SubTask(id="a", description="independent 1", agent_type="researcher"),
-        SubTask(id="b", description="independent 2", agent_type="writer"),
-        SubTask(id="c", description="merge", agent_type="general", dependencies=["a", "b"]),
-    ])
+    dag = TaskDAG(
+        goal="test",
+        subtasks=[
+            SubTask(id="a", description="independent 1", agent_type="researcher"),
+            SubTask(id="b", description="independent 2", agent_type="writer"),
+            SubTask(id="c", description="merge", agent_type="general", dependencies=["a", "b"]),
+        ],
+    )
     batches = dag.topological_batches()
     assert len(batches) == 2
     batch_0_ids = sorted([st.id for st in batches[0]])
@@ -37,10 +44,13 @@ def test_dag_topological_batches_parallel() -> None:
 
 
 def test_dag_cycle_detection() -> None:
-    dag = TaskDAG(goal="test", subtasks=[
-        SubTask(id="a", description="one", agent_type="general", dependencies=["b"]),
-        SubTask(id="b", description="two", agent_type="general", dependencies=["a"]),
-    ])
+    dag = TaskDAG(
+        goal="test",
+        subtasks=[
+            SubTask(id="a", description="one", agent_type="general", dependencies=["b"]),
+            SubTask(id="b", description="two", agent_type="general", dependencies=["a"]),
+        ],
+    )
     errors = dag.validate()
     assert len(errors) > 0
     assert any("Cycle" in e for e in errors)
@@ -53,14 +63,18 @@ def test_dag_empty() -> None:
 
 
 def test_dag_unknown_dependency() -> None:
-    dag = TaskDAG(goal="test", subtasks=[
-        SubTask(id="a", description="x", agent_type="general", dependencies=["nonexistent"]),
-    ])
+    dag = TaskDAG(
+        goal="test",
+        subtasks=[
+            SubTask(id="a", description="x", agent_type="general", dependencies=["nonexistent"]),
+        ],
+    )
     errors = dag.validate()
     assert any("unknown" in e for e in errors)
 
 
 # ── AgentRegistry tests ───────────────────────────────────────────── #
+
 
 def test_registry_register_and_get() -> None:
     registry = AgentRegistry()

@@ -32,13 +32,14 @@ router = APIRouter(tags=["tasks"])
 # owns only the write/action endpoints below, which routes_trust.py does not
 # implement.
 
+
 @router.post("/tasks", status_code=202)
 async def create_task(
     command: CreateTaskRequest,
     control_plane: AtlasControlPlane = Depends(get_control_plane),
 ) -> JSONResponse:
     """Accept a task for async execution. Returns 202 with task in state 'created'.
-    
+
     The task runs in the background. Connect to the SSE stream to follow progress.
     Idempotent: repeat calls with the same idempotency_key return the same task.
     """

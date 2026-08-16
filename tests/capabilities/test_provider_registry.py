@@ -20,6 +20,6 @@ def test_unhealthy_dropped() -> None:
     p = FakeProvider("x")
     reg.register(p)
     for _ in range(10):
-        h.record("x", ok=False, latency_ms=1)   # trip breaker
+        h.record("x", ok=False, latency_ms=1)  # trip breaker
     with pytest.raises(NoProviderAvailable):
         reg.candidates(p.capability)

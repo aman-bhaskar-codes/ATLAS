@@ -25,8 +25,12 @@ class ShellTool:
     name = "shell"
 
     def __init__(
-        self, *, read_only: list[str], side_effect: list[str],
-        sandbox: Sandbox, mounts: dict[str, str],
+        self,
+        *,
+        read_only: list[str],
+        side_effect: list[str],
+        sandbox: Sandbox,
+        mounts: dict[str, str],
     ) -> None:
         self._read_only = read_only
         self._side_effect = side_effect
@@ -38,7 +42,7 @@ class ShellTool:
 
     def _allowed(self, command: str) -> tuple[bool, str]:
         """Parse command with shlex, validate executable exactly against allowlist.
-        
+
         Returns (allowed, reason).
         """
         try:
@@ -75,18 +79,23 @@ class ShellTool:
 
         network = argv[0] in {"npm", "pip"} or " ".join(argv[:2]) in {"git clone", "git pull"}
         result = await self._sandbox.run(
-            argv, mounts=self._mounts, network=network, timeout_s=120.0,
+            argv,
+            mounts=self._mounts,
+            network=network,
+            timeout_s=120.0,
         )
         is_side_effect = argv[0] in self._side_effect
         effects: tuple[SideEffect, ...] = ()
         if is_side_effect:
-            effects = (SideEffect(kind="command", target=argv[0],
-                                  detail=command, reversible=False),)
+            effects = (SideEffect(kind="command", target=argv[0], detail=command, reversible=False),)
         return ToolResult(
             ok=result.exit_code == 0,
-            output={"exit_code": result.exit_code, "stdout": result.stdout_tail,
-                    "stderr": result.stderr_tail, "duration_ms": result.duration_ms},
+            output={
+                "exit_code": result.exit_code,
+                "stdout": result.stdout_tail,
+                "stderr": result.stderr_tail,
+                "duration_ms": result.duration_ms,
+            },
             side_effects=effects,
             error=None if result.exit_code == 0 else (result.stderr_tail or "non-zero exit"),
         )
-

@@ -1,4 +1,5 @@
 """Transport-independent Trust Center application facade."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -29,9 +30,20 @@ class AtlasTrustPlane(Protocol):
     async def memory_provenance(self, fact_id: str) -> Sequence[ProvenanceView]: ...
     async def correct_memory(self, command: MemoryCorrectionCommand) -> MemoryMutationReceipt: ...
     async def supersede_memory(
-        self, fact_id: str, *, idempotency_key: str, request_id: str,
+        self,
+        fact_id: str,
+        *,
+        idempotency_key: str,
+        request_id: str,
     ) -> MemoryMutationReceipt: ...
     async def delete_memory(self, fact_id: str, *, idempotency_key: str, request_id: str) -> MemoryMutationReceipt: ...
-    async def audit(self, *, task_id: str | None, correlation_id: str | None,
-                    execution_id: str | None, cursor: str | None, limit: int) -> AuditPage: ...
+    async def audit(
+        self,
+        *,
+        task_id: str | None,
+        correlation_id: str | None,
+        execution_id: str | None,
+        cursor: str | None,
+        limit: int,
+    ) -> AuditPage: ...
     async def audit_event(self, event_id: str) -> AuditEventView: ...

@@ -28,14 +28,12 @@ from typing import Any
 
 def _setup(safety: Any, provider: Any) -> CapabilityDispatcher:
     reg = CapabilityRegistry()
-    reg.register(CapabilitySpec(capability=Capability.KNOWLEDGE, safety_tool="knowledge",
-                                operations=("search",)))
+    reg.register(CapabilitySpec(capability=Capability.KNOWLEDGE, safety_tool="knowledge", operations=("search",)))
     health = CapabilityHealth()
     preg = ProviderRegistry(health)
     preg.register(provider)
     tele = CapabilityTelemetry(lambda **k: _noop())
-    return CapabilityDispatcher(registry=reg, providers=preg, health=health,
-                               safety=safety, telemetry=tele)
+    return CapabilityDispatcher(registry=reg, providers=preg, health=health, safety=safety, telemetry=tele)
 
 
 async def _noop() -> None: ...
@@ -43,9 +41,9 @@ async def _noop() -> None: ...
 
 async def test_execute_ok_returns_domain_model() -> None:
     d = _setup(AllowSafety(), FakeProvider())
-    res = await d.execute(CapabilityRequest(capability=Capability.KNOWLEDGE,
-                                            operation="search", args={"q": "hi"}),
-                          CorrelationId("c"))
+    res = await d.execute(
+        CapabilityRequest(capability=Capability.KNOWLEDGE, operation="search", args={"q": "hi"}), CorrelationId("c")
+    )
     assert res.ok
     assert res.payload is not None
     assert res.payload.value == "hi" and res.provider == "fake"
@@ -53,15 +51,15 @@ async def test_execute_ok_returns_domain_model() -> None:
 
 async def test_retry_then_success() -> None:
     d = _setup(AllowSafety(), FakeProvider(fail_times=2))  # max_attempts=3
-    res = await d.execute(CapabilityRequest(capability=Capability.KNOWLEDGE,
-                                            operation="search", args={"q": "x"}),
-                          CorrelationId("c"))
+    res = await d.execute(
+        CapabilityRequest(capability=Capability.KNOWLEDGE, operation="search", args={"q": "x"}), CorrelationId("c")
+    )
     assert res.ok
 
 
 async def test_denial_raises_capability_denied() -> None:
     d = _setup(DenySafety(), FakeProvider())
     with pytest.raises(CapabilityDenied):
-        await d.execute(CapabilityRequest(capability=Capability.KNOWLEDGE,
-                                          operation="search", args={}), CorrelationId("c"))
-
+        await d.execute(
+            CapabilityRequest(capability=Capability.KNOWLEDGE, operation="search", args={}), CorrelationId("c")
+        )

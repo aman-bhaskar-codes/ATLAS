@@ -30,8 +30,9 @@ class FallbackEngine:
                 return resp.model_copy(update={"fell_back": i > 0, "attempts": i + 1})
             except IntelligenceError as exc:
                 last = exc
-                _log.warning("fallback.next", event_type="intel", model=spec.id,
-                             error=repr(exc), remaining=len(ranked) - i - 1)
+                _log.warning(
+                    "fallback.next", event_type="intel", model=spec.id, error=repr(exc), remaining=len(ranked) - i - 1
+                )
                 if not exc.provider_switch_helps and not exc.retryable:
                     break  # e.g. budget exceeded — switching won't help
         raise FallbackError(f"all candidates failed; last={last!r}")

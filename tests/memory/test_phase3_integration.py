@@ -23,28 +23,32 @@ import pytest_asyncio
 from atlas.infra.clock import SystemClock
 from atlas.infra.db import Database
 from atlas.infra.ids import UuidGenerator
-from atlas.memory.cache import FactCache, RetrievalCache, StatsCache
+from atlas.memory.cache import RetrievalCache, StatsCache
 from atlas.memory.episodic import EpisodicMemory
 from atlas.memory.retrieval import Retriever
 from atlas.memory.semantic import SemanticMemory
 from atlas.memory.types import (
-    Episode, EpisodeKind, FactKind, RetrievedContext, SemanticFact,
+    Episode,
+    EpisodeKind,
+    FactKind,
+    RetrievedContext,
 )
 from atlas.memory.user_model import UserModel
 from atlas.memory.vectorstore import ChromaVectorStore
-
 
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------
 
+
 class _FakeEmbedder:
     """Returns a fixed unit vector — no Ollama required."""
+
     DIM = 384
 
     async def embed(self, text: str) -> list[float]:
         # deterministic but text-sensitive (for basic uniqueness)
-        h = hash(text) % (10 ** 6)
+        h = hash(text) % (10**6)
         base = [float(h % (i + 2)) for i in range(self.DIM)]
         norm = (sum(x * x for x in base) ** 0.5) or 1.0
         return [x / norm for x in base]
@@ -52,6 +56,7 @@ class _FakeEmbedder:
 
 class _FakeBus:
     """Collects published events for inspection."""
+
     def __init__(self) -> None:
         self.events: list[tuple[str, Any]] = []
         self._subs: dict[str, list[Any]] = {}
@@ -69,6 +74,7 @@ class _FakeBus:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def db(tmp_path: Path) -> Database:
     d = Database(tmp_path / "test.db")
@@ -84,9 +90,11 @@ async def chroma_store(tmp_path: Path) -> ChromaVectorStore:
 @pytest_asyncio.fixture
 async def semantic(db: Database, chroma_store: ChromaVectorStore) -> SemanticMemory:
     return SemanticMemory(
-        db=db, vectors=chroma_store,
+        db=db,
+        vectors=chroma_store,
         embedder=_FakeEmbedder(),
-        ids=UuidGenerator(), clock=SystemClock(),
+        ids=UuidGenerator(),
+        clock=SystemClock(),
     )
 
 
@@ -116,8 +124,9 @@ async def retriever(
 
 
 # ---------------------------------------------------------------------------
-# Task 3.1 – Episode write performance
+# Task 3.1 - Episode write performance
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_episode_write_under_10ms(db: Database) -> None:
@@ -150,9 +159,13 @@ async def test_episode_bus_event_emitted(db: Database) -> None:
     mem.set_bus(bus)  # type: ignore[arg-type]
 
     ep = Episode(
-        correlation_id="c1", task_id="t1",
-        ts=datetime.now(UTC), kind=EpisodeKind.ACTION,
-        role="agent", content="test", salience=0.4,
+        correlation_id="c1",
+        task_id="t1",
+        ts=datetime.now(UTC),
+        kind=EpisodeKind.ACTION,
+        role="agent",
+        content="test",
+        salience=0.4,
     )
     await mem.record(ep)
     # Give the create_task a chance to run
@@ -166,8 +179,9 @@ async def test_episode_bus_event_emitted(db: Database) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Task 3.2 / 3.8 – Retrieval cache
+# Task 3.2 / 3.8 - Retrieval cache
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_retrieval_cache_hit_is_fast(
@@ -175,9 +189,7 @@ async def test_retrieval_cache_hit_is_fast(
     semantic: SemanticMemory,
 ) -> None:
     """Second retrieve() for the same query hits the cache and is < 5 ms."""
-    await semantic.add_fact(
-        "Prefers dark mode", FactKind.PREFERENCE, confidence=0.9, salience=0.7, sources=()
-    )
+    await semantic.add_fact("Prefers dark mode", FactKind.PREFERENCE, confidence=0.9, salience=0.7, sources=())
 
     # First call — cache miss
     await retriever.retrieve("what theme does the user prefer")
@@ -211,15 +223,14 @@ async def test_cache_invalidated_after_fact_write(
 
 
 # ---------------------------------------------------------------------------
-# Task 3.3 – FactCache
+# Task 3.3 - FactCache
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_fact_cache_miss_then_hit(semantic: SemanticMemory) -> None:
     """get_recent_facts() populates the cache on first call."""
-    await semantic.add_fact(
-        "Uses pytest", FactKind.SKILL, confidence=0.85, salience=0.6, sources=()
-    )
+    await semantic.add_fact("Uses pytest", FactKind.SKILL, confidence=0.85, salience=0.6, sources=())
 
     cache = semantic._fact_cache
     # Clear any previous state
@@ -249,8 +260,9 @@ async def test_fact_cache_invalidated_on_add(semantic: SemanticMemory) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Task 3.6 – Knowledge chunks in retrieval
+# Task 3.6 - Knowledge chunks in retrieval
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_retrieval_context_has_knowledge_chunks_field(
@@ -275,8 +287,9 @@ async def test_retrieval_render_has_knowledge_section_when_chunks_present(
 
 
 # ---------------------------------------------------------------------------
-# Task 3.4 – User model preference caching
+# Task 3.4 - User model preference caching
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_preference_cache_hit(user_model: UserModel) -> None:
@@ -309,13 +322,13 @@ async def test_preference_cache_invalidated_on_set(user_model: UserModel) -> Non
 # StatsCache unit test
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_stats_cache_ttl() -> None:
     """StatsCache returns None when TTL expires."""
     cache = StatsCache(ttl=0.05)  # 50 ms TTL
 
-    sample = {"episode_count": 10, "fact_count": 5, "document_count": 2,
-              "chunk_count": 20, "preference_count": 3}
+    sample = {"episode_count": 10, "fact_count": 5, "document_count": 2, "chunk_count": 20, "preference_count": 3}
     await cache.set(sample)
 
     # Immediate read should hit
@@ -333,8 +346,7 @@ async def test_stats_cache_ttl() -> None:
 async def test_stats_cache_invalidate() -> None:
     """StatsCache.invalidate() clears before TTL."""
     cache = StatsCache(ttl=60.0)
-    await cache.set({"episode_count": 1, "fact_count": 0,
-                     "document_count": 0, "chunk_count": 0, "preference_count": 0})
+    await cache.set({"episode_count": 1, "fact_count": 0, "document_count": 0, "chunk_count": 0, "preference_count": 0})
 
     assert await cache.get() is not None
     await cache.invalidate()
@@ -344,6 +356,7 @@ async def test_stats_cache_invalidate() -> None:
 # ---------------------------------------------------------------------------
 # RetrievalCache unit tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_retrieval_cache_evicts_on_capacity() -> None:
@@ -355,7 +368,7 @@ async def test_retrieval_cache_evicts_on_capacity() -> None:
         k = cache.make_key(f"query_{i}", None)
         await cache.set(k, f"result_{i}")
 
-    # Some entries were evicted; cache must not exceed 2× the cap
+    # Some entries were evicted; cache must not exceed 2x the cap
     assert cache.size <= 10  # very conservative upper bound
 
 
@@ -379,6 +392,7 @@ async def test_retrieval_cache_different_task_ids_are_separate() -> None:
 # Token budget partitioning
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_token_budget_is_respected(
     retriever: Retriever,
@@ -389,7 +403,10 @@ async def test_token_budget_is_respected(
     for i in range(20):
         await semantic.add_fact(
             f"Fact number {i}: " + "x " * 50,
-            FactKind.FACT, confidence=0.9, salience=0.5, sources=(),
+            FactKind.FACT,
+            confidence=0.9,
+            salience=0.5,
+            sources=(),
         )
 
     ctx = await retriever.retrieve("token budget test")
@@ -399,6 +416,7 @@ async def test_token_budget_is_respected(
 # ---------------------------------------------------------------------------
 # DB PRAGMA verification
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_db_wal_mode_enabled(db: Database) -> None:
@@ -412,9 +430,7 @@ async def test_db_wal_mode_enabled(db: Database) -> None:
 @pytest.mark.asyncio
 async def test_db_indexes_exist(db: Database) -> None:
     """Phase 3 performance indexes must exist after migration."""
-    cur = await db.conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_episodes_%'"
-    )
+    cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_episodes_%'")
     rows = await cur.fetchall()
     index_names = {r[0] for r in rows}
     required = {"idx_episodes_task_id", "idx_episodes_salience", "idx_episodes_kind_ts"}

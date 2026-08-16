@@ -44,8 +44,17 @@ class TaskResponse(BaseModel):
     source: Literal["cli", "file", "whatsapp", "api", "scheduler", "system"]
     request: str
     state: Literal[
-        "created", "ready", "building_context", "planning", "reasoning",
-        "waiting_tool", "executing", "observing", "completed", "failed", "cancelled",
+        "created",
+        "ready",
+        "building_context",
+        "planning",
+        "reasoning",
+        "waiting_tool",
+        "executing",
+        "observing",
+        "completed",
+        "failed",
+        "cancelled",
     ]
     ok: bool | None
     answer: str | None
@@ -105,7 +114,8 @@ class CapabilityResponse(BaseModel):
 class AttachmentRef(BaseModel):
     id: str
     type: str
-    
+
+
 class CreateTaskRequest(BaseModel):
     request: str = Field(min_length=1, max_length=20_000)
     source: Literal["api"] = "api"
@@ -134,6 +144,7 @@ class ApprovalDecisionRequest(BaseModel):
 
 class ErrorEnvelope(BaseModel):
     """Stable error shape. Never include raw exception text or stack traces."""
+
     error: ErrorDetail
 
 

@@ -51,7 +51,8 @@ class NtfyNotifier:
             f"https://ntfy.sh/{self._topic}",
             content=body.encode(),
             headers={
-                "Title": title, "Priority": "5",
+                "Title": title,
+                "Priority": "5",
                 "Actions": f"http, Approve, {approve}; http, Deny, {deny}",
             },
         )
@@ -96,8 +97,7 @@ class CompositeConfirmer:
                 f"ATLAS confirm: {req.tool}.{req.operation}", prompt, timeout_s=self._timeout_s
             )
             if result is None:
-                _log.info("notify.confirm_timeout", event_type="notify",
-                          correlation_id=req.correlation_id)
+                _log.info("notify.confirm_timeout", event_type="notify", correlation_id=req.correlation_id)
                 return False  # fail-closed
             return result
         return await self._cli.confirm(prompt, decision, req)

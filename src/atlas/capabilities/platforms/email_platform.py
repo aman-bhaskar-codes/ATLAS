@@ -31,8 +31,13 @@ _log = get_logger("atlas.email")
 
 class EmailPlatform:
     def __init__(
-        self, *, provider: EmailProvider, notifications: NotificationPlatform,
-        ids: IdGenerator, known_contacts: set[str], approval_channels: tuple[str, ...],
+        self,
+        *,
+        provider: EmailProvider,
+        notifications: NotificationPlatform,
+        ids: IdGenerator,
+        known_contacts: set[str],
+        approval_channels: tuple[str, ...],
     ) -> None:
         self._provider = provider
         self._notify = notifications
@@ -61,9 +66,9 @@ class EmailPlatform:
 
     # ---- compose (Tier-0, no side effect) -------------------------------
     def classify_recipients(self, draft: EmailDraft) -> list[Contact]:
-        return [Contact(address=a.email, name=a.name,
-                        known=self._is_known(f"{a.email}"))
-                for a in draft.all_recipients()]
+        return [
+            Contact(address=a.email, name=a.name, known=self._is_known(f"{a.email}")) for a in draft.all_recipients()
+        ]
 
     # ---- SEND (Tier-2, previewed, human-approved) -----------------------
     async def send(self, draft: EmailDraft, correlation_id: CorrelationId) -> str:
@@ -74,21 +79,32 @@ class EmailPlatform:
         # Approval via the 6.4 platform. Unknown recipients => stronger warning,
         # deny-on-timeout. This is the highest-regret action, so default is NO.
         req = ApprovalRequest(
-            id=self._ids.execution_id(), correlation_id=correlation_id,
-            prompt=("Send this email?" if not unknown
-                    else f"⚠️ Send to {len(unknown)} NEW contact(s)?"),
-            detail=preview, timeout_s=600.0, default_on_timeout=False)
+            id=self._ids.execution_id(),
+            correlation_id=correlation_id,
+            prompt=("Send this email?" if not unknown else f"⚠️ Send to {len(unknown)} NEW contact(s)?"),
+            detail=preview,
+            timeout_s=600.0,
+            default_on_timeout=False,
+        )
         decision = await self._notify.request_approval(req, self._approval_channels)
         if not decision.approved:
-            _log.info("email.send_denied", event_type="email",
-                      correlation_id=correlation_id, timed_out=decision.timed_out,
-                      unknown_recipients=len(unknown))
-            raise CapabilityDenied(
-                "send not approved" + (" (timed out)" if decision.timed_out else ""))
+            _log.info(
+                "email.send_denied",
+                event_type="email",
+                correlation_id=correlation_id,
+                timed_out=decision.timed_out,
+                unknown_recipients=len(unknown),
+            )
+            raise CapabilityDenied("send not approved" + (" (timed out)" if decision.timed_out else ""))
 
         message_id = await self._provider.send(draft)
-        _log.info("email.sent", event_type="email", correlation_id=correlation_id,
-                  message_id=message_id, recipients=len(contacts))
+        _log.info(
+            "email.sent",
+            event_type="email",
+            correlation_id=correlation_id,
+            message_id=message_id,
+            recipients=len(contacts),
+        )
         return message_id
 
     def _render_preview(self, draft: EmailDraft, unknown: list[Contact]) -> str:
@@ -103,8 +119,7 @@ class EmailPlatform:
             lines.append(f"Bcc:     {', '.join(a.render() for a in draft.bcc)}")
         lines += [f"Subject: {draft.subject}", ""]
         if unknown:
-            lines.append("⚠️ NEW CONTACTS (not in your known list): "
-                         + ", ".join(f"{c.address}" for c in unknown))
+            lines.append("⚠️ NEW CONTACTS (not in your known list): " + ", ".join(f"{c.address}" for c in unknown))
             lines.append("")
         lines.append(draft.body_text)
         if draft.attachments:

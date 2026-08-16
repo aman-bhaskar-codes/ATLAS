@@ -18,10 +18,16 @@ from atlas.safety.manifest import Manifest
 
 _log = get_logger("atlas.classifier")
 
-KNOWN_CONSTRAINTS: frozenset[str] = frozenset({
-    "within_write_paths", "cmd_in_read_only", "cmd_in_side_effect",
-    "contact_known", "recipients_known", "attendees_known",
-})
+KNOWN_CONSTRAINTS: frozenset[str] = frozenset(
+    {
+        "within_write_paths",
+        "cmd_in_read_only",
+        "cmd_in_side_effect",
+        "contact_known",
+        "recipients_known",
+        "attendees_known",
+    }
+)
 
 
 class TierClassifier:
@@ -33,10 +39,10 @@ class TierClassifier:
         try:
             return self._classify(req)
         except Exception as exc:  # fail closed
-            _log.error("classifier.error", event_type="safety",
-                       correlation_id=req.correlation_id, error=repr(exc))
+            _log.error("classifier.error", event_type="safety", correlation_id=req.correlation_id, error=repr(exc))
             return SafetyDecision(
-                decision="require_confirm", tier=self._err_tier,
+                decision="require_confirm",
+                tier=self._err_tier,
                 reason=f"classifier error, fail-closed: {exc!r}",
             )
 
@@ -46,9 +52,7 @@ class TierClassifier:
             return hb
         confirmation = self._required_confirmation(req)
         for rule in self._m.rules:
-            if fnmatch.fnmatch(req.tool, rule.tool) and fnmatch.fnmatch(
-                req.operation, rule.operation
-            ):
+            if fnmatch.fnmatch(req.tool, rule.tool) and fnmatch.fnmatch(req.operation, rule.operation):
                 tier = Tier(rule.tier)
                 tier, reason = self._apply_constraint(rule.constraint, req, tier)
                 matched_rule = f"{req.tool}.{req.operation}"
@@ -65,7 +69,8 @@ class TierClassifier:
                     matched_rule,
                 )
         return SafetyDecision(
-            decision="deny", tier=Tier.CONFIRM,
+            decision="deny",
+            tier=Tier.CONFIRM,
             reason="deny-by-default: no manifest rule matched",
         )
 
@@ -77,16 +82,20 @@ class TierClassifier:
         threshold = int(self._m.safety.get("mass_deletion_threshold", 25))
 
         for hb in self._m.hard_block:
-            if not (
-                fnmatch.fnmatch(req.tool, hb.tool) and fnmatch.fnmatch(req.operation, hb.operation)
-            ):
+            if not (fnmatch.fnmatch(req.tool, hb.tool) and fnmatch.fnmatch(req.operation, hb.operation)):
                 continue
             hit, reason = self._match(hb.match, req, paths, blob, cred_dirs, fin_domains, threshold)
             if hit:
-                _log.warning("safety.hard_block", event_type="safety",
-                             correlation_id=req.correlation_id, match=hb.match, reason=reason)
+                _log.warning(
+                    "safety.hard_block",
+                    event_type="safety",
+                    correlation_id=req.correlation_id,
+                    match=hb.match,
+                    reason=reason,
+                )
                 return SafetyDecision(
-                    decision="deny", tier=Tier.BLOCK,
+                    decision="deny",
+                    tier=Tier.BLOCK,
                     reason=f"hard_block:{hb.match}: {reason}",
                     matched_rule=f"hard_block:{hb.match}",
                 )
@@ -101,8 +110,7 @@ class TierClassifier:
 
         for confirmation in self._m.require_confirm:
             if not (
-                fnmatch.fnmatch(req.tool, confirmation.tool)
-                and fnmatch.fnmatch(req.operation, confirmation.operation)
+                fnmatch.fnmatch(req.tool, confirmation.tool) and fnmatch.fnmatch(req.operation, confirmation.operation)
             ):
                 continue
             hit, reason = self._match(
@@ -129,8 +137,14 @@ class TierClassifier:
         return None
 
     def _match(
-        self, name: str, req: ToolRequest, paths: list[str], blob: str,
-        cred_dirs: list[str], fin_domains: list[str], threshold: int,
+        self,
+        name: str,
+        req: ToolRequest,
+        paths: list[str],
+        blob: str,
+        cred_dirs: list[str],
+        fin_domains: list[str],
+        threshold: int,
     ) -> tuple[bool, str]:
         if name == "credential_access":
             return matchers.is_credential_access(paths, cred_dirs)
@@ -158,9 +172,7 @@ class TierClassifier:
             return matchers.is_form_submission(req.tool, req.operation)
         return False, ""
 
-    def _apply_constraint(
-        self, constraint: str | None, req: ToolRequest, tier: Tier
-    ) -> tuple[Tier, str | None]:
+    def _apply_constraint(self, constraint: str | None, req: ToolRequest, tier: Tier) -> tuple[Tier, str | None]:
         if constraint is None:
             return tier, None
         ok, reason = self._check_constraint(constraint, req)
@@ -205,9 +217,6 @@ class TierClassifier:
     @staticmethod
     def _as_decision(tier: Tier, reason: str, rule: str) -> SafetyDecision:
         decision: Decision = (
-            "allow" if tier <= Tier.NOTIFY
-            else "require_confirm" if tier in (Tier.CONFIRM, Tier.DANGEROUS)
-            else "deny"
+            "allow" if tier <= Tier.NOTIFY else "require_confirm" if tier in (Tier.CONFIRM, Tier.DANGEROUS) else "deny"
         )
         return SafetyDecision(decision=decision, tier=tier, reason=reason, matched_rule=rule)
-

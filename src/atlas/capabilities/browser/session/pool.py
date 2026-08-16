@@ -1,4 +1,5 @@
 """BrowserPool manages concurrent browser sessions and evicts idle ones."""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,6 +13,7 @@ from atlas.capabilities.browser.providers.base import BrowserProvider
 from atlas.capabilities.browser.registry.provider_registry import ProviderRegistry
 
 _log = logging.getLogger("atlas.browser.pool")
+
 
 class BrowserPool:
     def __init__(self, registry: ProviderRegistry, max_concurrent: int = 3, idle_ttl_s: int = 300) -> None:
@@ -37,15 +39,11 @@ class BrowserPool:
 
             # Launch provider inside sandbox
             provider_session_id = await provider.launch(
-                profile=spec.profile_name,
-                incognito=spec.incognito,
-                sandbox_spec=sandbox_spec
+                profile=spec.profile_name, incognito=spec.incognito, sandbox_spec=sandbox_spec
             )
 
             state = SessionState(
-                session_id=provider_session_id,
-                provider_name=provider.name,
-                auth_state=AuthState.ANONYMOUS
+                session_id=provider_session_id, provider_name=provider.name, auth_state=AuthState.ANONYMOUS
             )
             session = BrowserSession(id=session_id, spec=spec, state=state)
             self._sessions[session_id] = session

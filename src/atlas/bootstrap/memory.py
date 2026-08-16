@@ -65,18 +65,28 @@ def build_memory(
     working = WorkingMemory()
 
     knowledge_store = KnowledgeStore(
-        db=db, vector_store=vectors, embedder=embedder, ids=ids, clock=clock,
+        db=db,
+        vector_store=vectors,
+        embedder=embedder,
+        ids=ids,
+        clock=clock,
     )
     retriever = Retriever(
-        semantic=semantic, episodic=episodic, user_model=user_model,
+        semantic=semantic,
+        episodic=episodic,
+        user_model=user_model,
         knowledge_store=knowledge_store,
     )
     consolidator = Consolidator(
-        episodic=episodic, semantic=semantic, gateway=gateway,
-        db=db, ids=ids, clock=clock,
+        episodic=episodic,
+        semantic=semantic,
+        gateway=gateway,
+        db=db,
+        ids=ids,
+        clock=clock,
     )
     pruner = Pruner(db=db, gateway=gateway, ids=ids, clock=clock)
-    
+
     # Phase 2: Trajectory store and experience extractor for durable learning
     trajectory_store = TrajectoryStore(db=db, ids=ids, clock=clock)
     experience_extractor = ExperienceExtractor(

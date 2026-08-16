@@ -22,6 +22,7 @@ class CapabilityNotFound(CapabilityError):  # noqa: N818
 
 class NoProviderAvailable(CapabilityError):  # noqa: N818
     """Capability exists but no healthy provider can serve it."""
+
     provider_switch_helps = True
 
 
@@ -32,11 +33,13 @@ class ProviderExecutionError(CapabilityError):
 
 class ProviderAuthError(CapabilityError):
     """Credentials missing/expired — the Identity Platform (6.2) must resolve."""
+
     provider_switch_helps = True
 
 
 class NormalizationError(CapabilityError):
     """Provider returned something we couldn't map to a domain model."""
+
     retryable = True
 
 
