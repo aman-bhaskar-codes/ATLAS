@@ -18,8 +18,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol
 
+from atlas.infra.logging import get_logger
+
 if TYPE_CHECKING:
     pass
+
+_log = get_logger("atlas.orchestration.goal")
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +223,12 @@ class GoalVerifier:
                 failure_reason=str(data["failure_reason"]) if data.get("failure_reason") else None,
                 suggestions=suggestions,
             )
-        except Exception:
+        except Exception as exc:
             # Verification failure must not crash the task — fall back to pass
+            _log.warning(
+                "goal.verification_error",
+                event_type="orchestration",
+                error=repr(exc),
+                detail="Verification failed; falling back to passed=True, score=0.5",
+            )
             return VerificationResult(passed=True, score=0.5, failure_reason="verifier_error")
