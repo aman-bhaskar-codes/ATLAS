@@ -177,7 +177,7 @@ export interface AtlasModel {
   id: string; provider: string; context_length: number;
   usd_per_1m_input: number; usd_per_1m_output: number; latency_estimate_ms: number;
   capabilities: string[]; supports_streaming: boolean; supports_tool_calling: boolean;
-  quality_score: number; enabled: boolean;
+  quality_score: number; enabled: boolean; cost_class?: string;
 }
 export interface AtlasProvider { name: string; is_local: boolean; available: boolean }
 export interface AtlasSchedule { id: string; name: string; cron: string; enabled: boolean }
@@ -216,3 +216,41 @@ export const trajectoryApi = {
   experiences: (limit = 50) =>
     requestJSON(`/api/v1/trajectory/experiences?limit=${limit}`) as Promise<AtlasExperience[]>,
 };
+
+// --- Zero-Cost-First: Provider/Cost/Profile API ---
+export interface ProviderHealth {
+  name: string; healthy: boolean; avg_latency_ms: number; is_local: boolean;
+  quota_pct?: number; quota_requests_remaining?: number; quota_tokens_remaining?: number;
+}
+export interface ProfileInfo {
+  profile: string; cost_policy: string; network_policy: string;
+  allow_cloud: boolean; enable_quota_governor: boolean; daily_usd: number;
+  allowed_cost_classes: string[];
+}
+export interface QuotaSnapshot {
+  enabled: boolean;
+  providers: Record<string, {
+    requests_remaining: number; tokens_remaining: number;
+    requests_used: number; tokens_used: number;
+    daily_requests_limit: number; daily_tokens_limit: number;
+    pct_remaining: number;
+  }>;
+}
+export interface CapabilityMatrix {
+  matrix: Record<string, { local: string[]; free_quota: string[]; paid: string[] }>;
+  total_models: number;
+}
+
+export const providersApi = {
+  health: () =>
+    requestJSON(`/providers/health`) as Promise<ProviderHealth[]>,
+  free: () =>
+    requestJSON(`/providers/free`) as Promise<ProviderHealth[]>,
+  profile: () =>
+    requestJSON(`/profile`) as Promise<ProfileInfo>,
+  quota: () =>
+    requestJSON(`/providers/quota`) as Promise<QuotaSnapshot>,
+  capabilityMatrix: () =>
+    requestJSON(`/capabilities/matrix`) as Promise<CapabilityMatrix>,
+};
+

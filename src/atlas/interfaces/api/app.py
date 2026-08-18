@@ -211,6 +211,7 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.routes_tasks import router as tasks_router
     from atlas.interfaces.api.routes_trajectory import router as trajectory_router  # Phase 2
     from atlas.interfaces.api.routes_trust import router as trust_router
+    from atlas.interfaces.api.routes_providers import router as providers_router  # Zero-cost-first
 
     # Each API path now has exactly one owning router — see routes_tasks.py
     # and routes_trust.py module docstrings/comments for the split:
@@ -237,5 +238,6 @@ def create_app() -> FastAPI:
     app.include_router(events_ws_router, prefix="")  # WebSocket routes include /ws/ prefix
     app.include_router(learning_router, prefix="/api/v1")  # Batch 6
     app.include_router(ops_router, prefix="/api/v1")  # Batch 6
+    app.include_router(providers_router, prefix="")  # Zero-cost-first: already has /api/v1 prefix
 
     return app

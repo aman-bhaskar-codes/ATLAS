@@ -86,6 +86,79 @@ class ModelCapability(StrEnum):
 ModelCapabilitySet = frozenset[ModelCapability]
 
 
+# ---------------------------------------------------------------------------
+# Zero-Cost-First Policy Enums
+# WHY here (not in intelligence/): these cross L0/L1 boundaries. The selector,
+# runtime, governor, CLI, and API all need them — keeping them in the shared
+# leaf module avoids import cycles while giving the whole stack a single
+# vocabulary for cost, network, and privacy constraints.
+# ---------------------------------------------------------------------------
+
+
+class CostClass(StrEnum):
+    """Semantic cost tier for a provider or model.
+
+    LOCAL       — runs on user hardware, $0 always
+    FREE        — cloud service, $0, no quota limit known
+    FREE_QUOTA  — cloud service, $0 within a daily/monthly quota
+    PAID        — costs money per token/request
+    """
+
+    LOCAL = "local"
+    FREE = "free"
+    FREE_QUOTA = "free_quota"
+    PAID = "paid"
+
+
+class CostPolicy(StrEnum):
+    """User-chosen cost enforcement mode.
+
+    ZERO_COST       — hard-block ALL paid providers, even if keys exist
+    FREE_ONLY       — only local + free cloud (no paid)
+    FREE_PREFERRED  — prefer free, paid only if user explicitly authorizes
+    BALANCED        — optimize cost/quality/latency
+    UNRESTRICTED    — use whatever is configured
+    """
+
+    ZERO_COST = "zero_cost"
+    FREE_ONLY = "free_only"
+    FREE_PREFERRED = "free_preferred"
+    BALANCED = "balanced"
+    UNRESTRICTED = "unrestricted"
+
+
+class NetworkPolicy(StrEnum):
+    """Network access constraint, enforced before provider selection.
+
+    OFFLINE       — no network at all, only local tools/models
+    LOCAL_ONLY    — no external API calls (LAN services like Ollama OK)
+    FREE_CLOUD    — only approved free-tier cloud providers
+    UNRESTRICTED  — any configured provider
+    """
+
+    OFFLINE = "offline"
+    LOCAL_ONLY = "local_only"
+    FREE_CLOUD = "free_cloud"
+    UNRESTRICTED = "unrestricted"
+
+
+class PrivacyClass(StrEnum):
+    """Data sensitivity classification — drives provider routing.
+
+    PUBLIC     — can go anywhere (free cloud, paid, etc.)
+    INTERNAL   — internal data, local preferred but cloud OK
+    PRIVATE    — personal data, only local or explicitly approved providers
+    SENSITIVE  — PII/financial, local strongly preferred
+    SECRET     — must stay local, cloud routing hard-blocked
+    """
+
+    PUBLIC = "public"
+    INTERNAL = "internal"
+    PRIVATE = "private"
+    SENSITIVE = "sensitive"
+    SECRET = "secret"
+
+
 class ModelTarget(IntEnum):
     LOCAL_FAST = 0
     LOCAL_HEAVY = 1

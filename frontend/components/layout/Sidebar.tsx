@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Orbit, Activity, ListChecks, ShieldCheck, Brain, Waypoints, ScrollText, GraduationCap, Lightbulb, BarChart3, Wrench, Cpu, CalendarClock, Settings2 } from "lucide-react";
+import { Orbit, Activity, ListChecks, ShieldCheck, Brain, Waypoints, ScrollText, GraduationCap, Lightbulb, BarChart3, Wrench, Cpu, CalendarClock, Settings2, Zap, DollarSign } from "lucide-react";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -46,6 +46,8 @@ export function Sidebar() {
     {
       title: "SYSTEM",
       links: [
+        { href: "/providers", label: "Providers", icon: Zap },
+        { href: "/cost", label: "Cost", icon: DollarSign },
         { href: "/tools", label: "Tools", icon: Wrench },
         { href: "/models", label: "Models", icon: Cpu },
         { href: "/schedules", label: "Schedules", icon: CalendarClock },

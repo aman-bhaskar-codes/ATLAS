@@ -1,15 +1,27 @@
 logging:
   level: INFO
   format: console        # console | json
+
+# ── Operating Profile ──────────────────────────────────────────────────
+# Profiles: local_free | free_hybrid | free_demo | production
+# ATLAS_PROFILE env var overrides this.
+profile: local_free
+
+# ── Cost & Network Policy ─────────────────────────────────────────────
+# These can be overridden by the profile or set independently.
+# ATLAS_COST_POLICY and ATLAS_NETWORK_POLICY env vars override these.
+cost_policy: zero_cost       # zero_cost | free_only | free_preferred | balanced | unrestricted
+network_policy: local_only   # offline | local_only | free_cloud | unrestricted
+
 models:
   gpu_concurrency: 1
   local_timeout_s: 120
   cloud_timeout_s: 90
-  allow_cloud: true      # Phase 5A enabled
-  daily_usd: 1.00
-  weekly_usd: 5.00
-  monthly_usd: 15.00
-  per_task_usd: 0.50
+  allow_cloud: false       # profile overrides this
+  daily_usd: 0.00
+  weekly_usd: 0.00
+  monthly_usd: 0.00
+  per_task_usd: 0.00
 safety:
   stop_flag_path: STOP.flag
   confirm_timeout_s: 300

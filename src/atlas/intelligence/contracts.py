@@ -13,7 +13,7 @@ from enum import StrEnum
 from pydantic import BaseModel
 
 from atlas.infra.ids import CorrelationId
-from atlas.infra.types import ProviderToolCall, ToolCallSpec
+from atlas.infra.types import CostClass, CostPolicy, NetworkPolicy, PrivacyClass, ProviderToolCall, ToolCallSpec
 from atlas.intelligence.capabilities import CapabilitySet
 
 
@@ -37,7 +37,12 @@ class Usage(BaseModel):
 
 
 class ModelSpec(BaseModel):
-    """Config-driven metadata for one model. Loaded from models.yaml."""
+    """Config-driven metadata for one model. Loaded from models.yaml.
+
+    cost_class drives the zero-cost-first policy engine: the selector
+    uses it to hard-block PAID models when CostPolicy is ZERO_COST,
+    and the quota governor uses it to track free-tier usage.
+    """
 
     model_config = {"frozen": True}
     id: str  # logical id, e.g. 'glm-5.2'
@@ -46,6 +51,7 @@ class ModelSpec(BaseModel):
     context_length: int
     usd_per_1m_input: float
     usd_per_1m_output: float
+    cost_class: CostClass = CostClass.PAID  # default safe: assume paid
     latency_estimate_ms: int = 2000
     capabilities: CapabilitySet = frozenset()
     max_concurrency: int = 4
@@ -61,7 +67,12 @@ class ModelSpec(BaseModel):
 
 
 class Constraints(BaseModel):
-    """Caller/selection constraints."""
+    """Caller/selection constraints.
+
+    cost_policy and network_policy are injected from the active profile.
+    They flow through the ModelSelector to hard-filter ineligible models
+    before scoring. privacy_class is set per-request from the task.
+    """
 
     model_config = {"frozen": True}
     max_latency_ms: int | None = None
@@ -70,6 +81,10 @@ class Constraints(BaseModel):
     require_streaming: bool = False
     prefer_local: bool = False
     pinned_model: str | None = None  # explicit override (still budget/health checked)
+    # Zero-cost-first policy fields
+    cost_policy: CostPolicy = CostPolicy.UNRESTRICTED
+    network_policy: NetworkPolicy = NetworkPolicy.UNRESTRICTED
+    privacy_class: PrivacyClass = PrivacyClass.PUBLIC
 
 
 class InferenceRequest(BaseModel):

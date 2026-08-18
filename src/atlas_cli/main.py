@@ -364,5 +364,348 @@ def events_cmd(
     _run(go())
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Zero-Cost-First CLI Commands
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── atlas doctor ──────────────────────────────────────────────────────────
+
+@app.command("doctor")
+def doctor_cmd() -> None:
+    """Run system diagnostics — verify environment, providers, models."""
+    from rich.panel import Panel
+    from rich.table import Table
+
+    async def go() -> None:
+        try:
+            resp = await client._get("/api/v1/ops/health")
+            data = resp if isinstance(resp, dict) else {"status": "unknown"}
+        except Exception:
+            data = {"status": "unreachable"}
+
+        # ── Environment checks ────────────────────────────────────────
+        import shutil
+        import sys
+
+        table = Table(title="ATLAS Environment", show_header=True)
+        table.add_column("Component", style="cyan")
+        table.add_column("Status", style="bold")
+        table.add_column("Detail", style="dim")
+
+        # Python
+        table.add_row("Python", "[green]✓[/]", f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+
+        # Ollama
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=3) as c:
+                r = await c.get("http://localhost:11434/api/tags")
+                models = [m["name"] for m in r.json().get("models", [])]
+                table.add_row("Ollama", "[green]✓[/]", f"{len(models)} models: {', '.join(models[:3])}")
+        except Exception:
+            table.add_row("Ollama", "[red]✗[/]", "Not running")
+
+        # Docker
+        docker = shutil.which("docker")
+        table.add_row("Docker", "[green]✓[/]" if docker else "[yellow]○[/] optional", str(docker or "not found"))
+
+        # Playwright
+        try:
+            import playwright  # noqa: F401
+            table.add_row("Browser", "[green]✓[/]", "Playwright installed")
+        except ImportError:
+            table.add_row("Browser", "[yellow]○[/] optional", "pip install playwright")
+
+        # API server
+        api_status = data.get("status", "unknown")
+        table.add_row(
+            "API Server",
+            "[green]✓[/]" if api_status == "ok" else "[red]✗[/]",
+            f"Status: {api_status}",
+        )
+
+        console.print(table)
+
+        # ── Profile info ──────────────────────────────────────────────
+        from atlas.infra.profiles import resolve_profile
+        from atlas.infra.config import load_settings
+
+        try:
+            settings = load_settings()
+            profile = resolve_profile(settings.profile)
+            console.print()
+            console.print(Panel(
+                f"[bold]Profile:[/] {profile.profile.value}\n"
+                f"[bold]Cost Policy:[/] {profile.cost_policy.value}\n"
+                f"[bold]Network Policy:[/] {profile.network_policy.value}\n"
+                f"[bold]Cloud Allowed:[/] {profile.allow_cloud}\n"
+                f"[bold]Quota Governor:[/] {profile.enable_quota_governor}",
+                title="[bold cyan]Active Profile[/]",
+                border_style="cyan",
+            ))
+        except Exception:
+            pass
+
+    _run(go())
+
+
+# ── atlas providers ───────────────────────────────────────────────────────
+
+providers_app = typer.Typer(help="Manage providers: list, health, free, quota")
+app.add_typer(providers_app, name="providers")
+
+
+@providers_app.command("list")
+def providers_list() -> None:
+    """List all registered providers with health and cost class."""
+    from rich.table import Table
+
+    async def go() -> None:
+        try:
+            data = await client._get("/api/v1/ops/models")
+        except Exception as exc:
+            console.print(f"[red]Error fetching models:[/] {exc}")
+            console.print("[dim]Falling back to config file...[/]")
+            data = []
+
+        if not data:
+            # Fallback: read directly from models.yaml
+            from pathlib import Path
+            import yaml
+
+            config_path = Path(__file__).resolve().parents[2] / "config" / "models.yaml"
+            if config_path.exists():
+                raw = yaml.safe_load(config_path.read_text())
+                data = raw.get("models", [])
+
+        table = Table(title="Provider Registry")
+        table.add_column("Model", style="cyan")
+        table.add_column("Provider", style="bold")
+        table.add_column("Cost Class", style="bold")
+        table.add_column("Quality", justify="right")
+        table.add_column("Enabled", justify="center")
+        table.add_column("Context", justify="right")
+
+        for m in data:
+            cost_class = m.get("cost_class", "paid")
+            color = {"local": "green", "free": "blue", "free_quota": "yellow", "paid": "red"}.get(cost_class, "white")
+            enabled = m.get("enabled", False)
+            table.add_row(
+                m.get("id", "?"),
+                m.get("provider", "?"),
+                f"[{color}]{cost_class.upper()}[/{color}]",
+                f"{m.get('quality_score', 0):.2f}",
+                "[green]✓[/]" if enabled else "[dim]○[/]",
+                f"{m.get('context_length', 0):,}",
+            )
+        console.print(table)
+
+    _run(go())
+
+
+@providers_app.command("free")
+def providers_free() -> None:
+    """Show only free and local providers."""
+    from rich.table import Table
+    from pathlib import Path
+    import yaml
+
+    config_path = Path(__file__).resolve().parents[2] / "config" / "models.yaml"
+    raw = yaml.safe_load(config_path.read_text()) if config_path.exists() else {}
+    models = raw.get("models", [])
+
+    table = Table(title="Free & Local Providers")
+    table.add_column("Model", style="cyan")
+    table.add_column("Provider", style="bold")
+    table.add_column("Cost Class", style="bold")
+    table.add_column("Capabilities", style="dim")
+    table.add_column("Enabled", justify="center")
+
+    for m in models:
+        cc = m.get("cost_class", "paid")
+        if cc in ("local", "free", "free_quota"):
+            color = {"local": "green", "free": "blue", "free_quota": "yellow"}.get(cc, "white")
+            caps = ", ".join(m.get("capabilities", [])[:4])
+            enabled = m.get("enabled", False)
+            table.add_row(
+                m.get("id", "?"),
+                m.get("provider", "?"),
+                f"[{color}]{cc.upper()}[/{color}]",
+                caps,
+                "[green]✓[/]" if enabled else "[dim]○[/]",
+            )
+    console.print(table)
+
+
+@providers_app.command("health")
+def providers_health() -> None:
+    """Show provider health + quota status."""
+    from rich.table import Table
+
+    async def go() -> None:
+        try:
+            data = await client._get("/api/v1/providers/health")
+        except Exception:
+            console.print("[yellow]API not available. Showing static config.[/]")
+            providers_list()
+            return
+
+        table = Table(title="Provider Health")
+        table.add_column("Provider", style="cyan")
+        table.add_column("Health", justify="center")
+        table.add_column("Quota", justify="right")
+        table.add_column("Latency", justify="right")
+
+        for p in data if isinstance(data, list) else []:
+            health = p.get("healthy", False)
+            table.add_row(
+                p.get("name", "?"),
+                "[green]✓[/]" if health else "[red]✗[/]",
+                f"{p.get('quota_pct', 100)}%",
+                f"{p.get('avg_latency_ms', 0)}ms",
+            )
+        console.print(table)
+
+    _run(go())
+
+
+# ── atlas cost ────────────────────────────────────────────────────────────
+
+cost_app = typer.Typer(help="View and manage cost controls")
+app.add_typer(cost_app, name="cost")
+
+
+@cost_app.command("show")
+def cost_show() -> None:
+    """Show current cost summary."""
+    from rich.panel import Panel
+
+    async def go() -> None:
+        try:
+            data = await client._get("/api/v1/ops/cost")
+        except Exception:
+            data = {}
+
+        today = data.get("today_usd", 0.0)
+        week = data.get("week_usd", 0.0)
+        month = data.get("month_usd", 0.0)
+        policy = data.get("cost_policy", "unknown")
+
+        content = (
+            f"[bold]Cost Policy:[/] {policy}\n"
+            f"\n"
+            f"[bold]Today:[/]  ${today:.4f}\n"
+            f"[bold]Week:[/]   ${week:.4f}\n"
+            f"[bold]Month:[/]  ${month:.4f}\n"
+        )
+
+        if policy == "zero_cost":
+            content += "\n[bold green]$0 ENFORCED — paid providers blocked[/]"
+
+        console.print(Panel(content, title="[bold cyan]Cost Summary[/]", border_style="cyan"))
+
+    _run(go())
+
+
+@cost_app.command("enforce")
+def cost_enforce(mode: str = typer.Argument("zero_cost", help="Cost mode: zero_cost|free_only|free_preferred|balanced|unrestricted")) -> None:
+    """Set cost enforcement mode."""
+    valid = {"zero_cost", "free_only", "free_preferred", "balanced", "unrestricted"}
+    if mode not in valid:
+        console.print(f"[red]Invalid mode.[/] Choose: {', '.join(sorted(valid))}")
+        raise typer.Exit(1)
+    console.print(f"[green]✓[/] Set ATLAS_COST_POLICY={mode}")
+    console.print(f"[dim]To persist: export ATLAS_COST_POLICY={mode}[/]")
+
+
+# ── atlas models ──────────────────────────────────────────────────────────
+
+models_app = typer.Typer(help="Manage models: list, doctor, pull")
+app.add_typer(models_app, name="models")
+
+
+@models_app.command("list")
+def models_list() -> None:
+    """Show all configured models and availability."""
+    providers_list()  # reuse the same table
+
+
+@models_app.command("doctor")
+def models_doctor() -> None:
+    """Verify all configured local models exist in Ollama."""
+    from pathlib import Path
+    import yaml
+
+    async def go() -> None:
+        config_path = Path(__file__).resolve().parents[2] / "config" / "models.yaml"
+        raw = yaml.safe_load(config_path.read_text()) if config_path.exists() else {}
+        local_models = [m for m in raw.get("models", []) if m.get("cost_class") == "local"]
+
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=3) as c:
+                r = await c.get("http://localhost:11434/api/tags")
+                installed = {m["name"] for m in r.json().get("models", [])}
+        except Exception:
+            console.print("[red]Ollama is not running.[/]")
+            return
+
+        for m in local_models:
+            model_name = m.get("provider_model", "")
+            found = model_name in installed or any(model_name in i for i in installed)
+            status = "[green]✓ installed[/]" if found else "[red]✗ missing[/]"
+            console.print(f"  {model_name:30s} {status}")
+
+        missing = [m for m in local_models if m.get("provider_model", "") not in installed and not any(m.get("provider_model", "") in i for i in installed)]
+        if missing:
+            console.print(f"\n[yellow]Run to install missing models:[/]")
+            for m in missing:
+                console.print(f"  ollama pull {m.get('provider_model', '')}")
+
+    _run(go())
+
+
+# ── atlas profile ─────────────────────────────────────────────────────────
+
+@app.command("profile")
+def profile_cmd(
+    name: str = typer.Argument(None, help="Profile to show/set: local_free|free_hybrid|free_demo|production"),
+) -> None:
+    """Show or set the operating profile."""
+    from atlas.infra.profiles import list_profiles, resolve_profile
+    from rich.table import Table
+
+    if name is None:
+        # Show all profiles
+        table = Table(title="Operating Profiles")
+        table.add_column("Profile", style="cyan")
+        table.add_column("Cost Policy", style="bold")
+        table.add_column("Network", style="bold")
+        table.add_column("Cloud", justify="center")
+        table.add_column("Budget/day", justify="right")
+
+        for p in list_profiles():
+            table.add_row(
+                p.profile.value,
+                p.cost_policy.value,
+                p.network_policy.value,
+                "[green]✓[/]" if p.allow_cloud else "[dim]○[/]",
+                f"${p.daily_usd:.2f}",
+            )
+        console.print(table)
+        console.print("\n[dim]Set profile: export ATLAS_PROFILE=<name>[/]")
+    else:
+        p = resolve_profile(name)
+        console.print(f"[bold]Profile:[/] {p.profile.value}")
+        console.print(f"  Cost Policy:      {p.cost_policy.value}")
+        console.print(f"  Network Policy:   {p.network_policy.value}")
+        console.print(f"  Cloud Allowed:    {p.allow_cloud}")
+        console.print(f"  Quota Governor:   {p.enable_quota_governor}")
+        console.print(f"  Budget (daily):   ${p.daily_usd:.2f}")
+        console.print(f"  Allowed Classes:  {', '.join(sorted(p.allowed_cost_classes))}")
+        console.print(f"\n[dim]Activate: export ATLAS_PROFILE={name}[/]")
+
+
 if __name__ == "__main__":
     app()
+

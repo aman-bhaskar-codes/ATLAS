@@ -5,10 +5,18 @@ that satisfies capabilities within budget, is healthy, meets latency, and has
 good historical reliability. Score blends quality, reliability, cost, latency,
 and health, each normalized. Returns a RANKED list so the fallback engine has an
 ordered chain for free.
+
+ZERO-COST-FIRST ADDITIONS (Phase 1):
+ - _passes() now enforces CostPolicy, NetworkPolicy, and PrivacyClass as
+   hard filters BEFORE scoring. A model that violates policy is never scored.
+ - _score() applies stronger local_bonus when cost_policy is FREE_PREFERRED.
+ - The selector is purely deterministic and observable: every filter decision
+   is traceable from the constraints + model metadata.
 """
 
 from __future__ import annotations
 
+from atlas.infra.types import CostClass, CostPolicy, NetworkPolicy, PrivacyClass
 from atlas.intelligence.capabilities import CapabilitySet
 from atlas.intelligence.contracts import Constraints, ModelSpec
 from atlas.intelligence.errors import RoutingError
@@ -32,6 +40,7 @@ class ModelSelector:
         return ranked
 
     def _passes(self, m: ModelSpec, c: Constraints) -> bool:
+        # --- Existing filters ---
         if c.min_context and m.context_length < c.min_context:
             return False
         if c.require_streaming and not m.supports_streaming:
@@ -40,6 +49,41 @@ class ModelSelector:
             return False
         if not self._health.is_available(m.provider):
             return False
+
+        # --- Zero-Cost-First policy filters ---
+
+        # Cost policy enforcement: ZERO_COST and FREE_ONLY hard-block PAID models
+        if c.cost_policy == CostPolicy.ZERO_COST:
+            if m.cost_class == CostClass.PAID:
+                return False
+        elif c.cost_policy == CostPolicy.FREE_ONLY:
+            if m.cost_class == CostClass.PAID:
+                return False
+
+        # Network policy enforcement
+        if c.network_policy == NetworkPolicy.OFFLINE:
+            # Offline: only local models (Ollama etc.) — no network at all
+            if m.cost_class != CostClass.LOCAL:
+                return False
+        elif c.network_policy == NetworkPolicy.LOCAL_ONLY:
+            # Local-only: no external API calls (but LAN services like Ollama OK)
+            if m.cost_class != CostClass.LOCAL:
+                return False
+        elif c.network_policy == NetworkPolicy.FREE_CLOUD:
+            # Free-cloud: block paid providers, allow local + free
+            if m.cost_class == CostClass.PAID:
+                return False
+
+        # Privacy classification enforcement
+        if c.privacy_class == PrivacyClass.SECRET:
+            # SECRET data must never leave local hardware
+            if m.cost_class != CostClass.LOCAL:
+                return False
+        elif c.privacy_class == PrivacyClass.SENSITIVE:
+            # SENSITIVE: strongly prefer local, block paid cloud
+            if m.cost_class == CostClass.PAID:
+                return False
+
         return True
 
     def _score(self, m: ModelSpec, c: Constraints) -> float:
@@ -48,6 +92,37 @@ class ModelSelector:
         reliability = m.reliability_score
         cost_pen = 1.0 / (1.0 + m.usd_per_1m_output)  # cheaper = higher
         latency_pen = 1.0 / (1.0 + m.latency_estimate_ms / 1000.0)
-        local_bonus = 0.15 if (c.prefer_local and m.usd_per_1m_output == 0) else 0.0
         health = self._health.reliability(m.provider)
-        return 0.35 * quality + 0.20 * reliability + 0.15 * cost_pen + 0.10 * latency_pen + 0.20 * health + local_bonus
+
+        # Local bonus: stronger when cost policy is free-preferred or zero-cost
+        local_bonus = 0.0
+        if m.cost_class == CostClass.LOCAL:
+            if c.cost_policy in (CostPolicy.ZERO_COST, CostPolicy.FREE_ONLY, CostPolicy.FREE_PREFERRED):
+                local_bonus = 0.25  # strong preference for local
+            elif c.prefer_local:
+                local_bonus = 0.15  # original behavior
+
+        # Free-quota models get a smaller bonus in free-preferred mode
+        free_bonus = 0.0
+        if m.cost_class == CostClass.FREE_QUOTA and c.cost_policy in (
+            CostPolicy.FREE_PREFERRED,
+            CostPolicy.FREE_ONLY,
+        ):
+            free_bonus = 0.10
+
+        # Privacy bonus: prefer local for private/sensitive data
+        privacy_bonus = 0.0
+        if c.privacy_class in (PrivacyClass.PRIVATE, PrivacyClass.SENSITIVE):
+            if m.cost_class == CostClass.LOCAL:
+                privacy_bonus = 0.10
+
+        return (
+            0.30 * quality
+            + 0.20 * reliability
+            + 0.15 * cost_pen
+            + 0.10 * latency_pen
+            + 0.15 * health
+            + local_bonus
+            + free_bonus
+            + privacy_bonus
+        )

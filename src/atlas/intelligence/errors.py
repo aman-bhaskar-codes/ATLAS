@@ -54,3 +54,19 @@ class FallbackError(IntelligenceError):
 
 class ConfigurationError(IntelligenceError):
     retryable = False
+
+
+class QuotaExhaustedError(IntelligenceError):
+    """Free-tier quota exhausted for a provider. Switching providers helps."""
+
+    retryable = False
+    provider_switch_helps = True
+
+
+class PolicyViolationError(IntelligenceError):
+    """A hard policy constraint was violated (e.g. ZERO_COST + paid provider).
+    No retry or provider switch — the constraint itself must change."""
+
+    retryable = False
+    provider_switch_helps = False
+

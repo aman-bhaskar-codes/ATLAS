@@ -34,14 +34,20 @@ class Settings(BaseSettings):
     embed_model: str = "bge-m3"
     ntfy_topic: str = ""
     ntfy_callback_base: str = "http://localhost:8730"
+    # ── API keys ──────────────────────────────────────────────────────
     deepseek_api_key: str = ""
     glm_api_key: str = ""
     kimi_api_key: str = ""
     mimo_api_key: str = ""
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
+    groq_api_key: str = ""
     master_key: str = ""
     api_keys: str = ""  # comma-separated; 'ro:' prefix = readonly key (Batch 7)
+    # ── Zero-cost-first policy ────────────────────────────────────────
+    profile: str = "local_free"  # local_free | free_hybrid | free_demo | production
+    cost_policy: str = "zero_cost"  # zero_cost | free_only | free_preferred | balanced | unrestricted
+    network_policy: str = "local_only"  # offline | local_only | free_cloud | unrestricted
 
     def db_path(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)

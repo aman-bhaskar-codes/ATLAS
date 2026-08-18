@@ -31,6 +31,12 @@ class Embedder(Protocol):
     async def embed(self, text: str) -> list[float]: ...
 
 
+class EmbeddingError(Exception):
+    """Raised when embedding generation fails. Never silently return zero vectors."""
+
+    pass
+
+
 class OllamaEmbedder:
     def __init__(self, settings: Settings, timeout_s: float = 30.0) -> None:
         self._host = settings.ollama_host.rstrip("/")
@@ -43,13 +49,48 @@ class OllamaEmbedder:
             resp.raise_for_status()
             data = resp.json()
             vec = data.get("embeddings", [[]])[0] if "embeddings" in data else data.get("embedding", [])
+            if not vec or all(x == 0.0 for x in vec[:10]):
+                raise EmbeddingError(f"Ollama returned empty/zero embedding for model {self._model}")
             return [float(x) for x in vec]
-        except Exception:
-            # Fallback to dummy vector to avoid blocking execution in dev when Ollama model is missing/down
-            return [0.0] * 1024
+        except EmbeddingError:
+            raise
+        except Exception as exc:
+            raise EmbeddingError(
+                f"Ollama embedding failed (host={self._host}, model={self._model}): {exc}"
+            ) from exc
 
     async def close(self) -> None:
         await self._client.aclose()
+
+
+class FallbackEmbedder:
+    """Tries multiple embedders in order. Never returns silent zero vectors.
+
+    Usage: FallbackEmbedder([OllamaEmbedder(...), CloudEmbedder(...)])
+    """
+
+    def __init__(self, embedders: list[Embedder]) -> None:
+        self._embedders = embedders
+
+    async def embed(self, text: str) -> list[float]:
+        last_error: Exception | None = None
+        for embedder in self._embedders:
+            try:
+                return await embedder.embed(text)
+            except EmbeddingError as exc:
+                last_error = exc
+                _log.warning(
+                    "embedding.fallback",
+                    event_type="memory",
+                    embedder=type(embedder).__name__,
+                    error=str(exc),
+                )
+        raise EmbeddingError(f"All embedders failed. Last error: {last_error}")
+
+    async def close(self) -> None:
+        for embedder in self._embedders:
+            if hasattr(embedder, "close"):
+                await embedder.close()
 
 
 class EmbeddingWorker:

@@ -1,26 +1,126 @@
 # The Intelligence Platform Model Registry
+# Every model MUST declare cost_class: local | free | free_quota | paid
+# The selector uses cost_class to enforce CostPolicy (zero_cost blocks paid).
 
 models:
+  # ─── LOCAL MODELS (Ollama) ────────────────────────────────────────────
+  # Default development model — always available, $0, no API key needed.
   - id: qwen3-4b
     provider: ollama
     provider_model: qwen3:4b
     context_length: 8192
     usd_per_1m_input: 0.0
     usd_per_1m_output: 0.0
+    cost_class: local
     latency_estimate_ms: 100
     capabilities:
       - tool_calling
       - structured_output
       - reflection
+      - classification
+      - summarization
+      - json_generation
+      - coding
+      - reasoning
+    max_concurrency: 4
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: true
+    supports_vision: false
+    supports_tool_calling: true
+    quality_score: 0.60
+    reliability_score: 0.95
+    enabled: true
+
+  # ─── FREE-QUOTA CLOUD MODELS ─────────────────────────────────────────
+  # These are $0 within provider free-tier limits. Disabled by default;
+  # enabled when API keys are configured and profile allows cloud.
+
+  - id: gemini-2.0-flash
+    provider: gemini
+    provider_model: gemini-2.0-flash
+    context_length: 1048576
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
+    cost_class: free_quota
+    latency_estimate_ms: 600
+    capabilities:
+      - reasoning
+      - planning
+      - coding
+      - vision
+      - tool_calling
+      - structured_output
+      - long_context
+      - classification
+      - summarization
+      - reflection
+      - json_generation
+    max_concurrency: 2
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: true
+    supports_vision: true
+    supports_tool_calling: false  # adapter doesn't map tools yet
+    quality_score: 0.82
+    reliability_score: 0.90
+    enabled: false  # enable when ATLAS_GEMINI_API_KEY is set
+
+  - id: groq-llama-3.3-70b
+    provider: groq
+    provider_model: llama-3.3-70b-versatile
+    context_length: 128000
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
+    cost_class: free_quota
+    latency_estimate_ms: 200
+    capabilities:
+      - reasoning
+      - coding
+      - tool_calling
+      - structured_output
+      - classification
+      - summarization
+      - json_generation
+    max_concurrency: 2
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: true
+    supports_vision: false
+    supports_tool_calling: true
+    quality_score: 0.82
+    reliability_score: 0.88
+    enabled: false  # enable when ATLAS_GROQ_API_KEY is set
+
+  - id: groq-llama-3.1-8b
+    provider: groq
+    provider_model: llama-3.1-8b-instant
+    context_length: 128000
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
+    cost_class: free_quota
+    latency_estimate_ms: 80
+    capabilities:
+      - classification
+      - summarization
+      - structured_output
+      - json_generation
     max_concurrency: 4
     supports_streaming: true
     supports_structured_output: true
     supports_reasoning: false
     supports_vision: false
     supports_tool_calling: true
-    quality_score: 0.6
-    reliability_score: 0.95
-    enabled: false
+    quality_score: 0.55
+    reliability_score: 0.90
+    preferred_tasks:
+      - classification
+      - extraction
+      - routing
+    enabled: false  # enable when ATLAS_GROQ_API_KEY is set
+
+  # ─── PAID CLOUD MODELS ───────────────────────────────────────────────
+  # Blocked in ZERO_COST / FREE_ONLY modes even if API keys exist.
 
   - id: glm-5.2
     provider: glm
@@ -28,6 +128,7 @@ models:
     context_length: 128000
     usd_per_1m_input: 0.15
     usd_per_1m_output: 0.60
+    cost_class: paid
     latency_estimate_ms: 800
     capabilities:
       - reasoning
@@ -47,7 +148,7 @@ models:
     supports_tool_calling: true
     quality_score: 0.85
     reliability_score: 0.98
-    enabled: true
+    enabled: false
 
   - id: deepseek-v4-pro
     provider: deepseek
@@ -55,6 +156,7 @@ models:
     context_length: 64000
     usd_per_1m_input: 0.14
     usd_per_1m_output: 0.28
+    cost_class: paid
     latency_estimate_ms: 1200
     capabilities:
       - reasoning
@@ -78,6 +180,7 @@ models:
     context_length: 8192
     usd_per_1m_input: 0.08
     usd_per_1m_output: 0.16
+    cost_class: paid
     latency_estimate_ms: 900
     capabilities:
       - coding
@@ -99,6 +202,7 @@ models:
     context_length: 128000
     usd_per_1m_input: 0.10
     usd_per_1m_output: 0.20
+    cost_class: paid
     latency_estimate_ms: 800
     capabilities:
       - coding
