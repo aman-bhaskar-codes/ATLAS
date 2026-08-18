@@ -52,7 +52,7 @@ class TriggerEngine:
         for key, expected in config.filters.items():
             # simple dot-notation extraction
             parts = key.split(".")
-            val = payload
+            val: Any = payload
             for p in parts:
                 if isinstance(val, dict):
                     val = val.get(p)

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 from atlas.infra.clock import Clock
 from atlas.infra.config import AppConfig, Settings
@@ -41,6 +42,9 @@ from atlas.intelligence.selection.selector import ModelSelector
 from atlas.memory.embedder import OllamaEmbedder
 from atlas.memory.vectorstore import ChromaVectorStore
 from atlas.safety.audit import AuditLog
+
+if TYPE_CHECKING:
+    from atlas.infra.bus import MessageBus
 
 _log = get_logger("atlas.bootstrap.intelligence")
 
@@ -236,9 +240,9 @@ async def build_intelligence(
         telemetry=telemetry,
         model_timeout_s=config.models.cloud_timeout_s,
         tracker=llm_tracker,
-        bus=bus,
+        bus=cast("MessageBus | None", bus),
     )
-    fallback = FallbackEngine(bus=bus)
+    fallback = FallbackEngine(bus=cast("MessageBus | None", bus))
     cap_router = CapabilityRouter()
     selector = ModelSelector(capability_index, health)
 
