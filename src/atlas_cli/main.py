@@ -436,7 +436,8 @@ def doctor_cmd() -> None:
         table.add_column("Detail", style="dim")
 
         # Python
-        table.add_row("Python", "[green]✓[/]", f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+        py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        table.add_row("Python", "[green]✓[/]", py_version)
 
         # Ollama
         import httpx
@@ -649,7 +650,11 @@ def providers_verify() -> None:
             if len(discovery.models) > 5:
                 table.add_row("  ...", "", f"+{len(discovery.models) - 5} more")
         else:
-            table.add_row("OpenRouter free models", "[yellow]○ unreachable[/]", "degraded to static config (offline is fine)")
+            table.add_row(
+                "OpenRouter free models",
+                "[yellow]○ unreachable[/]",
+                "degraded to static config (offline is fine)",
+            )
 
         console.print(table)
 
@@ -780,7 +785,12 @@ def cost_show() -> None:
 
 
 @cost_app.command("enforce")
-def cost_enforce(mode: str = typer.Argument("zero_cost", help="Cost mode: zero_cost|free_only|free_preferred|balanced|unrestricted")) -> None:
+def cost_enforce(
+    mode: str = typer.Argument(
+        "zero_cost",
+        help="Cost mode: zero_cost|free_only|free_preferred|balanced|unrestricted",
+    ),
+) -> None:
     """Set cost enforcement mode."""
     valid = {"zero_cost", "free_only", "free_preferred", "balanced", "unrestricted"}
     if mode not in valid:
@@ -829,7 +839,12 @@ def models_doctor() -> None:
             status = "[green]✓ installed[/]" if found else "[red]✗ missing[/]"
             console.print(f"  {model_name:30s} {status}")
 
-        missing = [m for m in local_models if m.get("provider_model", "") not in installed and not any(m.get("provider_model", "") in i for i in installed)]
+        missing = [
+            m
+            for m in local_models
+            if m.get("provider_model", "") not in installed
+            and not any(m.get("provider_model", "") in i for i in installed)
+        ]
         if missing:
             console.print("\n[yellow]Run to install missing models:[/]")
             for m in missing:

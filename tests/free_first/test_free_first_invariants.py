@@ -354,7 +354,15 @@ class TestOpenRouterDiscovery:
         from atlas.intelligence.providers.openrouter_free import FreeModelDiscovery, FreeModelInfo, diff_against_static
         disc = FreeModelDiscovery(
             verified_at=None,
-            models=[FreeModelInfo(id="meta-llama/llama-3:free", name="Llama 3 Free", context_length=8192, supports_tool_calling=False, supports_vision=False)],
+            models=[
+                FreeModelInfo(
+                    id="meta-llama/llama-3:free",
+                    name="Llama 3 Free",
+                    context_length=8192,
+                    supports_tool_calling=False,
+                    supports_vision=False,
+                )
+            ],
         )
         static = {"meta-llama/llama-3:free", "google/gemma-7b:free"}
         diff = diff_against_static(disc, static)

@@ -114,9 +114,15 @@ async def build_intelligence(
     quota_governor = FreeQuotaGovernor()
     if profile.enable_quota_governor:
         # Configure quotas for known free-tier providers
-        quota_governor.configure("groq", ProviderQuota(daily_requests=1000, daily_tokens=500_000, requests_per_minute=30))
-        quota_governor.configure("gemini", ProviderQuota(daily_requests=1500, daily_tokens=1_000_000, requests_per_minute=15))
-        quota_governor.configure("openrouter", ProviderQuota(daily_requests=200, daily_tokens=200_000, requests_per_minute=20))
+        quota_governor.configure(
+            "groq", ProviderQuota(daily_requests=1000, daily_tokens=500_000, requests_per_minute=30)
+        )
+        quota_governor.configure(
+            "gemini", ProviderQuota(daily_requests=1500, daily_tokens=1_000_000, requests_per_minute=15)
+        )
+        quota_governor.configure(
+            "openrouter", ProviderQuota(daily_requests=200, daily_tokens=200_000, requests_per_minute=20)
+        )
         _log.info("quota_governor.configured", event_type="lifecycle", providers=["groq", "gemini", "openrouter"])
 
     # ── Provider registration (profile-filtered) ──────────────────────
@@ -145,7 +151,11 @@ async def build_intelligence(
                 from atlas.intelligence.providers.gemini import GeminiProvider
 
                 provider_registry.register(
-                    GeminiProvider(name="gemini", api_key=settings.gemini_api_key, timeout_s=config.models.cloud_timeout_s)
+                    GeminiProvider(
+                        name="gemini",
+                        api_key=settings.gemini_api_key,
+                        timeout_s=config.models.cloud_timeout_s,
+                    )
                 )
                 _log.info("provider.registered", event_type="lifecycle", provider="gemini", cost_class="free_quota")
             except Exception as exc:
