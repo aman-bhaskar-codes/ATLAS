@@ -23,6 +23,17 @@ from atlas.intelligence.errors import FallbackError, IntelligenceError
 
 if TYPE_CHECKING:
     from atlas.infra.bus import MessageBus
+    
+from atlas.infra.bus import Event
+
+
+class FallbackEvent(Event):
+    provider: str
+    model: str
+    cost_class: str
+    error: str
+    remaining_candidates: int
+
 
 _log = get_logger("atlas.intel.fallback")
 
@@ -44,25 +55,24 @@ class FallbackEngine:
                 _log.warning(
                     "fallback.next", event_type="intel", model=spec.id, error=repr(exc), remaining=len(ranked) - i - 1
                 )
-                # Emit fallback event for dashboard/trajectory visibility
-                await self._emit_fallback(spec, exc, remaining=len(ranked) - i - 1)
                 if not exc.provider_switch_helps and not exc.retryable:
                     break  # e.g. budget exceeded — switching won't help
+                # Emit fallback event for dashboard/trajectory visibility
+                await self._emit_fallback(spec, exc, remaining=len(ranked) - i - 1)
         raise FallbackError(f"all candidates failed; last={last!r}")
 
     async def _emit_fallback(self, spec: ModelSpec, exc: Exception, *, remaining: int) -> None:
         if self._bus is None:
             return
         try:
-            await self._bus.emit(
-                "provider.fallback",
-                {
-                    "provider": spec.provider,
-                    "model": spec.id,
-                    "cost_class": spec.cost_class.value,
-                    "error": repr(exc),
-                    "remaining_candidates": remaining,
-                },
+            event = FallbackEvent(
+                correlation_id="fallback",
+                provider=spec.provider,
+                model=spec.id,
+                cost_class=spec.cost_class.value,
+                error=repr(exc),
+                remaining_candidates=remaining,
             )
+            await self._bus.publish("provider.fallback", event)
         except Exception:
             pass  # best-effort

@@ -16,8 +16,9 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
+from atlas.infra.bus import Event, MessageBus
 from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
 from atlas.interfaces.api.websocket import ConnectionManager
@@ -30,19 +31,20 @@ router = APIRouter()
 class EventStreamDependencies:
     """Shared dependencies for event streaming routes."""
 
-    def __init__(self, manager: ConnectionManager, db: Database) -> None:
+    def __init__(self, manager: ConnectionManager, db: Database, bus: MessageBus | None = None) -> None:
         self.manager = manager
         self.db = db
+        self.bus = bus
 
 
 # Global singleton - will be set by create_app()
 _deps: EventStreamDependencies | None = None
 
 
-def set_dependencies(manager: ConnectionManager, db: Database) -> None:
+def set_dependencies(manager: ConnectionManager, db: Database, bus: MessageBus | None = None) -> None:
     """Initialize route dependencies (called from create_app)."""
     global _deps
-    _deps = EventStreamDependencies(manager, db)
+    _deps = EventStreamDependencies(manager, db, bus)
 
 
 @router.websocket("/ws/events")
@@ -168,7 +170,7 @@ async def task_scoped_stream(websocket: WebSocket, task_id: str) -> None:
 
 async def _fetch_task_history(task_id: str) -> list[dict[str, Any]]:
     """
-    Fetch historical events for a task from event_log.
+    Fetch historical events for a task from the new canonical events table.
 
     Returns events in chronological order (oldest first).
     """
@@ -178,10 +180,10 @@ async def _fetch_task_history(task_id: str) -> list[dict[str, Any]]:
     try:
         cursor = await _deps.db.conn.execute(
             """
-            SELECT topic, payload_json, created_ts
-            FROM event_log
-            WHERE task_id = ?
-            ORDER BY id ASC
+            SELECT type as topic, payload, occurred_at as created_ts
+            FROM events
+            WHERE causation_id = ?
+            ORDER BY occurred_at ASC
             LIMIT 1000
             """,
             (task_id,),
@@ -192,7 +194,7 @@ async def _fetch_task_history(task_id: str) -> list[dict[str, Any]]:
         for row in rows:
             import json
 
-            event_data = json.loads(row["payload_json"])
+            event_data = json.loads(row["payload"])
             event_data["_topic"] = row["topic"]
             event_data["_timestamp"] = row["created_ts"]
             events.append(event_data)
@@ -238,7 +240,7 @@ async def _search_events(
     offset: int = 0,
 ) -> EventSearchResult:
     """
-    Search event_log with filters and pagination.
+    Search events table with filters and pagination.
 
     Builds dynamic SQL query based on provided filters and returns
     paginated results with total count.
@@ -250,35 +252,35 @@ async def _search_events(
     params = []
 
     if task_id:
-        conditions.append("task_id = ?")
+        conditions.append("causation_id = ?")
         params.append(task_id)
 
     if topic:
-        conditions.append("topic LIKE ?")
+        conditions.append("type LIKE ?")
         params.append(f"%{topic}%")
 
     if from_ts:
-        conditions.append("created_ts >= ?")
+        conditions.append("occurred_at >= ?")
         params.append(from_ts)
 
     if to_ts:
-        conditions.append("created_ts <= ?")
+        conditions.append("occurred_at <= ?")
         params.append(to_ts)
 
     where_clause = " AND ".join(conditions) if conditions else "1=1"
 
     # Count total matches
-    count_query = f"SELECT COUNT(*) as total FROM event_log WHERE {where_clause}"
+    count_query = f"SELECT COUNT(*) as total FROM events WHERE {where_clause}"
     cursor = await db.conn.execute(count_query, params)
     row = await cursor.fetchone()
     total = row["total"] if row else 0
 
     # Fetch paginated results
     query = f"""
-        SELECT topic, payload_json, task_id, correlation_id, created_ts
-        FROM event_log
+        SELECT type as topic, payload, causation_id as task_id, correlation_id, occurred_at as created_ts
+        FROM events
         WHERE {where_clause}
-        ORDER BY created_ts DESC
+        ORDER BY occurred_at DESC
         LIMIT ? OFFSET ?
     """
     cursor = await db.conn.execute(query, [*params, limit, offset])
@@ -287,7 +289,7 @@ async def _search_events(
     # Parse JSON payloads
     events = []
     for row in rows:
-        event_data = json.loads(row["payload_json"])
+        event_data = json.loads(row["payload"])
         event_data["_topic"] = row["topic"]
         event_data["_task_id"] = row["task_id"]
         event_data["_correlation_id"] = row["correlation_id"]
@@ -309,7 +311,7 @@ async def search_events(
     """
     Search historical events with filters and pagination.
 
-    Query the event_log table with optional filters for forensic analysis,
+    Query the canonical events table with optional filters for forensic analysis,
     debugging, and system-wide event exploration.
 
     Examples:
@@ -331,3 +333,72 @@ async def search_events(
     except Exception as exc:
         _log.error("events.search_failed", event_type="api", error=str(exc))
         return {"error": str(exc), "events": [], "total": 0, "limit": limit, "offset": offset}
+
+class EmitRequest(BaseModel):
+    topic: str
+    payload: dict[str, Any]
+
+@router.post("/api/v1/events/emit")
+async def emit_event(req: EmitRequest) -> dict[str, Any]:
+    """Emit a manual event to the MessageBus."""
+    if _deps is None or _deps.bus is None:
+        return {"error": "Server or bus not initialized"}
+
+    class DynamicEvent(Event):
+        model_config = ConfigDict(extra="allow", frozen=True)
+        correlation_id: str = "manual-emit"
+
+    try:
+        event = DynamicEvent.model_validate(req.payload)
+        await _deps.bus.publish(req.topic, event)
+        return {"status": "ok", "topic": req.topic}
+    except Exception as exc:
+        _log.error("events.emit_failed", event_type="api", error=str(exc))
+        return {"error": str(exc)}
+
+@router.post("/api/v1/events/{event_id}/replay")
+async def replay_event(event_id: str) -> dict[str, Any]:
+    """Replay an historical event onto the MessageBus."""
+    if _deps is None or _deps.bus is None:
+        return {"error": "Server or bus not initialized"}
+
+    try:
+        cur = await _deps.db.conn.execute("SELECT type, payload FROM events WHERE id = ?", (event_id,))
+        row = await cur.fetchone()
+        if not row:
+            return {"error": "Event not found"}
+
+        topic = row["type"]
+        import json
+        payload_dict = json.loads(row["payload"])
+
+        class DynamicEvent(Event):
+            model_config = ConfigDict(extra="allow", frozen=True)
+            correlation_id: str = "replay"
+
+        event = DynamicEvent.model_validate(payload_dict)
+        await _deps.bus.publish(topic, event)
+        return {"status": "ok", "topic": topic, "replayed_id": event_id}
+    except Exception as exc:
+        _log.error("events.replay_failed", event_type="api", error=str(exc))
+        return {"error": str(exc)}
+
+@router.post("/api/v1/webhooks/{source}")
+async def receive_webhook(source: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Canonical event ingestion for external webhooks (e.g., GitHub, Stripe)."""
+    if _deps is None or _deps.bus is None:
+        return {"error": "Server or bus not initialized"}
+
+    topic = f"webhook.{source}"
+    
+    class WebhookEvent(Event):
+        model_config = ConfigDict(extra="allow", frozen=True)
+        correlation_id: str = f"webhook-{source}"
+        
+    try:
+        event = WebhookEvent.model_validate(payload)
+        await _deps.bus.publish(topic, event)
+        return {"status": "ok", "topic": topic}
+    except Exception as exc:
+        _log.error("events.webhook_failed", event_type="api", source=source, error=str(exc))
+        return {"error": str(exc)}

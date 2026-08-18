@@ -94,6 +94,7 @@ A production-grade system with:
 &nbsp;&nbsp;✅&nbsp; **Multi-agent DAG** decomposition with parallel execution  
 &nbsp;&nbsp;✅&nbsp; **OTAR reasoning** — Observe → Think → Act → Reflect  
 &nbsp;&nbsp;✅&nbsp; **4-layer memory** with vector search and user modeling  
+&nbsp;&nbsp;✅&nbsp; **Autonomy Fabric** — reactive event-driven triggers and webhooks  
 &nbsp;&nbsp;✅&nbsp; **<span data-counter data-target="348">348</span> tests**, zero mocked business logic
 
 </td>

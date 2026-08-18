@@ -22,6 +22,12 @@ export function Sidebar() {
       ]
     },
     {
+      title: "AUTONOMY",
+      links: [
+        { href: "/automations", label: "Automations", icon: Waypoints }, // using Waypoints or Zap
+      ]
+    },
+    {
       title: "TRUST",
       links: [
         { href: "/approvals", label: "Approvals", icon: ShieldCheck },

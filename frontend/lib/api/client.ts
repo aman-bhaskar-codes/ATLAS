@@ -144,6 +144,34 @@ export const trustApi = {
   }
 };
 
+// --- Autonomy Fabric Endpoints (Phase 4) ---
+import { Automation } from "./contracts";
+export const autonomyApi = {
+  listAutomations: async (enabledOnly: boolean = false) => {
+    return requestJSON(`/automations?enabled_only=${enabledOnly}`) as Promise<Automation[]>;
+  },
+  getAutomation: async (id: string) => {
+    return requestJSON(`/automations/${encodeURIComponent(id)}`) as Promise<Automation>;
+  },
+  createAutomation: async (auto: Partial<Automation>) => {
+    return requestJSON(`/automations`, {
+      method: "POST",
+      body: JSON.stringify(auto),
+    }) as Promise<Automation>;
+  },
+  updateAutomation: async (id: string, auto: Partial<Automation>) => {
+    return requestJSON(`/automations/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(auto),
+    }) as Promise<Automation>;
+  },
+  deleteAutomation: async (id: string) => {
+    return requestJSON(`/automations/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+};
+
 // --- Learning & Ops endpoints (Batch 6) — typed via runtime validation ---
 export interface AtlasSkill {
   id: string; name: string; description: string; version: number; status: string;

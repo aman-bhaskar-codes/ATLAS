@@ -12,16 +12,14 @@ from __future__ import annotations
 
 import pytest
 
-from atlas.infra.profiles import AtlasProfile, resolve_profile, list_profiles
+from atlas.infra.profiles import AtlasProfile, list_profiles, resolve_profile
 from atlas.infra.types import CostClass, CostPolicy, NetworkPolicy, PrivacyClass
 from atlas.intelligence.contracts import Constraints, ModelSpec
 from atlas.intelligence.errors import PolicyViolationError, QuotaExhaustedError
 from atlas.intelligence.governance.quota_governor import (
     FreeQuotaGovernor,
     ProviderQuota,
-    QuotaExhaustedError as QuotaError,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -157,14 +155,14 @@ class TestFreeQuotaGovernor:
         g.configure("groq", ProviderQuota(daily_requests=2, daily_tokens=1_000_000))
         g.record("groq", 100)
         g.record("groq", 100)
-        with pytest.raises(QuotaError, match="daily request limit"):
+        with pytest.raises(QuotaExhaustedError, match="daily request limit"):
             g.check("groq")
 
     def test_daily_tokens_exceeded(self):
         g = FreeQuotaGovernor()
         g.configure("groq", ProviderQuota(daily_requests=1000, daily_tokens=100))
         g.record("groq", 90)
-        with pytest.raises(QuotaError, match="daily token limit"):
+        with pytest.raises(QuotaExhaustedError, match="daily token limit"):
             g.check("groq", 50)
 
     def test_remaining_snapshot(self):
@@ -194,7 +192,7 @@ class TestFreeQuotaGovernor:
         assert "gemini" in snap
 
     def test_quota_error_properties(self):
-        err = QuotaError("groq", "daily limit")
+        err = QuotaExhaustedError("groq", "daily limit")
         assert err.provider_switch_helps is True
         assert err.retryable is False
 
@@ -244,8 +242,7 @@ class TestProfiles:
 
 class TestErrorTaxonomy:
     def test_quota_exhausted_is_switchable(self):
-        from atlas.intelligence.errors import QuotaExhaustedError
-        err = QuotaExhaustedError("quota hit")
+        err = QuotaExhaustedError("test-provider", "quota hit")
         assert err.provider_switch_helps is True
         assert err.retryable is False
 

@@ -13,10 +13,11 @@ If the DB is unavailable, counters are kept in-memory (degrade gracefully).
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from atlas.infra.logging import get_logger
+from atlas.intelligence.errors import QuotaExhaustedError
 
 if TYPE_CHECKING:
     from atlas.infra.db import Database
@@ -59,23 +60,6 @@ class QuotaState:
             self.requests_this_minute = 1
         else:
             self.requests_this_minute += 1
-
-
-class QuotaExhaustedError(Exception):
-    """Raised when a free-tier provider's quota is exhausted."""
-
-    def __init__(self, provider: str, reason: str) -> None:
-        self.provider = provider
-        self.reason = reason
-        super().__init__(f"{provider}: {reason}")
-
-    @property
-    def provider_switch_helps(self) -> bool:
-        return True  # another provider can serve the request
-
-    @property
-    def retryable(self) -> bool:
-        return False  # quota resets at midnight, not worth retrying now
 
 
 class FreeQuotaGovernor:

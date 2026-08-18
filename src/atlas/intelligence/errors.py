@@ -62,6 +62,11 @@ class QuotaExhaustedError(IntelligenceError):
     retryable = False
     provider_switch_helps = True
 
+    def __init__(self, provider: str, reason: str) -> None:
+        self.provider = provider
+        self.reason = reason
+        super().__init__(f"{provider}: {reason}")
+
 
 class PolicyViolationError(IntelligenceError):
     """A hard policy constraint was violated (e.g. ZERO_COST + paid provider).

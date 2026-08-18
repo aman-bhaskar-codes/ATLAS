@@ -55,6 +55,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # paths (CLI, API, tests). No need to call them again here.
 
     event_store = TaskEventStore(atlas.db)
+    
+    # Initialize Trigger Engine (Phase 3)
+    from atlas.autonomy.automations import AutomationRegistry
+    from atlas.autonomy.trigger_engine import TriggerEngine
+    automation_registry = AutomationRegistry(atlas.db)
+    trigger_engine = TriggerEngine(automation_registry)
+    atlas.bus.subscribe_global(trigger_engine.handle_event)
 
     # Subscribe to the orchestrator bus topic so every emitted event is
     # persisted to the task_events table and available for SSE streaming.
@@ -110,7 +117,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     memory_ws_broadcaster.start()
 
     # Set dependencies for WebSocket routes
-    routes_events.set_dependencies(ws_manager, atlas.db)
+    routes_events.set_dependencies(ws_manager, atlas.db, atlas.bus)
 
     # Set dependencies for memory routes
     from atlas.interfaces.api import routes_memory
@@ -200,6 +207,7 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.events import router as events_router
     from atlas.interfaces.api.routes_approvals import router as approvals_router
     from atlas.interfaces.api.routes_attachments import router as attachments_router
+    from atlas.interfaces.api.routes_automations import router as automations_router  # Phase 3
     from atlas.interfaces.api.routes_capabilities import router as capabilities_router
     from atlas.interfaces.api.routes_events import router as events_ws_router
     from atlas.interfaces.api.routes_feedback import router as feedback_router
@@ -207,11 +215,11 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.routes_learning import router as learning_router  # Batch 6
     from atlas.interfaces.api.routes_memory import router as memory_router
     from atlas.interfaces.api.routes_ops import router as ops_router  # Batch 6
+    from atlas.interfaces.api.routes_providers import router as providers_router  # Zero-cost-first
     from atlas.interfaces.api.routes_runtime import router as runtime_router
     from atlas.interfaces.api.routes_tasks import router as tasks_router
     from atlas.interfaces.api.routes_trajectory import router as trajectory_router  # Phase 2
     from atlas.interfaces.api.routes_trust import router as trust_router
-    from atlas.interfaces.api.routes_providers import router as providers_router  # Zero-cost-first
 
     # Each API path now has exactly one owning router — see routes_tasks.py
     # and routes_trust.py module docstrings/comments for the split:
@@ -239,5 +247,6 @@ def create_app() -> FastAPI:
     app.include_router(learning_router, prefix="/api/v1")  # Batch 6
     app.include_router(ops_router, prefix="/api/v1")  # Batch 6
     app.include_router(providers_router, prefix="")  # Zero-cost-first: already has /api/v1 prefix
+    app.include_router(automations_router, prefix="")  # Phase 3: already has /api/v1/automations prefix
 
     return app

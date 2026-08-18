@@ -113,6 +113,13 @@ class StorageError(RetryableError):
     user_message = "A storage operation failed. Retrying may help."
 
 
+class NotFoundError(AtlasError):
+    """Resource could not be found."""
+
+    code = "atlas.not_found"
+    user_message = "The requested resource was not found."
+
+
 class AuthenticationError(AtlasError):
     """Credential is missing, invalid, or expired."""
 

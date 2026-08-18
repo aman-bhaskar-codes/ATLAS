@@ -22,21 +22,17 @@ from unittest.mock import AsyncMock
 import pytest
 
 from atlas.infra.types import CostClass, CostPolicy, NetworkPolicy, PrivacyClass
-from atlas.intelligence.capabilities import CapabilitySet
 from atlas.intelligence.contracts import Constraints, ModelSpec
-from atlas.intelligence.errors import FallbackError, RateLimitError
-from atlas.intelligence.errors import QuotaExhaustedError as IntelQuotaExhaustedError
+from atlas.intelligence.errors import FallbackError, QuotaExhaustedError, RateLimitError
 from atlas.intelligence.governance.quota_governor import (
     FreeQuotaGovernor,
     ProviderQuota,
 )
-from atlas.intelligence.governance.quota_governor import QuotaExhaustedError as GovQuotaExhaustedError
 from atlas.intelligence.health.health_monitor import HealthMonitor
 from atlas.intelligence.registry.capability_index import CapabilityIndex
 from atlas.intelligence.registry.model_registry import ModelRegistry
 from atlas.intelligence.runtime.fallback import FallbackEngine
 from atlas.intelligence.selection.selector import ModelSelector
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -267,7 +263,7 @@ class TestFallbackChain:
 
         async def attempt(spec: ModelSpec):
             if spec.provider == "groq":
-                raise IntelQuotaExhaustedError(provider="groq", reason="daily limit")
+                raise QuotaExhaustedError("groq", "daily limit")
             return _response(spec.id, provider=spec.provider)
 
         resp = await engine.run(ranked, attempt)
@@ -280,8 +276,9 @@ class TestFallbackChain:
         engine = FallbackEngine(bus=bus)
         ranked = [LOCAL]
 
+        from atlas.intelligence.errors import ProviderError
         async def attempt(spec: ModelSpec):
-            raise RuntimeError("ollama not running")
+            raise ProviderError("ollama not running")
 
         with pytest.raises(FallbackError):
             await engine.run(ranked, attempt)
@@ -320,14 +317,14 @@ class TestQuotaGovernorIntegration:
         gov.configure("groq", ProviderQuota(daily_requests=2, daily_tokens=100_000))
         gov.record("groq", tokens_used=100)
         gov.record("groq", tokens_used=100)
-        with pytest.raises(GovQuotaExhaustedError):
+        with pytest.raises(QuotaExhaustedError):
             gov.check("groq", estimated_tokens=100)
 
     def test_tokens_exhausted_raises(self):
         gov = FreeQuotaGovernor()
         gov.configure("gemini", ProviderQuota(daily_requests=100, daily_tokens=200))
         gov.record("gemini", tokens_used=150)
-        with pytest.raises(GovQuotaExhaustedError):
+        with pytest.raises(QuotaExhaustedError):
             gov.check("gemini", estimated_tokens=100)
 
     def test_unknown_provider_never_raises(self):

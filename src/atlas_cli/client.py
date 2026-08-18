@@ -108,3 +108,18 @@ class AtlasClient:
             resp = await client.get(f"{self.base_url}/api/v1/events/search", params=params, timeout=10.0)
             resp.raise_for_status()
             return cast(dict[str, Any], resp.json())
+
+    async def emit_event(self, topic: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Emit a manual event via the REST API."""
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self.base_url}/api/v1/events/emit", json={"topic": topic, "payload": payload}, timeout=5.0
+            )
+            # Don't raise for status here to let the CLI handle API errors gracefully
+            return cast(dict[str, Any], resp.json())
+
+    async def replay_event(self, event_id: str) -> dict[str, Any]:
+        """Replay an historical event via the REST API."""
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(f"{self.base_url}/api/v1/events/{event_id}/replay", json={}, timeout=5.0)
+            return cast(dict[str, Any], resp.json())

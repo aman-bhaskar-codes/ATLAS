@@ -30,6 +30,7 @@ from atlas.intelligence.governance.quota_governor import FreeQuotaGovernor
 from atlas.intelligence.health.health_monitor import HealthMonitor
 from atlas.intelligence.observability.telemetry import Telemetry
 from atlas.intelligence.registry.provider_registry import ProviderRegistry
+from atlas.intelligence.runtime.events import ProviderLifecycleEvent
 from atlas.intelligence.runtime.retry import RetryEngine
 
 if TYPE_CHECKING:
@@ -178,16 +179,15 @@ class InferenceRuntime:
         if self._bus is None:
             return
         try:
-            await self._bus.emit(
-                event_type,
-                {
-                    "provider": spec.provider,
-                    "model": spec.id,
-                    "cost_class": spec.cost_class.value,
-                    "task_id": req.task_id,
-                    "correlation_id": req.correlation_id,
-                    "error": error,
-                },
+            event = ProviderLifecycleEvent(
+                correlation_id=req.correlation_id,
+                kind=event_type,
+                provider=spec.provider,
+                model=spec.id,
+                cost_class=spec.cost_class.value,
+                task_id=req.task_id,
+                error=error,
             )
+            await self._bus.publish(event_type, event)
         except Exception:
             pass  # event emission is best-effort

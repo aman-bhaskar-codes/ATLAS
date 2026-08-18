@@ -10,9 +10,11 @@
 | 1 | ✅ CLOSED (Batch 1): ExecutionStore/CancellationStore protocols + SQLite implementations |
 | 2 | ✅ CLOSED (Batch 1/7): durable cancellation + fail-clean crash recovery |
 | 3 | ✅ CLOSED (Batch 1): shared `plan_parsing.py` |
-| 4 | `idempotency_keys` table queried by `api/idempotency.py` but not created in `_MIGRATIONS` | `infra/db.py` | Batch 1 verification |
+| 4 | ✅ CLOSED (Batch 9.1): `idempotency_keys` table migration added to migration 007 + comprehensive test suite | `infra/db.py`, `tests/interfaces/test_idempotency.py` | COMPLETE |
 | 5 | MessageBus batch dispatch is not crash-safe mid-batch; no DLQ for bus events (deserialize failures dropped) | `infra/bus.py` | Batch 7 |
 | 6 | ✅ CLOSED (Batch 7): checkpoints saved per-step; fail-clean recovery (auto-resume pending idempotency keys — see below) |
+| 6.1 | ✅ CLOSED (Batch 9.2): Provider lifecycle events calling `.emit()` instead of `.publish()` with typed Event | `intelligence/runtime/inference.py`, `intelligence/runtime/fallback.py` | COMPLETE |
+| 6.2 | ✅ CLOSED (Batch 9.3): Two incompatible `QuotaExhaustedError` classes consolidated into one with proper constructor | `intelligence/errors.py`, `intelligence/governance/quota_governor.py` | COMPLETE |
 
 ## P1 — Architecture hygiene
 

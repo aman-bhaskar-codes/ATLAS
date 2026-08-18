@@ -8,6 +8,8 @@ no stringly-typed payloads cross the bus.
 from __future__ import annotations
 
 import asyncio
+import json
+import uuid
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -15,6 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from atlas.autonomy.events import AtlasEvent, DeliveryStatus, DurabilityTier
 from atlas.infra.db import Database
 from atlas.infra.errors import BusError
 from atlas.infra.logging import get_logger
@@ -72,6 +75,7 @@ class MessageBus:
     def __init__(self, db: Database) -> None:
         self._db = db
         self._subs: dict[str, list[Handler]] = defaultdict(list)
+        self._global_subs: list[Callable[[str, str], Awaitable[None]]] = []
         self._closed = False
         self._wake_event = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
@@ -87,26 +91,54 @@ class MessageBus:
     def subscribe(self, topic: str, handler: Handler) -> None:
         self._subs[topic].append(handler)
 
+    def subscribe_global(self, handler: Callable[[str, str], Awaitable[None]]) -> None:
+        """Subscribe to all events (topic, payload_json) independent of specific typing."""
+        self._global_subs.append(handler)
+
     async def publish(self, topic: str, event: Event) -> None:
         if self._closed:
             raise BusError("publish on a closed bus")
 
         now = datetime.now(UTC).isoformat()
-        payload = event.model_dump_json()
-
-        # Write to event_queue for immediate processing
-        await self._db.conn.execute(
-            "INSERT INTO event_queue(topic, payload_json, created_ts) VALUES (?,?,?)", (topic, payload, now)
-        )
-
-        # Also write to event_log for historical replay
+        
         event_dict = event.model_dump()
         task_id = event_dict.get("task_id")
-        correlation_id = event_dict.get("correlation_id", event.correlation_id)
+        correlation_id = event_dict.get("correlation_id", getattr(event, "correlation_id", "unknown"))
+        
+        atlas_event = AtlasEvent(
+            id=str(uuid.uuid4()),
+            type=topic,
+            source="system",
+            correlation_id=correlation_id,
+            causation_id=task_id,
+            occurred_at=now,
+            payload=event_dict,
+            metadata={"original_type": event.__class__.__name__}
+        )
+        
+        payload_json = event.model_dump_json()
 
         await self._db.conn.execute(
-            "INSERT INTO event_log(topic, payload_json, task_id, correlation_id, created_ts) VALUES (?,?,?,?,?)",
-            (topic, payload, task_id, correlation_id, now),
+            """INSERT INTO events(
+                id, type, source, correlation_id, causation_id, deduplication_key, 
+                occurred_at, payload, metadata, schema_version, durability, 
+                delivery_status, attempt_count
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", 
+            (
+                atlas_event.id,
+                atlas_event.type,
+                atlas_event.source,
+                atlas_event.correlation_id,
+                atlas_event.causation_id,
+                atlas_event.deduplication_key,
+                atlas_event.occurred_at,
+                payload_json,
+                json.dumps(atlas_event.metadata),
+                atlas_event.schema_version,
+                DurabilityTier.DURABLE.value,
+                DeliveryStatus.PENDING.value,
+                0
+            )
         )
 
         await self._db.conn.commit()
@@ -117,7 +149,9 @@ class MessageBus:
             try:
                 if self._closed:
                     break
-                cur = await self._db.conn.execute("SELECT * FROM event_queue ORDER BY id ASC LIMIT 50")
+                cur = await self._db.conn.execute(
+                    "SELECT id, type, payload FROM events WHERE delivery_status = 'pending' ORDER BY occurred_at ASC LIMIT 50"
+                )
                 rows = await cur.fetchall()
 
                 if not rows:
@@ -125,18 +159,19 @@ class MessageBus:
                     await self._wake_event.wait()
                     continue
 
-                ids_to_delete = []
+                delivered_ids = []
+                dead_letter_ids = []
                 for row in rows:
-                    topic = row["topic"]
-                    payload = row["payload_json"]
+                    topic = row["type"]
+                    payload_json = row["payload"]
                     eid = row["id"]
 
                     event_cls = self._event_types.get(topic, Event)
                     try:
-                        event = event_cls.model_validate_json(payload)
+                        event = event_cls.model_validate_json(payload_json)
                     except Exception as e:
                         _log.error("bus.deserialize_error", event_type="bus", error=str(e), topic=topic)
-                        ids_to_delete.append(eid)
+                        dead_letter_ids.append((str(e), eid))
                         continue
 
                     handlers = tuple(self._subs.get(topic, ()))
@@ -151,12 +186,29 @@ class MessageBus:
                                     correlation_id=event.correlation_id,
                                     error=repr(res),
                                 )
-                    ids_to_delete.append(eid)
+                    
+                    # Global subscribers
+                    if self._global_subs:
+                        global_results = await asyncio.gather(*(g(topic, payload_json) for g in self._global_subs), return_exceptions=True)
+                        for res in global_results:
+                            if isinstance(res, Exception):
+                                _log.warning("bus.global_handler_error", event_type="bus", error=repr(res))
+                                
+                    delivered_ids.append(eid)
 
-                if ids_to_delete:
+                if delivered_ids:
                     await self._db.conn.execute(
-                        f"DELETE FROM event_queue WHERE id IN ({','.join('?' * len(ids_to_delete))})", ids_to_delete
+                        f"UPDATE events SET delivery_status = 'delivered' WHERE id IN ({','.join('?' * len(delivered_ids))})", 
+                        delivered_ids
                     )
+                if dead_letter_ids:
+                    for reason, eid in dead_letter_ids:
+                        await self._db.conn.execute(
+                            "UPDATE events SET delivery_status = 'dead_letter', dead_letter_reason = ? WHERE id = ?",
+                            (reason, eid)
+                        )
+                        
+                if delivered_ids or dead_letter_ids:
                     await self._db.conn.commit()
             except Exception as e:
                 if not self._closed:

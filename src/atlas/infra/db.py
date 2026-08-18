@@ -194,7 +194,7 @@ _MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id, sequence);
     CREATE INDEX IF NOT EXISTS idx_task_events_event_id ON task_events(event_id);
     """,
-    # 007 — Vamos alignment: hash chain audit + feedback + schedules + llm_calls + workflow_templates
+    # 007 — Vamos alignment: hash chain audit + feedback + schedules + llm_calls + workflow_templates + idempotency_keys
     """
     ALTER TABLE audit_events ADD COLUMN prev_hash TEXT NOT NULL DEFAULT '';
     ALTER TABLE audit_events ADD COLUMN row_hash TEXT NOT NULL DEFAULT '';
@@ -250,6 +250,14 @@ _MIGRATIONS: tuple[str, ...] = (
         success_rate REAL,
         created_ts TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+        key TEXT PRIMARY KEY,
+        fingerprint TEXT NOT NULL,
+        response_json TEXT NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created_ts ON idempotency_keys(created_ts);
     """,
     # 008 — semantic response cache (Phase 11)
     """
@@ -574,6 +582,43 @@ _MIGRATIONS: tuple[str, ...] = (
         completed_ts TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_tq_state ON task_queue(state, created_ts);
+    """,
+    """
+    -- 014 — Phase 2 Autonomy Fabric: Canonical event storage
+    CREATE TABLE IF NOT EXISTS events (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        source TEXT NOT NULL,
+        correlation_id TEXT NOT NULL,
+        causation_id TEXT,
+        deduplication_key TEXT UNIQUE,
+        occurred_at TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        schema_version INTEGER NOT NULL DEFAULT 1,
+        durability TEXT NOT NULL,           -- ephemeral | durable | replayable
+        delivery_status TEXT NOT NULL,      -- pending | delivered | dead_letter
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        next_retry_at TEXT,
+        dead_letter_reason TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
+    CREATE INDEX IF NOT EXISTS idx_events_status ON events(delivery_status, next_retry_at);
+    CREATE INDEX IF NOT EXISTS idx_events_occurred ON events(occurred_at DESC);
+    """,
+    """
+    -- 015 — Phase 3 Autonomy Fabric: Automation Registry
+    CREATE TABLE IF NOT EXISTS automations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        trigger_config TEXT NOT NULL,
+        action_config TEXT NOT NULL,
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_automations_enabled ON automations(enabled);
     """,
 )
 

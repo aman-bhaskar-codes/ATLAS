@@ -119,6 +119,28 @@ export const ApprovalDecisionSchema = z.object({
   idempotency_key: z.string().min(16),
 });
 
+// --- Automations ---
+export const TriggerConfigSchema = z.object({
+  event_type: z.string(),
+  filters: z.record(z.string(), z.any()).default({}),
+});
+
+export const ActionConfigSchema = z.object({
+  type: z.string(),
+  request_template: z.string(),
+});
+
+export const AutomationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  enabled: z.boolean().default(true),
+  trigger_config: TriggerConfigSchema,
+  action_config: ActionConfigSchema,
+  created_ts: z.string().datetime().optional(),
+  updated_ts: z.string().datetime().optional(),
+});
+
 // ─── Derived types ────────────────────────────────────────────────────────────
 export type RuntimeStatus = z.infer<typeof RuntimeStatusSchema>;
 export type RuntimeHealth = z.infer<typeof RuntimeHealthSchema>;
@@ -127,6 +149,7 @@ export type TaskEvent = z.infer<typeof TaskEventSchema>;
 export type Approval = z.infer<typeof ApprovalSchema>;
 export type Capability = z.infer<typeof CapabilitySchema>;
 export type CancelTaskResponse = z.infer<typeof CancelTaskResponseSchema>;
+export type Automation = z.infer<typeof AutomationSchema>;
 
 // ─── Domain selectors (single authoritative source — update here if backend vocab changes) ──
 export type ConnectionState = "connected" | "reconnecting" | "stale" | "offline";

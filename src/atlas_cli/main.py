@@ -127,7 +127,10 @@ def task_cmd(action: str = typer.Argument("list"), task_id: str = "") -> None:
 
             async with httpx.AsyncClient() as c:
                 resp = await c.get(f"{client.base_url}/api/v1/tasks")
-                tasks = resp.json()
+                
+                data = resp.json()
+                tasks = data.get("items", []) if isinstance(data, dict) else data
+
                 from rich.table import Table
 
                 table = Table("ID", "State", "Request", "Source", "Created")
@@ -141,9 +144,14 @@ def task_cmd(action: str = typer.Argument("list"), task_id: str = "") -> None:
                             p = json.loads(p)
                         except Exception:
                             pass
+
                     if isinstance(p, dict):
                         req = p.get("request", "")[:40]
-                    table.add_row(t["id"], t["state"], req, t["source"], t["created_ts"][:19])
+
+                    # Note: API might return created_at instead of created_ts
+                    created_time = t.get("created_ts", t.get("created_at", ""))[:19]
+                    table.add_row(t["id"], t["state"], req, t["source"], created_time)
+
                 console.print(table)
 
     _run(go())
@@ -159,7 +167,7 @@ def shell_cmd() -> None:
 
 @app.command("events")
 def events_cmd(
-    action: str = typer.Argument("stream", help="Action: stream or search"),
+    action: str = typer.Argument("stream", help="Action: stream, search, emit, replay"),
     task_id: str = typer.Option(None, "--task-id", "-t", help="Filter by task ID"),
     event_type: str = typer.Option(None, "--event-type", "-e", help="Filter by event type (e.g., tool.completed)"),
     from_time: str = typer.Option(None, "--from", help="Start timestamp (ISO format)"),
@@ -167,6 +175,8 @@ def events_cmd(
     limit: int = typer.Option(100, "--limit", "-n", help="Max results (default: 100)"),
     offset: int = typer.Option(0, "--offset", help="Pagination offset (default: 0)"),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON"),
+    payload: str = typer.Option(None, "--payload", "-p", help="JSON payload string for emit"),
+    event_id: str = typer.Option(None, "--event-id", help="Event ID to replay"),
 ) -> None:
     """Monitor global event stream or search historical events.
 
@@ -357,9 +367,42 @@ def events_cmd(
                 console.print("\n[yellow]⏸ Stopped streaming[/]")
             except Exception as exc:
                 console.print(f"[red]✗ Error:[/] {exc}")
+                
+        elif action == "emit":
+            import json
+            if not event_type or not payload:
+                console.print("[red]--event-type and --payload are required for emit[/]")
+                return
+            try:
+                payload_dict = json.loads(payload)
+                resp = await client.emit_event(event_type, payload_dict)
+                if resp.get("error"):
+                    console.print(f"[red]Error:[/] {resp['error']}")
+                else:
+                    console.print(f"[green]✓ Emitted event '{event_type}'[/]")
+                if json_output:
+                    console.print_json(data=resp)
+            except Exception as exc:
+                console.print(f"[red]Error emitting event:[/] {exc}")
+                
+        elif action == "replay":
+            if not event_id:
+                console.print("[red]--event-id is required for replay[/]")
+                return
+            try:
+                resp = await client.replay_event(event_id)
+                if resp.get("error"):
+                    console.print(f"[red]Error:[/] {resp['error']}")
+                else:
+                    console.print(f"[green]✓ Replayed event {event_id}[/]")
+                if json_output:
+                    console.print_json(data=resp)
+            except Exception as exc:
+                console.print(f"[red]Error replaying event:[/] {exc}")
+                
         else:
             console.print(f"[red]Unknown action:[/] {action}")
-            console.print("[dim]Available actions: stream, search[/]")
+            console.print("[dim]Available actions: stream, search, emit, replay[/]")
 
     _run(go())
 
@@ -427,8 +470,8 @@ def doctor_cmd() -> None:
         console.print(table)
 
         # ── Profile info ──────────────────────────────────────────────
-        from atlas.infra.profiles import resolve_profile
         from atlas.infra.config import load_settings
+        from atlas.infra.profiles import resolve_profile
 
         try:
             settings = load_settings()
@@ -471,6 +514,7 @@ def providers_list() -> None:
         if not data:
             # Fallback: read directly from models.yaml
             from pathlib import Path
+
             import yaml
 
             config_path = Path(__file__).resolve().parents[2] / "config" / "models.yaml"
@@ -506,9 +550,10 @@ def providers_list() -> None:
 @providers_app.command("free")
 def providers_free() -> None:
     """Show only free and local providers."""
-    from rich.table import Table
     from pathlib import Path
+
     import yaml
+    from rich.table import Table
 
     config_path = Path(__file__).resolve().parents[2] / "config" / "models.yaml"
     raw = yaml.safe_load(config_path.read_text()) if config_path.exists() else {}
@@ -611,6 +656,91 @@ def providers_verify() -> None:
     _run(go())
 
 
+# ── atlas automations ─────────────────────────────────────────────────────
+
+automations_app = typer.Typer(help="Manage automations")
+app.add_typer(automations_app, name="automations")
+
+@automations_app.command("list")
+def automations_list(enabled_only: bool = False) -> None:
+    """List automations."""
+    import httpx
+    from rich.table import Table
+
+    async def go() -> None:
+        async with httpx.AsyncClient() as c:
+            resp = await c.get(f"{client.base_url}/api/v1/automations", params={"enabled_only": enabled_only})
+            if resp.is_error:
+                console.print(f"[red]Error:[/] {resp.text}")
+                return
+            
+            data = resp.json()
+            table = Table(title="Automations Registry")
+            table.add_column("ID", style="cyan")
+            table.add_column("Name", style="bold")
+            table.add_column("Event Type")
+            table.add_column("Action")
+            table.add_column("Enabled")
+            
+            for auto in data:
+                trigger = auto.get("trigger_config", {})
+                action = auto.get("action_config", {})
+                table.add_row(
+                    auto.get("id"),
+                    auto.get("name"),
+                    trigger.get("event_type", ""),
+                    action.get("type", ""),
+                    "[green]✓[/]" if auto.get("enabled") else "[red]✗[/]"
+                )
+            console.print(table)
+    _run(go())
+
+@automations_app.command("create")
+def automations_create(
+    name: str = typer.Option(..., "--name", "-n"),
+    description: str = typer.Option("", "--desc"),
+    event_type: str = typer.Option(..., "--event-type", "-e"),
+    action_type: str = typer.Option("task", "--action-type"),
+    request_template: str = typer.Option(..., "--template", "-t"),
+) -> None:
+    """Create a new automation."""
+    import httpx
+    async def go() -> None:
+        payload = {
+            "name": name,
+            "description": description,
+            "trigger_config": {"event_type": event_type, "filters": {}},
+            "action_config": {"type": action_type, "request_template": request_template}
+        }
+        async with httpx.AsyncClient() as c:
+            resp = await c.post(f"{client.base_url}/api/v1/automations", json=payload)
+            if resp.is_error:
+                console.print(f"[red]Error:[/] {resp.text}")
+            else:
+                console.print(f"[green]✓ Created automation:[/] {resp.json().get('id')}")
+    _run(go())
+    
+@automations_app.command("toggle")
+def automations_toggle(auto_id: str) -> None:
+    """Toggle an automation enabled state."""
+    import httpx
+    async def go() -> None:
+        async with httpx.AsyncClient() as c:
+            resp = await c.get(f"{client.base_url}/api/v1/automations/{auto_id}")
+            if resp.is_error:
+                console.print(f"[red]Error:[/] {resp.text}")
+                return
+            auto = resp.json()
+            auto["enabled"] = not auto["enabled"]
+            resp = await c.put(f"{client.base_url}/api/v1/automations/{auto_id}", json=auto)
+            if resp.is_error:
+                console.print(f"[red]Error:[/] {resp.text}")
+            else:
+                state = "enabled" if auto["enabled"] else "disabled"
+                console.print(f"[green]✓ Automation {auto_id} is now {state}.[/]")
+    _run(go())
+
+
 # ── atlas cost ────────────────────────────────────────────────────────────
 
 cost_app = typer.Typer(help="View and manage cost controls")
@@ -676,6 +806,7 @@ def models_list() -> None:
 def models_doctor() -> None:
     """Verify all configured local models exist in Ollama."""
     from pathlib import Path
+
     import yaml
 
     async def go() -> None:
@@ -700,7 +831,7 @@ def models_doctor() -> None:
 
         missing = [m for m in local_models if m.get("provider_model", "") not in installed and not any(m.get("provider_model", "") in i for i in installed)]
         if missing:
-            console.print(f"\n[yellow]Run to install missing models:[/]")
+            console.print("\n[yellow]Run to install missing models:[/]")
             for m in missing:
                 console.print(f"  ollama pull {m.get('provider_model', '')}")
 
@@ -714,8 +845,9 @@ def profile_cmd(
     name: str = typer.Argument(None, help="Profile to show/set: local_free|free_hybrid|free_demo|production"),
 ) -> None:
     """Show or set the operating profile."""
-    from atlas.infra.profiles import list_profiles, resolve_profile
     from rich.table import Table
+
+    from atlas.infra.profiles import list_profiles, resolve_profile
 
     if name is None:
         # Show all profiles

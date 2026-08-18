@@ -190,13 +190,13 @@ async def test_event_persistence_to_log():
         # Give bus time to process
         await asyncio.sleep(0.5)
 
-        # Check event_log table
-        cursor = await db.conn.execute("SELECT * FROM event_log WHERE task_id = ?", ("test-task-1",))
+        # Check events table
+        cursor = await db.conn.execute("SELECT * FROM events WHERE causation_id = ?", ("test-task-1",))
         rows = await cursor.fetchall()
 
         assert len(rows) == 1
-        assert rows[0]["topic"] == "orchestrator"
-        assert rows[0]["task_id"] == "test-task-1"
+        assert rows[0]["type"] == "orchestrator"
+        assert rows[0]["causation_id"] == "test-task-1"
         assert rows[0]["correlation_id"] == "test-corr-1"
 
         # Cleanup
@@ -242,10 +242,10 @@ async def test_historical_replay_query():
         # Query historical events
         cursor = await db.conn.execute(
             """
-            SELECT topic, payload_json, created_ts
-            FROM event_log
-            WHERE task_id = ?
-            ORDER BY id ASC
+            SELECT type, payload, occurred_at
+            FROM events
+            WHERE causation_id = ?
+            ORDER BY occurred_at ASC
             """,
             (task_id,),
         )
@@ -255,7 +255,7 @@ async def test_historical_replay_query():
 
         # Verify order
         for i, row in enumerate(rows):
-            data = json.loads(row["payload_json"])
+            data = json.loads(row["payload"])
             assert data["metadata"]["sequence"] == i
 
         # Cleanup
