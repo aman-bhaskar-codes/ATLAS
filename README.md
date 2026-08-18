@@ -1,861 +1,637 @@
-<!-- ╔═══════════════════════════════════════════════════════════════════════════╗ -->
-<!-- ║                              A T L A S                                  ║ -->
-<!-- ║            Autonomous Task & Learning Agent System                       ║ -->
-<!-- ╚═══════════════════════════════════════════════════════════════════════════╝ -->
+# ATLAS
 
-<!-- Load custom animations and scripts -->
-<link rel="stylesheet" href="assets/styles/readme-animations.css">
+**Autonomous Task & Learning Agent System**
 
-<div align="center">
+[![CI](https://img.shields.io/badge/CI-passing-00d68f?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/aman-bhaskar-codes/ATLAS/actions)
+[![Tests](https://img.shields.io/badge/Tests-384_passing-00d68f?style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/aman-bhaskar-codes/ATLAS)
+[![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![License](https://img.shields.io/badge/License-MIT-8b949e?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 
-<!-- ═══ HERO WITH PARTICLE BACKGROUND ═══ -->
-<div class="hero-container" style="position: relative; background: #0d1117; padding: 40px 0;">
-  <!-- Particle animation canvas -->
-  <canvas id="particles-canvas" width="100%" height="300"></canvas>
-  
-  <!-- Animated wave header -->
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,20:161b22,40:1a1b27,60:161b22,80:1a1b27,100:0d1117&height=240&section=header&text=A%20T%20L%20A%20S&fontSize=90&fontColor=58a6ff&animation=fadeIn&fontAlignY=32&desc=Autonomous%20Task%20%26%20Learning%20Agent%20System&descAlignY=56&descSize=20&descColor=8b949e" width="100%" style="position: relative; z-index: 1;" />
-</div>
+> **Production-grade autonomous AI agent framework** with 5-tier safety, multi-agent orchestration, and full audit transparency.
 
-<!-- ═══ ANIMATED TYPING ═══ -->
-<a href="https://github.com/aman-bhaskar-codes/ATLAS">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=600&size=24&duration=3000&pause=1000&color=58A6FF&center=true&vCenter=true&multiline=true&repeat=true&width=750&height=100&lines=%F0%9F%9B%A1%EF%B8%8F+5-Tier+Safety+%E2%80%A2+%F0%9F%A4%96+Multi-Agent+DAGs+%E2%80%A2+%F0%9F%94%84+OTAR+Loop;Nothing+runs+without+your+permission.+Ever.;Production-grade+autonomous+AI+agent+framework." alt="Typing SVG" />
-</a>
+---
 
-<br/>
+## 🌟 What is ATLAS?
 
-<!-- ═══ BADGES — ROW 1: STATUS (with pulse animation on hover) ═══ -->
-<p>
-  <a href="https://github.com/aman-bhaskar-codes/ATLAS/actions" class="badge-pulse"><img src="https://img.shields.io/badge/CI-passing-00d68f?style=for-the-badge&logo=github-actions&logoColor=white&labelColor=0d1117" alt="CI" /></a>
-  <span data-counter data-target="348"><img src="https://img.shields.io/badge/Tests-348_passing-00d68f?style=for-the-badge&logo=pytest&logoColor=white&labelColor=0d1117" alt="Tests" /></span>
-  <a href="https://python.org" class="badge-pulse"><img src="https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white&labelColor=0d1117" alt="Python" /></a>
-  <a href="https://docs.astral.sh/uv/" class="badge-pulse"><img src="https://img.shields.io/badge/uv-managed-7c3aed?style=for-the-badge&logo=astral&logoColor=white&labelColor=0d1117" alt="uv" /></a>
-</p>
-
-<!-- ═══ BADGES — ROW 2: QUALITY ═══ -->
-<p>
-  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/Ruff-linted-ef5552?style=for-the-badge&logo=ruff&logoColor=white&labelColor=0d1117" alt="Ruff" /></a>
-  <img src="https://img.shields.io/badge/Type_Checked-mypy_strict-3fb950?style=for-the-badge&logo=python&logoColor=white&labelColor=0d1117" alt="Mypy" />
-  <img src="https://img.shields.io/badge/Safety-5_Tier-f0883e?style=for-the-badge&logo=shieldsdotio&logoColor=white&labelColor=0d1117" alt="Safety" />
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-8b949e?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=0d1117" alt="License" /></a>
-</p>
-
-<!-- ═══ NAVIGATION PILLS ═══ -->
-<p>
-  <a href="#-what-is-atlas"><img src="https://img.shields.io/badge/▸_Overview-161b22?style=flat-square&labelColor=0d1117" /></a>&nbsp;
-  <a href="#-architecture"><img src="https://img.shields.io/badge/▸_Architecture-161b22?style=flat-square&labelColor=0d1117" /></a>&nbsp;
-  <a href="#%EF%B8%8F-safety-engine"><img src="https://img.shields.io/badge/▸_Safety-161b22?style=flat-square&labelColor=0d1117" /></a>&nbsp;
-  <a href="#-otar-reasoning-loop"><img src="https://img.shields.io/badge/▸_OTAR_Loop-161b22?style=flat-square&labelColor=0d1117" /></a>&nbsp;
-  <a href="#-multi-agent-system"><img src="https://img.shields.io/badge/▸_Agents-161b22?style=flat-square&labelColor=0d1117" /></a>&nbsp;
-  <a href="#-memory-system"><img src="https://img.shields.io/badge/▸_Memory-161b22?style=flat-square&labelColor=0d1117" /></a>&nbsp;
-  <a href="#-quickstart"><img src="https://img.shields.io/badge/▸_Quick_Start-161b22?style=flat-square&labelColor=0d1117" /></a>&nbsp;
-  <a href="#-api-reference"><img src="https://img.shields.io/badge/▸_API-161b22?style=flat-square&labelColor=0d1117" /></a>
-</p>
-
-<!-- ═══ HERO BANNER ═══ -->
-<img src="assets/atlas-banner.png" alt="ATLAS Neural Banner" width="100%" />
-
-</div>
-
-<br/>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: OVERVIEW ═══════════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
-
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=58A6FF&center=true&vCenter=true&repeat=false&width=500&height=50&lines=%F0%9F%8C%8C+What+is+ATLAS%3F" alt="Section" />
-</div>
-
-<br/>
-
-> **ATLAS is not another LLM wrapper.** It is a ground-up, multi-phase autonomous agent runtime that plans, reasons, acts, and *learns* — while never doing anything without your explicit permission.
-> 
-> 📄 **Latest Update:** ATLAS now supports a fully local **Zero-Cost-First Platform Expansion**. See [ZERO_COST_ARCHITECTURE.md](ZERO_COST_ARCHITECTURE.md) for details on running $0 hardware-first DAGs.
-
-<table>
-<tr>
-<td width="50%" data-scroll-reveal>
+ATLAS is not another LLM wrapper. It's a **ground-up, production-ready autonomous agent runtime** that plans, reasons, acts, and learns—while **never doing anything without your explicit permission**.
 
 ### The Problem
 
 Most AI agent frameworks are either:
-
-&nbsp;&nbsp;🚫&nbsp; **Unsafe** — run tools with no guardrails  
-&nbsp;&nbsp;🧸&nbsp; **Toy-grade** — can't handle real multi-step tasks  
-&nbsp;&nbsp;🔒&nbsp; **Black boxes** — no audit trail, no transparency
+- 🚫 **Unsafe** — run tools with no guardrails
+- 🧸 **Toy-grade** — can't handle real multi-step tasks
+- 🔒 **Black boxes** — no audit trail, no transparency
 
 ### The ATLAS Solution
 
 A production-grade system with:
 
-&nbsp;&nbsp;✅&nbsp; **5-tier safety** with SHA-256 hash-chain audit  
-&nbsp;&nbsp;✅&nbsp; **Multi-agent DAG** decomposition with parallel execution  
-&nbsp;&nbsp;✅&nbsp; **OTAR reasoning** — Observe → Think → Act → Reflect  
-&nbsp;&nbsp;✅&nbsp; **4-layer memory** with vector search and user modeling  
-&nbsp;&nbsp;✅&nbsp; **Autonomy Fabric** — reactive event-driven triggers and webhooks  
-&nbsp;&nbsp;✅&nbsp; **<span data-counter data-target="348">348</span> tests**, zero mocked business logic
+✅ **5-tier safety** with SHA-256 hash-chain audit  
+✅ **Multi-agent DAG** decomposition with parallel execution  
+✅ **OTAR reasoning** — Observe → Think → Act → Reflect  
+✅ **4-layer memory** with vector search and user modeling  
+✅ **Autonomy Fabric** — reactive event-driven triggers  
+✅ **384 tests**, zero mocked business logic  
+✅ **Zero-cost-first** — runs on local hardware (Ollama + free-tier cloud)
 
-</td>
-<td width="50%" data-scroll-reveal>
+---
 
-<div class="terminal-3d" style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; font-family: 'JetBrains Mono', monospace; transform: perspective(1000px) rotateX(5deg) rotateY(-2deg); box-shadow: 0 25px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(88,166,255,0.1);">
-<div style="display: flex; gap: 8px; margin-bottom: 15px;">
-  <div style="width: 12px; height: 12px; border-radius: 50%; background: #f85149;"></div>
-  <div style="width: 12px; height: 12px; border-radius: 50%; background: #d29922;"></div>
-  <div style="width: 12px; height: 12px; border-radius: 50%; background: #3fb950;"></div>
-</div>
-<div style="color: #c9d1d9; font-size: 13px; line-height: 1.8;">
-<div><span style="color: #58a6ff; font-weight: 600;">$</span> <span style="color: #bc8cff;">atlas run "research quantum"</span></div>
-<div style="margin-left: 20px; color: #8b949e;">
-  <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0;">
-    <span>🧠</span><span>Context: 3 memories</span>
-  </div>
-  <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0;">
-    <span>📋</span><span>Plan: 4 steps</span>
-  </div>
-  <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0;">
-    <span>🔬</span><span>Research: arXiv + Wikipedia</span>
-  </div>
-  <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0;">
-    <span>🛡️</span><span>Safety: Tier 0 (auto)</span>
-  </div>
-  <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0; color: #3fb950;">
-    <span>✅</span><span>Complete in 4.2s</span>
-  </div>
-</div>
-<div style="margin-top: 10px;">
-  <span style="color: #58a6ff; font-weight: 600;">$</span>
-  <span style="display: inline-block; width: 8px; height: 14px; background: #58a6ff; animation: blink 1s step-end infinite;"></span>
-</div>
-</div>
-</div>
+## 🏗️ Architecture
 
-</td>
-</tr>
-</table>
-
-<br/>
-
-<!-- ═══ LIVE DEMOS SECTION ═══ -->
-<div align="center" data-scroll-reveal>
-  <h3>🎬 See ATLAS in Action</h3>
-  <p><em>Watch the OTAR loop, safety intercepts, and multi-agent orchestration live</em></p>
-</div>
-
-<table>
-<tr>
-<td width="50%" align="center" data-scroll-reveal>
-  <img src="assets/demos/task-execution.gif" alt="Task Execution Demo" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
-  <p><strong>📋 Task Execution</strong><br/><em>Full OTAR loop with live streaming</em></p>
-</td>
-<td width="50%" align="center" data-scroll-reveal>
-  <img src="assets/demos/safety-intercept.gif" alt="Safety Intercept Demo" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
-  <p><strong>🛡️ Safety Intercept</strong><br/><em>Dangerous action → approval flow</em></p>
-</td>
-</tr>
-<tr>
-<td width="50%" align="center" data-scroll-reveal>
-  <img src="assets/demos/multi-agent-dag.gif" alt="Multi-Agent DAG Demo" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
-  <p><strong>🤖 Multi-Agent DAG</strong><br/><em>Parallel task decomposition</em></p>
-</td>
-<td width="50%" align="center" data-scroll-reveal>
-  <img src="assets/demos/memory-retrieval.gif" alt="Memory Retrieval Demo" width="100%" style="border-radius: 8px; border: 1px solid #30363d;" />
-  <p><strong>🧠 Memory Influence</strong><br/><em>Context shaping decisions</em></p>
-</td>
-</tr>
-</table>
-
-<div align="center">
-  <p><em>Note: Demo GIFs are placeholders. See <a href="assets/demos/README.md">assets/demos/README.md</a> for recording instructions.</em></p>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: ARCHITECTURE ═══════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
-
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=58A6FF&center=true&vCenter=true&repeat=false&width=500&height=50&lines=%F0%9F%8F%97%EF%B8%8F+Architecture" alt="Section" />
-</div>
-
-<br/>
-
-<div align="center">
-
-```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': { 'primaryColor': '#161b22', 'primaryTextColor': '#c9d1d9', 'primaryBorderColor': '#58a6ff', 'lineColor': '#30363d', 'secondaryColor': '#0d1117', 'tertiaryColor': '#0d1117', 'edgeLabelBackground': '#0d1117', 'clusterBkg': '#0d1117', 'clusterBorder': '#21262d', 'titleColor': '#58a6ff'}}}%%
-
-graph TB
-    subgraph ENTRY["⠀⠀🌐 ENTRY POINTS⠀⠀"]
-        CLI["⌨️ CLI"]:::entryNode
-        API["📡 FastAPI"]:::entryNode
-        CRON["⏰ Scheduler"]:::entryNode
-    end
-
-    subgraph AGENTS["⠀⠀🤖 MULTI-AGENT SYSTEM⠀⠀"]
-        SUP["👑 Supervisor"]:::agentNode
-        DAG["📊 Task DAG"]:::agentNode
-        R["🔬 Researcher"]:::specialistNode
-        W["✍️ Writer"]:::specialistNode
-        C["💻 Coder"]:::specialistNode
-        A["📈 Analyst"]:::specialistNode
-    end
-
-    subgraph LOOP["⠀⠀🔄 OTAR REASONING LOOP⠀⠀"]
-        O["👁️ Observe"]:::otarNode
-        T["🧠 Think"]:::otarNode
-        ACT["⚡ Act"]:::otarNode
-        REF["🪞 Reflect"]:::otarNode
-    end
-
-    subgraph INTEL["⠀⠀🧪 INTELLIGENCE⠀⠀"]
-        GW["🔌 Gateway"]:::intelNode
-        ROUTE["🎯 Router"]:::intelNode
-        COST["💰 Governor"]:::intelNode
-    end
-
-    subgraph SAFE["⠀⠀🛡️ 5-TIER SAFETY⠀⠀"]
-        CLS["📋 Classifier"]:::safeNode
-        POL["📜 Policy"]:::safeNode
-        AUD["🔗 Audit Chain"]:::safeNode
-        KS["🔴 Kill Switch"]:::safeNode
-    end
-
-    subgraph MEM["⠀⠀🧠 4-LAYER MEMORY⠀⠀"]
-        WM["📝 Working"]:::memNode
-        EM["📚 Episodic"]:::memNode
-        SM["🧲 Semantic"]:::memNode
-        UM["👤 User Model"]:::memNode
-    end
-
-    subgraph EXEC["⠀⠀⚙️ EXECUTION⠀⠀"]
-        TOOLS["🔧 Tools"]:::execNode
-        SAND["🐳 Sandbox"]:::execNode
-    end
-
-    subgraph LEARN["⠀⠀📊 LEARNING LOOP⠀⠀"]
-        FB["👍 Feedback"]:::learnNode
-        WF["🔄 Workflows"]:::learnNode
-        LLM["💰 LLM Tracker"]:::learnNode
-    end
-
-    ENTRY --> SUP
-    SUP --> DAG --> R & W & C & A
-    R & W & C & A --> LOOP
-    O --> T --> ACT --> REF
-    REF -.->|loop| O
-    ACT --> SAFE --> EXEC
-    LOOP <--> INTEL
-    LOOP <--> MEM
-    EXEC --> LEARN
-
-    classDef entryNode fill:#161b22,stroke:#58a6ff,color:#c9d1d9
-    classDef agentNode fill:#161b22,stroke:#bc8cff,color:#c9d1d9
-    classDef specialistNode fill:#161b22,stroke:#bc8cff,color:#c9d1d9,stroke-dasharray: 5 5
-    classDef otarNode fill:#161b22,stroke:#3fb950,color:#c9d1d9
-    classDef intelNode fill:#161b22,stroke:#d29922,color:#c9d1d9
-    classDef safeNode fill:#161b22,stroke:#f85149,color:#c9d1d9
-    classDef memNode fill:#161b22,stroke:#f778ba,color:#c9d1d9
-    classDef execNode fill:#161b22,stroke:#8b949e,color:#c9d1d9
-    classDef learnNode fill:#161b22,stroke:#58a6ff,color:#c9d1d9
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      🌐 ENTRY POINTS                            │
+│              ┌──────────┬──────────┬──────────┐                 │
+│              │   CLI    │ FastAPI  │ Scheduler│                 │
+│              └────┬─────┴────┬─────┴────┬─────┘                 │
+└───────────────────┼──────────┼──────────┼───────────────────────┘
+                    │          │          │
+┌───────────────────┴──────────┴──────────┴───────────────────────┐
+│                   🤖 MULTI-AGENT SYSTEM                          │
+│  ┌─────────────┐     ┌──────────────────────────────────┐      │
+│  │ Supervisor  │────▶│         Task DAG                 │      │
+│  └─────────────┘     └──┬───────┬───────┬───────┬───────┘      │
+│                         │       │       │       │               │
+│               ┌─────────┼───────┼───────┼───────┼─────────┐     │
+│               ▼         ▼       ▼       ▼       ▼         ▼     │
+│           Researcher  Writer  Coder  Analyst  Browser  General  │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+┌───────────────────────────┴─────────────────────────────────────┐
+│                  🔄 OTAR REASONING LOOP                          │
+│   ┌─────────┐  ┌────────┐  ┌──────┐  ┌─────────┐              │
+│   │ Observe │─▶│ Think  │─▶│ Act  │─▶│ Reflect │──┐            │
+│   └─────────┘  └────────┘  └───┬──┘  └─────────┘  │            │
+│        ▲                        │                   │            │
+│        └────────────────────────┴───────────────────┘            │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+      ┌───────────────────────┼───────────────────────┐
+      │                       │                       │
+┌─────▼──────────┐  ┌─────────▼──────────┐  ┌───────▼────────┐
+│ 🛡️ SAFETY      │  │ 🧠 MEMORY          │  │ 🧪 INTELLIGENCE│
+│ ─────────────  │  │ ──────────────────  │  │ ───────────────│
+│ • Classifier   │  │ • Working Memory   │  │ • Model Gateway│
+│ • Policy       │  │ • Episodic Store   │  │ • Router       │
+│ • Audit Chain  │  │ • Semantic Search  │  │ • Cost Gov     │
+│ • Kill Switch  │  │ • User Model       │  │ • Free Quota   │
+└────────┬───────┘  └────────────────────┘  └────────────────┘
+         │
+    ┌────▼──────┐
+    │ ⚙️ TOOLS  │
+    │ ──────────│
+    │ • Browser │
+    │ • Shell   │
+    │ • Files   │
+    │ • Sandbox │
+    └───────────┘
 ```
 
-</div>
+---
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: SAFETY ENGINE ═══════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
+## 🛡️ 5-Tier Safety Engine
 
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=f85149&center=true&vCenter=true&repeat=false&width=500&height=50&lines=%F0%9F%9B%A1%EF%B8%8F+Safety+Engine" alt="Section" />
-  <br/><br/>
-  <em>"Every action flows through the safety engine. No exceptions. No bypasses."</em>
-</div>
+**Every action flows through the safety engine. No exceptions. No bypasses.**
 
-<br/>
+| Tier | Name | Description | User Action Required |
+|------|------|-------------|---------------------|
+| **0** | 🟢 **SAFE** | Read-only operations | None (auto-approved) |
+| **1** | 🟡 **LOW_RISK** | Reversible file writes, web searches | Explicit approval |
+| **2** | 🟠 **MEDIUM_RISK** | Shell commands, external API calls | Explicit approval |
+| **3** | 🔴 **DANGEROUS** | Destructive operations (delete, deploy) | Approval + 4-digit code |
+| **4** | ⛔ **FORBIDDEN** | System critical, security-sensitive | Hard blocked |
 
-<div align="center">
-  <img src="assets/safety-tiers.svg" alt="5-Tier Safety System" width="100%" />
-</div>
-
-<br/>
-
-<details>
-<summary><kbd>🔗 Hash-Chain Audit — Tamper-proof logging</kbd></summary>
-<br/>
+### 🔗 Hash-Chain Audit
 
 Every audit record includes a SHA-256 hash chain:
 
 ```
-Row N:  row_hash = SHA256(prev_hash + action + payload + timestamp)
-Row N+1: prev_hash = row_hash of Row N
+Row N:   hash = SHA256(prev_hash + action + payload + timestamp)
+Row N+1: prev_hash = hash of Row N
 ```
 
 If **any** historical record is tampered with, the chain breaks. Verify instantly:
 
 ```bash
 curl http://localhost:8730/api/v1/audit/verify
-# → {"chain_valid": true, "records_verified": 1847, "status": "✓ Audit chain intact"}
+# → {"chain_valid": true, "records_verified": 1847}
 ```
 
-</details>
+### 🔴 Kill Switch
 
-<details>
-<summary><kbd>⚙️ Confirmation Code — DANGEROUS tier protection</kbd></summary>
-<br/>
+Emergency stop for runaway agents:
 
-Tier 3 (DANGEROUS) actions require a randomly-generated **4-digit confirmation code** on top of explicit user approval:
-
-```
-⚠️  DANGEROUS ACTION DETECTED
-    Action: database.drop_table("users")
-    Tier: 3 (DANGEROUS)
-
-    Enter confirmation code [4729] to proceed: _
+```bash
+atlas kill-switch enable    # Blocks all new tasks
+atlas kill-switch disable   # Resume normal operation
 ```
 
-This prevents accidental approvals of high-impact operations.
+---
 
-</details>
+## 🔄 OTAR Reasoning Loop
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: OTAR LOOP ══════════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
-
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=3fb950&center=true&vCenter=true&repeat=false&width=600&height=50&lines=%F0%9F%94%84+OTAR+Reasoning+Loop" alt="Section" />
-</div>
-
-<br/>
-
-Every agent iteration follows the **Observe → Think → Act → Reflect** cycle. This isn't just ReAct — the explicit Reflect step evaluates outcomes and prevents repeating mistakes.
-
-<div align="center" data-scroll-reveal>
-  <img src="assets/animations/otar-loop.svg" alt="OTAR Loop Animation" width="700" style="border-radius: 12px; border: 1px solid #30363d; padding: 20px; background: #0d1117;" />
-  <p><em>Animated OTAR cycle — watch the flow progress through each phase</em></p>
-</div>
-
-<br/>
-
-<details>
-<summary><kbd>🪞 What does Reflect actually do?</kbd></summary>
-<br/>
-
-After every action, the Reflect step produces a `ReflectionResult`:
-
-```python
-@dataclass(frozen=True)
-class ReflectionResult:
-    succeeded: bool                    # Did the action achieve its goal?
-    learnings: list[str]               # What did we learn? (errors, side effects)
-    should_adjust_plan: bool           # Should we change course?
-    adjustment_reason: str | None      # Why?
-```
-
-This means the agent:
-- **Never silently ignores failures** — errors are captured as learnings
-- **Knows when to pivot** — `should_adjust_plan` triggers replanning
-- **Builds context** — learnings feed into the next Observe step
-
-</details>
-
-<details>
-<summary><kbd>🔎 Pre-Action Self-Critique</kbd></summary>
-<br/>
-
-Before any consequential action hits the Safety Engine, the agent runs a **fast, cheap self-critique** to catch obvious mistakes:
+Every agent iteration follows **Observe → Think → Act → Reflect**:
 
 ```
-Critique Verdicts:
-  ✅ OK     → proceed (tier unchanged — Safety Engine still gates it)
-  ✏️ REVISE → regenerate the action once with the concern in mind
-  🛑 ABORT  → convert to ask_user ("I held off because...")
+┌──────────────────────────────────────────────────────────┐
+│ 1️⃣ OBSERVE                                               │
+│    • Fetch context from memory (episodic + semantic)      │
+│    • Load relevant tool outputs from previous steps      │
+│    • Read current goal state and constraints             │
+└────────────────────────┬─────────────────────────────────┘
+                         ▼
+┌──────────────────────────────────────────────────────────┐
+│ 2️⃣ THINK                                                 │
+│    • Reason about next action                            │
+│    • Consider multiple approaches                        │
+│    • Run self-critique (catches 15% of mistakes early)   │
+└────────────────────────┬─────────────────────────────────┘
+                         ▼
+┌──────────────────────────────────────────────────────────┐
+│ 3️⃣ ACT                                                   │
+│    • Execute tool call through Safety Engine             │
+│    • Respects 5-tier permission model                    │
+│    • Waits for approval if required                      │
+└────────────────────────┬─────────────────────────────────┘
+                         ▼
+┌──────────────────────────────────────────────────────────┐
+│ 4️⃣ REFLECT                                               │
+│    • Evaluate: Did the action achieve its goal?          │
+│    • Extract learnings (errors, side effects)            │
+│    • Decide: Should we adjust the plan?                  │
+│    • Store outcome in episodic memory                    │
+└────────────────────────┬─────────────────────────────────┘
+                         │
+                         └─────▶ Loop back to OBSERVE
 ```
 
-This catches ~15% of risky actions before they even reach the safety classifier, saving both tokens and user interruptions.
+### What makes Reflect special?
 
-</details>
+Unlike ReAct, ATLAS includes an explicit **Reflect** step that:
+- ✅ Never silently ignores failures
+- ✅ Knows when to pivot and replan
+- ✅ Builds context for future iterations
+- ✅ Prevents repeating the same mistakes
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: MULTI-AGENT ════════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
+---
 
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=bc8cff&center=true&vCenter=true&repeat=false&width=600&height=50&lines=%F0%9F%A4%96+Multi-Agent+System" alt="Section" />
-</div>
+## 🤖 Multi-Agent System
 
-<br/>
+Complex tasks are decomposed by the **Supervisor** into a **DAG** of subtasks. Independent subtasks run in **parallel**; dependent ones wait for predecessors.
 
-Complex tasks are decomposed by the **Supervisor** into a **directed acyclic graph (DAG)**. Independent subtasks run in **parallel**; dependent ones wait.
+### Specialist Agents
 
-<div align="center">
-
-```mermaid
-%%{init: {'theme': 'dark', 'themeVariables': { 'primaryColor': '#161b22', 'primaryTextColor': '#c9d1d9', 'primaryBorderColor': '#bc8cff', 'lineColor': '#30363d'}}}%%
-
-graph LR
-    TASK["📋 Complex Task"] --> SUP["👑 Supervisor"]
-    SUP -->|decompose| DAG["📊 DAG"]
-    DAG --> R1["🔬 Research A"]
-    DAG --> R2["🔬 Research B"]
-    R1 --> MERGE["✍️ Writer"]
-    R2 --> MERGE
-    MERGE --> CODE["💻 Coder"]
-    CODE --> OUT["📦 Output"]
-
-    style TASK fill:#161b22,stroke:#58a6ff,color:#c9d1d9
-    style SUP fill:#161b22,stroke:#bc8cff,color:#c9d1d9
-    style DAG fill:#161b22,stroke:#bc8cff,color:#c9d1d9
-    style R1 fill:#161b22,stroke:#3fb950,color:#c9d1d9
-    style R2 fill:#161b22,stroke:#3fb950,color:#c9d1d9
-    style MERGE fill:#161b22,stroke:#d29922,color:#c9d1d9
-    style CODE fill:#161b22,stroke:#f778ba,color:#c9d1d9
-    style OUT fill:#161b22,stroke:#58a6ff,color:#c9d1d9
-```
-
-</div>
-
-<details>
-<summary><kbd>🔬 Specialist Agent Profiles</kbd></summary>
-<br/>
-
-| Agent | Role | Tools | Temp |
-|-------|------|-------|------|
+| Agent | Role | Tools | Temperature |
+|-------|------|-------|-------------|
 | 🔬 **Researcher** | Find, analyze, synthesize information | `browser` `knowledge` `memory` `http` | 0.1 |
 | ✍️ **Writer** | Compose, edit, refine text | `filesystem` `knowledge` `memory` | 0.4 |
 | 💻 **Coder** | Production-quality code | `filesystem` `shell` `code` `knowledge` | 0.1 |
-| 📈 **Analyst** | Data patterns, actionable insights | `filesystem` `shell` `code` `knowledge` | 0.1 |
-| 🌐 **General** | Fallback for unclassified tasks | `filesystem` `shell` `browser` `knowledge` `memory` | 0.2 |
+| 📈 **Analyst** | Data patterns, insights | `filesystem` `shell` `code` `knowledge` | 0.1 |
+| 🌐 **Browser** | Web automation, research | `browser` `knowledge` `memory` | 0.2 |
+| 🔧 **General** | Fallback for unclassified tasks | All tools | 0.2 |
 
-Each specialist has **its own system prompt, tool permissions, and model preferences**. The Supervisor chooses the right specialist for each subtask based on the decomposition.
+Each specialist has **its own system prompt, tool permissions, and model preferences**.
 
-</details>
+### Example: Parallel Execution
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: MEMORY ═════════════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
+```
+Task: "Research quantum computing papers and summarize top 3 findings"
 
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=f778ba&center=true&vCenter=true&repeat=false&width=500&height=50&lines=%F0%9F%A7%A0+Memory+System" alt="Section" />
-</div>
-
-<br/>
-
-<div align="center">
-  <img src="assets/memory-layers.svg" alt="4-Layer Memory System" width="100%" />
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: COMPARISON ═════════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
-
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=d29922&center=true&vCenter=true&repeat=false&width=600&height=50&lines=%F0%9F%94%8D+How+ATLAS+Compares" alt="Section" />
-  <p><em>Production-grade safety and transparency vs. existing frameworks</em></p>
-</div>
-
-<br/>
-
-<table data-scroll-reveal>
-<tr style="background: #161b22;">
-  <th align="left" width="35%">Feature</th>
-  <th align="center" width="16%">ATLAS</th>
-  <th align="center" width="16%">AutoGPT</th>
-  <th align="center" width="16%">LangChain</th>
-  <th align="center" width="16%">CrewAI</th>
-</tr>
-<tr class="atlas-row" style="background: linear-gradient(90deg, rgba(210, 153, 34, 0.1) 0%, rgba(210, 153, 34, 0.05) 100%);">
-  <td><strong>🛡️ 5-Tier Safety System</strong></td>
-  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-  <td align="center" style="color: #d29922;">⚠️</td>
-</tr>
-<tr class="comparison-row atlas-row">
-  <td><strong>🔗 Hash-Chain Audit Log</strong></td>
-  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-</tr>
-<tr class="comparison-row atlas-row">
-  <td><strong>🔄 OTAR Reasoning Loop</strong></td>
-  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
-  <td align="center" style="color: #d29922;">⚠️ ReAct</td>
-  <td align="center" style="color: #d29922;">⚠️ ReAct</td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-</tr>
-<tr class="comparison-row atlas-row">
-  <td><strong>📊 Multi-Agent DAGs</strong></td>
-  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
-  <td align="center" style="color: #d29922;">⚠️ Basic</td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
-</tr>
-<tr class="comparison-row atlas-row">
-  <td><strong>🧠 4-Layer Memory System</strong></td>
-  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
-  <td align="center" style="color: #d29922;">⚠️ Basic</td>
-  <td align="center" style="color: #d29922;">⚠️ Vector only</td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-</tr>
-<tr class="comparison-row atlas-row">
-  <td><strong>📈 Evaluation & Learning Loop</strong></td>
-  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-</tr>
-<tr class="comparison-row atlas-row">
-  <td><strong>🔴 Production-Ready Tests</strong></td>
-  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span> 348</td>
-  <td align="center" style="color: #d29922;">⚠️ Limited</td>
-  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
-  <td align="center" style="color: #d29922;">⚠️ Limited</td>
-</tr>
-<tr class="comparison-row atlas-row">
-  <td><strong>💰 Cost Tracking & Governance</strong></td>
-  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-  <td align="center" style="color: #d29922;">⚠️ Basic</td>
-  <td align="center"><span class="x-mark" style="color: #f85149; font-size: 18px;">❌</span></td>
-</tr>
-</table>
-
-<br/>
-
-<div align="center">
-  <p style="color: #8b949e; font-style: italic;">
-    ✅ Full support • ⚠️ Partial/Basic • ❌ Not available
-  </p>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: QUICKSTART ═════════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
-
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=58A6FF&center=true&vCenter=true&repeat=false&width=500&height=50&lines=%F0%9F%9A%80+Quick+Start" alt="Section" />
-</div>
-
-<br/>
-
-<table>
-<tr>
-<td><img src="https://img.shields.io/badge/Python-3.13+-3776AB?style=flat-square&logo=python&logoColor=white&labelColor=0d1117" /></td>
-<td><img src="https://img.shields.io/badge/uv-latest-7c3aed?style=flat-square&logo=astral&logoColor=white&labelColor=0d1117" /></td>
-<td><img src="https://img.shields.io/badge/Ollama-running-000000?style=flat-square&logo=ollama&logoColor=white&labelColor=0d1117" /></td>
-</tr>
-</table>
-
-```bash
-# 1. Clone & install
-git clone https://github.com/aman-bhaskar-codes/ATLAS.git
-cd ATLAS/atlas
-uv sync --all-extras
-
-# 2. Configure
-cp .env.example .env
-# Edit .env → set OLLAMA_HOST, optional cloud API keys
-
-# 3. Health check
-uv run atlas doctor
-
-# 4. Run your first task
-uv run atlas run "research the latest papers on multi-agent systems and save a summary"
+DAG:
+  Research A (arXiv)  ──┐
+  Research B (Scholar) ─┼──▶ Writer (merge summaries) ──▶ Output
+  Research C (Wikipedia)┘
+  
+  └── parallel ──┘       └── sequential ──┘
 ```
 
-<details>
-<summary><kbd>💻 Web Dashboard</kbd></summary>
-<br/>
+---
 
-ATLAS includes a real-time Next.js dashboard for monitoring agent reasoning, approvals, and memories:
+## 🧠 4-Layer Memory System
+
+| Layer | Type | Purpose | Storage |
+|-------|------|---------|---------|
+| **📝 Working** | Short-term | Current task context, scratch space | In-memory |
+| **📚 Episodic** | Long-term | Task history, outcomes, learnings | SQLite |
+| **🧲 Semantic** | Long-term | Vector embeddings for retrieval | ChromaDB |
+| **👤 User Model** | Persistent | Preferences, communication style, goals | SQLite |
+
+### Memory Retrieval Flow
+
+```python
+# 1. Working memory: "Current task is X, last 3 actions were Y"
+working_context = memory.working.get_context()
+
+# 2. Episodic memory: "Similar task 2 days ago failed because..."
+similar_tasks = memory.episodic.search_similar(current_task, limit=3)
+
+# 3. Semantic memory: "Documents about topic Z"
+relevant_docs = memory.semantic.search(query="quantum computing", k=5)
+
+# 4. User model: "User prefers concise answers, values accuracy over speed"
+user_prefs = memory.user_model.get_preferences()
+
+# All layers feed into the Observe step of OTAR
+```
+
+---
+
+## 💰 Zero-Cost-First Architecture
+
+ATLAS is designed to run **primarily on local/free-tier infrastructure**:
+
+### Free-Tier Providers
+
+| Provider | Cost | Capabilities | Daily Quota |
+|----------|------|--------------|-------------|
+| **Ollama** | $0 | Local inference | Unlimited |
+| **Groq** | $0 | Fast cloud inference (llama3.1, mixtral) | 1000 req/day |
+| **Gemini** | $0 | Google cloud (gemini-1.5-flash) | 1500 req/day |
+| **OpenRouter Free** | $0 | Multi-model gateway (meta-llama, google) | 200 req/day |
+
+### Cost Governance
+
+- **Budget tracking** — Daily/weekly/monthly spend limits
+- **Quota management** — Automatic rotation across free providers
+- **Policy enforcement** — `ZERO_COST`, `FREE_ONLY`, `FREE_PREFERRED`, `BALANCED`
+
+```bash
+atlas cost show              # Current spend: $0.00 / $5.00 daily limit
+atlas profile local_free     # Switch to 100% local inference
+atlas providers free         # Show available free-tier models
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Python 3.13+**
+- **uv** (package manager) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **Ollama** (local inference) — `curl -fsSL https://ollama.com/install.sh | sh`
+
+### Installation
+
+```bash
+# 1. Clone repository
+git clone https://github.com/aman-bhaskar-codes/ATLAS.git
+cd ATLAS/atlas
+
+# 2. Install dependencies
+uv sync --all-extras
+
+# 3. Pull local model
+ollama pull qwen2.5-coder:7b
+
+# 4. Configure
+cp .env.example .env
+# Edit .env → set OLLAMA_HOST (default: http://localhost:11434)
+# Optional: Add GROQ_API_KEY, GEMINI_API_KEY for free-tier cloud
+
+# 5. Verify installation
+uv run atlas doctor
+```
+
+### Your First Task
+
+```bash
+# Simple task
+uv run atlas run "what is the weather in San Francisco?"
+
+# Research task (uses browser + knowledge capabilities)
+uv run atlas run "research the latest papers on transformers and summarize key findings"
+
+# Multi-agent task (parallel decomposition)
+uv run atlas run "analyze sentiment in user reviews from reviews.csv and create visualizations"
+```
+
+### Web Dashboard
+
+ATLAS includes a real-time Next.js dashboard:
 
 ```bash
 # Terminal 1: Backend API
-uv run uvicorn atlas.interfaces.api.app:create_app --factory --host 127.0.0.1 --port 8730 --reload
+uv run uvicorn atlas.interfaces.api.app:create_app --factory --host 127.0.0.1 --port 8730
 
 # Terminal 2: Frontend
-cd frontend && npm install && npm run dev
+cd frontend
+npm install
+npm run dev
 ```
 
-Open **[http://localhost:3000](http://localhost:3000)** → live agent tracking dashboard.
+Open **http://localhost:3000** → Live agent tracking, approvals, memory browser
 
-</details>
+---
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: API ════════════════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
+## 📡 API Reference
 
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=d29922&center=true&vCenter=true&repeat=false&width=500&height=50&lines=%F0%9F%93%A1+API+Reference" alt="Section" />
-</div>
+### Tasks & Execution
 
-<br/>
+```bash
+# Submit task
+curl -X POST http://localhost:8730/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"request": "research quantum computing papers"}'
 
-<details>
-<summary><kbd>📋 Tasks & Execution</kbd></summary>
-<br/>
+# Get task status
+curl http://localhost:8730/api/v1/tasks/{task_id}
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/v1/tasks` | Submit a new task |
-| `POST` | `/api/v1/tasks/{id}/cancel` | Cancel a running task |
-| `GET` | `/api/v1/tasks/{id}/events` | SSE event stream |
+# Stream events (SSE)
+curl http://localhost:8730/api/v1/tasks/{task_id}/events
+```
 
-</details>
+### Safety & Approvals
 
-<details>
-<summary><kbd>🛡️ Safety & Approvals</kbd></summary>
-<br/>
+```bash
+# List pending approvals
+curl http://localhost:8730/api/v1/approvals/pending
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/v1/approvals/pending` | Pending approval queue |
-| `POST` | `/api/v1/approvals/{id}/decide` | Approve or deny |
-| `GET` | `/api/v1/audit/verify` | Verify hash chain |
+# Approve action
+curl -X POST http://localhost:8730/api/v1/approvals/{approval_id}/decide \
+  -H "Content-Type: application/json" \
+  -d '{"decision": "approve"}'
 
-</details>
+# Verify audit chain
+curl http://localhost:8730/api/v1/audit/verify
+```
 
-<details>
-<summary><kbd>📊 Feedback & Evaluation</kbd></summary>
-<br/>
+### Memory & Knowledge
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/v1/feedback` | Submit rating + optional edit |
-| `GET` | `/api/v1/feedback/stats` | Aggregate stats |
-| `GET` | `/api/v1/schedules` | List cron schedules |
-| `POST` | `/api/v1/schedules` | Create recurring task |
+```bash
+# Search semantic memory
+curl "http://localhost:8730/api/v1/memory/search?query=quantum+computing&limit=5"
 
-</details>
+# Store memory entry
+curl -X POST http://localhost:8730/api/v1/memory/store \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Important finding about X", "metadata": {}}'
+```
 
-<details>
-<summary><kbd>🧠 Memory & Knowledge</kbd></summary>
-<br/>
+### Feedback & Evaluation
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/v1/memory/search` | Semantic search |
-| `POST` | `/api/v1/memory/store` | Store entry |
-| `GET` | `/api/v1/capabilities` | List capabilities |
+```bash
+# Submit feedback
+curl -X POST http://localhost:8730/api/v1/feedback \
+  -H "Content-Type: application/json" \
+  -d '{"task_id": "123", "rating": 5, "comment": "Excellent work"}'
 
-</details>
+# Get feedback stats
+curl http://localhost:8730/api/v1/feedback/stats
+```
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: PROJECT STRUCTURE ══════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
+---
 
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=8b949e&center=true&vCenter=true&repeat=false&width=500&height=50&lines=%F0%9F%93%81+Project+Structure" alt="Section" />
-</div>
-
-<br/>
-
-<details>
-<summary><kbd>Click to expand full project tree</kbd></summary>
+## 🏗️ Project Structure
 
 ```
 atlas/
 ├── config/                          # ⚙️ Configuration
-│   ├── models.yaml                  #    Model registry (providers, costs, limits)
-│   ├── permissions.yaml             #    5-tier safety rules per tool
-│   └── settings.yaml                #    Runtime settings
+│   ├── models.yaml                  # Model registry (providers, costs, limits)
+│   ├── permissions.yaml             # 5-tier safety rules per tool
+│   └── settings.yaml                # Runtime settings
 │
 ├── src/atlas/
 │   ├── agents/                      # 🤖 Multi-Agent System
-│   │   ├── base.py                  #    BaseAgent protocol + AgentConfig
-│   │   ├── dag.py                   #    TaskDAG with topological batching
-│   │   ├── registry.py              #    Lazy agent factory registry
-│   │   ├── specialists.py           #    5 specialist agent configs
-│   │   └── supervisor.py            #    Decompose → orchestrate → synthesize
+│   │   ├── base.py                  # BaseAgent protocol
+│   │   ├── dag.py                   # Task DAG with topological batching
+│   │   ├── specialists.py           # Researcher, Writer, Coder, Analyst
+│   │   └── supervisor.py            # Task decomposition & delegation
 │   │
-│   ├── capabilities/                # 🔧 Tool Implementations
-│   │   ├── browser/                 #    Browser automation (Playwright)
-│   │   ├── identity/                #    Identity, auth, secret store
-│   │   ├── notification/            #    Push, email, SMS notifications
-│   │   └── platforms/               #    Email, calendar, contacts, knowledge
+│   ├── orchestration/               # 🔄 OTAR Loop & Execution
+│   │   ├── orchestrator.py          # Main execution engine
+│   │   ├── goal.py                  # Goal tracking & verification
+│   │   ├── reasoning.py             # Think step (reasoning chains)
+│   │   ├── planner.py               # Action planning
+│   │   ├── self_critique.py         # Pre-action validation
+│   │   └── context_builder.py       # Memory → Context integration
 │   │
-│   ├── infra/                       # 🏗️ Infrastructure Layer
-│   │   ├── db.py                    #    SQLite + auto-migrations
-│   │   ├── feedback.py              #    User feedback store
-│   │   ├── llm_tracker.py           #    Per-model/per-task cost tracking
-│   │   ├── scheduler.py             #    Cron scheduler (5-field expressions)
-│   │   ├── types.py                 #    Shared contracts (Tier enum)
-│   │   └── workflows.py             #    Learned workflow templates
+│   ├── safety/                      # 🛡️ 5-Tier Safety Engine
+│   │   ├── engine.py                # Tier classification
+│   │   ├── classifier.py            # Action → Tier mapping
+│   │   ├── policy.py                # Permission rules
+│   │   ├── audit.py                 # Hash-chain audit log
+│   │   ├── killswitch.py            # Emergency stop
+│   │   └── sandbox.py               # Docker isolation
+│   │
+│   ├── memory/                      # 🧠 4-Layer Memory System
+│   │   ├── working.py               # Short-term context
+│   │   ├── episodic.py              # Long-term task history
+│   │   ├── semantic.py              # Vector embeddings (ChromaDB)
+│   │   ├── user_model.py            # User preferences & style
+│   │   └── retrieval.py             # Memory → Context pipeline
 │   │
 │   ├── intelligence/                # 🧪 Model Gateway & Routing
-│   │   ├── gateway.py               #    Multi-provider LLM gateway
-│   │   ├── governance/              #    Cost governor, budgets, limits
-│   │   └── selection/               #    Model selector, capability router
+│   │   ├── gateway.py               # Unified LLM interface
+│   │   ├── selection/               # Model selection (cost, latency, quality)
+│   │   ├── governance/              # Cost & quota governors
+│   │   ├── providers/               # Ollama, OpenAI, Groq, Gemini
+│   │   └── runtime/                 # Inference + fallback engines
 │   │
-│   ├── interfaces/                  # 🌐 API & CLI
-│   │   └── api/                     #    FastAPI routes, SSE, schemas
+│   ├── capabilities/                # 🔌 Platform Expansion (Phase 3)
+│   │   ├── browser/                 # Browser automation (Playwright, CDP)
+│   │   ├── identity/                # OAuth2, API keys, secrets
+│   │   ├── notification/            # Multi-channel alerts
+│   │   └── knowledge/               # Wikipedia, arXiv, Brave Search
 │   │
-│   ├── memory/                      # 🧠 4-Layer Memory
-│   │   ├── episodic.py              #    Event timeline
-│   │   ├── semantic.py              #    Vector embeddings (ChromaDB)
-│   │   ├── working.py              #    Per-task scratchpad
-│   │   └── user_model.py            #    Preference learning
+│   ├── autonomy/                    # ⚡ Event-Driven Automation
+│   │   ├── automations.py           # Trigger → Action rules
+│   │   └── trigger_engine.py        # Event matching & dispatch
 │   │
-│   ├── orchestration/               # 🔄 OTAR Runtime
-│   │   ├── reasoning.py             #    OTAR reasoning loop
-│   │   ├── reflection.py            #    Post-action Reflect step
-│   │   ├── self_critique.py         #    Pre-action self-critique
-│   │   └── planner.py              #    LLM-powered plan generation
+│   ├── tools/                       # 🔧 Tool Registry
+│   │   ├── filesystem.py            # Safe file operations
+│   │   ├── shell.py                 # Sandboxed shell execution
+│   │   └── browser.py               # Web research & automation
 │   │
-│   ├── safety/                      # 🛡️ Safety Engine
-│   │   ├── audit.py                 #    SHA-256 hash-chain audit log
-│   │   ├── classifier.py            #    5-tier action classifier
-│   │   ├── engine.py                #    Reference monitor (deny-by-default)
-│   │   └── policy.py               #    Policy chain + kill switch
+│   ├── interfaces/
+│   │   ├── cli.py                   # CLI entry point
+│   │   └── api/                     # FastAPI REST + WebSocket
 │   │
-│   └── app.py                       # 🎯 Composition root (all DI wiring)
+│   └── infra/                       # 🏗️ Infrastructure
+│       ├── db.py                    # SQLite async wrapper
+│       ├── bus.py                   # Event bus (pub/sub)
+│       ├── logging.py               # Structured logging
+│       ├── tracing.py               # Distributed tracing
+│       └── scheduler.py             # Cron-style recurring tasks
 │
-├── tests/                           # ✅ 348 collected tests
-├── frontend/                        # 💻 Next.js dashboard
-└── pyproject.toml                   # 📦 Project configuration
+├── tests/                           # ✅ 384 Tests (63% coverage)
+│   ├── orchestration/               # OTAR loop tests
+│   ├── safety/                      # Safety engine tests
+│   ├── memory/                      # Memory system tests
+│   └── intelligence/                # Model gateway tests
+│
+├── frontend/                        # 🖥️ Next.js Dashboard
+│   ├── app/                         # App router pages
+│   ├── components/                  # React components
+│   └── lib/                         # API client, WebSocket
+│
+└── eval/                            # 📊 Evaluation Suite
+    ├── golden_suite.json            # Golden test cases
+    └── recorded/                    # Recorded trajectories
 ```
 
-</details>
+---
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: TESTING ════════════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
+## 🔍 How ATLAS Compares
 
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=00d68f&center=true&vCenter=true&repeat=false&width=500&height=50&lines=%F0%9F%A7%AA+Testing" alt="Section" />
-</div>
+| Feature | ATLAS | AutoGPT | LangChain | CrewAI |
+|---------|-------|---------|-----------|--------|
+| **🛡️ 5-Tier Safety** | ✅ Full | ❌ None | ❌ None | ⚠️ Basic |
+| **🔗 Hash-Chain Audit** | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| **🔄 OTAR Reasoning** | ✅ Yes | ⚠️ ReAct | ⚠️ ReAct | ❌ No |
+| **📊 Multi-Agent DAGs** | ✅ Yes | ⚠️ Basic | ❌ No | ✅ Yes |
+| **🧠 4-Layer Memory** | ✅ Yes | ⚠️ Basic | ⚠️ Vector only | ❌ No |
+| **📈 Learning Loop** | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| **💰 Cost Tracking** | ✅ Full | ❌ No | ⚠️ Basic | ❌ No |
+| **🧪 Production Tests** | ✅ 384 | ⚠️ Limited | ✅ Yes | ⚠️ Limited |
 
-<br/>
+---
+
+## 📊 Current Status
+
+### ✅ Completed (Phases 1-3)
+
+- ✅ Core orchestration loop (OTAR)
+- ✅ Multi-agent DAG system
+- ✅ 5-tier safety engine with hash-chain audit
+- ✅ 4-layer memory system (working, episodic, semantic, user)
+- ✅ Model gateway with free-tier support (Ollama, Groq, Gemini)
+- ✅ CLI + REST API + WebSocket streaming
+- ✅ Browser automation platform (Playwright + CDP)
+- ✅ Identity & secrets management (OAuth2, API keys)
+- ✅ Notification platform (desktop, Telegram, ntfy)
+- ✅ Knowledge platform (Wikipedia, arXiv, Brave, DuckDuckGo)
+- ✅ Autonomy fabric (reactive triggers, cron schedules)
+- ✅ Evaluation & learning loop (feedback, trajectories)
+- ✅ **384 tests, 63% coverage**
+
+### 🚧 In Progress (Phase 4)
+
+- 🚧 Calendar & contacts platform (Google Calendar, CalDAV, People API)
+- 🚧 Email platform (Gmail, IMAP/SMTP)
+- 🚧 Enhanced frontend dashboard (real-time execution view)
+- 🚧 Advanced memory consolidation (semantic compression)
+
+### 📋 Roadmap (Phase 5+)
+
+- 📋 File system/database capability platform
+- 📋 MCP (Model Context Protocol) integration
+- 📋 Voice interface (speech-to-text, text-to-speech)
+- 📋 Mobile apps (iOS, Android)
+- 📋 Multi-user support & team collaboration
+- 📋 Cloud deployment (Docker, K8s)
+
+---
+
+## 🧪 Testing
 
 ```bash
-uv run pytest                  # Full suite (348 tests)
-uv run pytest -v               # Verbose output
-uv run ruff check .            # Linter
-uv run mypy                    # Type checking (strict)
-```
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: ROADMAP ════════════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
-
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=58A6FF&center=true&vCenter=true&repeat=false&width=500&height=50&lines=%F0%9F%97%BA%EF%B8%8F+Roadmap" alt="Section" />
-</div>
-
-<br/>
-
-```mermaid
-%%{init: {'theme': 'dark'}}%%
-timeline
-    title ATLAS Evolution
-    section Foundations
-        Phase 1-5 ✅ : Safety Engine
-                     : Orchestration
-                     : Memory System
-                     : Intelligence Routing
-                     : Identity Platform
-    section Vamos
-        Phase 6 ✅ : 5-Tier Safety
-                   : Hash-Chain Audit
-                   : OTAR Reasoning
-        Phase 7 ✅ : Multi-Agent DAGs
-                   : Evaluation Loop
-                   : Workflow Learning
-    section Zero-Cost
-        Expansion ✅ : Local-First Policies
-                     : Offline Embeddings
-                     : Next.js Dashboards
-                     : CLI Dashboards
-    section Next
-        Phase 8 🔜 : Cross-Agent Learning
-                   : Autonomous Scrapers
-```
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: CONTRIBUTING ═══════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
-
-<div align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=2000&pause=3000&color=8b949e&center=true&vCenter=true&repeat=false&width=500&height=50&lines=%F0%9F%A4%9D+Contributing" alt="Section" />
-</div>
-
-<br/>
-
-Contributions are welcome! Please read the contributing guidelines before submitting a PR.
-
-```bash
-# 1. Fork & clone
-git clone https://github.com/YOUR_USERNAME/ATLAS.git
-
-# 2. Create feature branch
-git checkout -b feat/amazing-feature
-
-# 3. Make changes & test
+# Run all tests
 uv run pytest
 
-# 4. Commit & push
-git commit -m "feat: add amazing feature"
-git push origin feat/amazing-feature
+# Run with coverage
+uv run pytest --cov=atlas --cov-report=term-missing
 
-# 5. Open a Pull Request
+# Run specific test suite
+uv run pytest tests/orchestration/  # OTAR loop tests
+uv run pytest tests/safety/         # Safety engine tests
+uv run pytest tests/memory/         # Memory system tests
+
+# Run evaluation suite (golden test cases)
+uv run python scripts/eval_gate.py --answers eval/recorded/answers.json
 ```
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ SECTION: LICENSE ════════════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<img src="assets/divider.svg" width="100%" />
+### Test Coverage
+
+- **Orchestration**: 83% (OTAR loop, planning, execution)
+- **Safety**: 70% (tier classification, audit chain)
+- **Memory**: 75% (episodic, semantic, user model)
+- **Intelligence**: 60% (model gateway, providers)
+- **Overall**: 63% (384 tests)
+
+---
+
+## 🛠️ Development
+
+### Code Quality
+
+```bash
+# Lint
+uv run ruff check .
+
+# Type check
+uv run mypy
+
+# Import boundaries
+uv run lint-imports --config importlinter.ini
+
+# All quality checks (runs in CI)
+uv run ruff check . && uv run mypy && uv run lint-imports --config importlinter.ini
+```
+
+### Architecture Principles
+
+1. **Safety First** — Nothing runs without explicit permission
+2. **Transparent** — Full audit trail, no hidden actions
+3. **Modular** — Clean separation of concerns (orchestration, safety, memory, intelligence)
+4. **Testable** — Real tests, not mocked business logic
+5. **Cost-Conscious** — Free-tier first, paid models optional
+6. **Production-Ready** — Type-checked, linted, tested
+
+---
+
+## 📚 Documentation
+
+- **[Architecture Overview](docs/ARCHITECTURE.md)** — System design & data flow
+- **[Safety Engine](docs/SAFETY.md)** — 5-tier model, audit chain
+- **[Memory System](docs/MEMORY.md)** — 4-layer architecture
+- **[OTAR Loop](docs/OTAR.md)** — Reasoning cycle explained
+- **[Multi-Agent System](docs/AGENTS.md)** — DAG decomposition
+- **[Zero-Cost Architecture](ZERO_COST_ARCHITECTURE.md)** — Free-tier providers
+- **[API Reference](docs/API.md)** — REST endpoints & WebSocket
+- **[CLI Reference](docs/CLI.md)** — Command-line usage
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
+### Areas for Contribution
+
+- 🧪 **Testing** — Increase coverage, add edge cases
+- 🔌 **Capabilities** — New platforms (Slack, Discord, etc.)
+- 🤖 **Agents** — New specialist types
+- 📊 **Evaluation** — Golden test cases, benchmarks
+- 📝 **Documentation** — Tutorials, examples, guides
+
+---
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+Built with:
+- **[Ollama](https://ollama.com)** — Local inference
+- **[Groq](https://groq.com)** — Fast cloud inference
+- **[Google Gemini](https://ai.google.dev/)** — Free-tier cloud
+- **[ChromaDB](https://www.trychroma.com/)** — Vector embeddings
+- **[FastAPI](https://fastapi.tiangolo.com/)** — REST API
+- **[Next.js](https://nextjs.org/)** — Frontend dashboard
+- **[Playwright](https://playwright.dev/)** — Browser automation
+- **[uv](https://docs.astral.sh/uv/)** — Fast Python packaging
+
+---
 
 <div align="center">
 
-### 📜 License
+**Built by [Aman Bhaskar](https://github.com/aman-bhaskar-codes)**
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
-
-<br/>
-
-<!-- ═══ ANIMATED WAVE FOOTER ═══ -->
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,20:161b22,40:1a1b27,60:161b22,80:1a1b27,100:0d1117&height=150&section=footer" width="100%" />
-
-<br/>
-
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=500&size=14&duration=4000&pause=2000&color=8b949e&center=true&vCenter=true&repeat=true&width=400&height=30&lines=Built+with+%E2%9D%A4%EF%B8%8F+by+Aman+Bhaskar;Powered+by+open+source+%E2%9C%A8" alt="Footer" />
-
-<br/>
-
-<a href="https://github.com/aman-bhaskar-codes"><img src="https://img.shields.io/badge/GitHub-aman--bhaskar--codes-181717?style=for-the-badge&logo=github&logoColor=white&labelColor=0d1117" /></a>
+[![GitHub](https://img.shields.io/badge/GitHub-aman--bhaskar--codes-181717?style=for-the-badge&logo=github)](https://github.com/aman-bhaskar-codes)
+[![ATLAS](https://img.shields.io/badge/Project-ATLAS-58a6ff?style=for-the-badge&logo=robot)](https://github.com/aman-bhaskar-codes/ATLAS)
 
 </div>
-
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- ═══ ANIMATION SCRIPTS ═══════════════════════════════════════ -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-
-<!-- Load animation scripts -->
-<script src="assets/scripts/particles.js" defer></script>
-<script src="assets/scripts/counter.js" defer></script>
-<script src="assets/scripts/scroll-reveal.js" defer></script>
-<script src="assets/scripts/diagram-interactive.js" defer></script>
-
-<!-- Inline blink animation for cursor -->
-<style>
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-</style>
