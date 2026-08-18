@@ -137,16 +137,6 @@ class Retriever:
             except Exception as exc:
                 _log.warning("retrieval.emit_error", event_type="memory", error=str(exc))
 
-        _log.debug(
-            "retrieval.complete",
-            event_type="memory",
-            facts_count=len(facts),
-            episodes_count=len(epis),
-            knowledge_count=len(knowledge_chunks),
-            tokens_used=used,
-            query=query[:50],
-        )
-
         result = RetrievedContext(
             user_model=user_model,
             facts=tuple(facts),
