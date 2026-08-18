@@ -41,8 +41,8 @@ class ModelGateway:
     async def health(self) -> dict[str, bool]:
         """Backward compatibility for diagnostics/doctor.py"""
         status: dict[str, bool] = {}
-        for p in self._runtime._providers.names():
-            status[p] = self._runtime._health.is_available(p)
+        for p in self._runtime.provider_names():
+            status[p] = self._runtime.is_provider_available(p)
         return status
 
     async def infer(self, req: InferenceRequest) -> InferenceResponse:

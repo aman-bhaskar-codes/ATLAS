@@ -155,6 +155,20 @@ class InferenceRuntime:
     async def close(self) -> None:
         await self._providers.close()
 
+    def provider_names(self) -> list[str]:
+        """Return list of all registered provider names.
+        
+        Public accessor for diagnostics and health checks.
+        """
+        return self._providers.names()
+
+    def is_provider_available(self, name: str) -> bool:
+        """Check if a provider is currently available (not circuit-broken).
+        
+        Public accessor for diagnostics and health checks.
+        """
+        return self._health.is_available(name)
+
     @staticmethod
     def _estimate_cost(req: InferenceRequest, spec: ModelSpec) -> float:
         approx_in = sum(len(m.content) for m in req.messages) // 4
