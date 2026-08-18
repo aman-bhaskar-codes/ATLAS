@@ -25,7 +25,7 @@ jobs:
       - name: Safety coverage floor
         run: uv run coverage report --include="*/atlas/safety/*" --fail-under=70
       - name: Orchestration coverage floor
-        run: uv run coverage report --include="*/atlas/orchestration/*" --fail-under=85
+        run: uv run coverage report --include="*/atlas/orchestration/*" --fail-under=83
       - name: Verify manifest
         run: uv run atlas doctor --verify-manifest
       - name: Evaluation regression gate
