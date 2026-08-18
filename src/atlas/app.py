@@ -229,17 +229,6 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     # ── Identity ─────────────────────────────────────────────────── #
     master_key = resolve_master_key(settings)
-    secret_store = SecretStore(db, master_key)
-    identity_platform = IdentityPlatform(
-        store=secret_store,
-        db=db,
-        strategies={
-            CredentialKind.API_KEY: ApiKeyStrategy(),
-            CredentialKind.JWT: JwtStrategy(),
-            CredentialKind.BROWSER_SESSION: BrowserSessionStrategy(),
-        },
-        audit=cap_audit,
-    )
 
     # ── Intelligence ──────────────────────────────────────────────── #
     from atlas.bootstrap.intelligence import build_intelligence
@@ -255,7 +244,45 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     )
     gateway, embedder, llm_tracker = intel.gateway, intel.embedder, intel.llm_tracker
 
-    # ── Notifications ─────────────────────────────────────────────── #
+    # ── Capability infrastructure ─────────────────────────────────── #
+    cap_registry = CapabilityRegistry()
+    cap_health = CapabilityHealth()
+    cap_providers = CapProviderRegistry(cap_health)
+    ext_cap_router = ExtCapabilityRouter(gateway)
+    cap_telemetry = CapabilityTelemetry(cap_audit)
+    cap_dispatcher = CapabilityDispatcher(
+        registry=cap_registry,
+        providers=cap_providers,
+        health=cap_health,
+        safety=safety,
+        telemetry=cap_telemetry,
+    )
+
+    # ── Memory ────────────────────────────────────────────────────── #
+    from atlas.bootstrap.memory import build_memory
+
+    mem = build_memory(
+        settings=settings,
+        db=db,
+        ids=ids,
+        clock=clock,
+        embedder=embedder,
+        gateway=gateway,
+    )
+    vectors = mem.vectors
+    embedding_worker = mem.embedding_worker
+    episodic, semantic = mem.episodic, mem.semantic
+    user_model, working = mem.user_model, mem.working
+    knowledge_store = mem.knowledge_store
+    retriever, consolidator, pruner = mem.retriever, mem.consolidator, mem.pruner
+    trajectory_store, experience_extractor = mem.trajectory_store, mem.experience_extractor  # Phase 2
+    skill_store, strategy_store = mem.skill_store, mem.strategy_store  # Batch 4
+    world_state, skill_promoter = mem.world_state, mem.skill_promoter  # Batch 4
+
+    # ── Capability platforms ──────────────────────────────────────── #
+    from atlas.bootstrap.capabilities import build_data_platforms, build_identity_platform
+
+    # Notification adapter for safety confirmer
     class NotificationPlatformAdapter:
         def __init__(self, platform: Any, clock: Clock, ids: IdGenerator) -> None:
             self._platform = platform
@@ -298,6 +325,14 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
                 return None
             return bool(decision.approved)
 
+    # Build identity first (needed by notification)
+    identity_platform = build_identity_platform(
+        db=db,
+        cap_audit=cap_audit,
+        master_key=master_key,
+    )
+
+    # Build notification (requires identity)
     notification_platform = build_notification_platform(
         config_dir=config_dir,
         db=db,
@@ -307,23 +342,27 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         identity=identity_platform,
         callback_base=settings.ntfy_callback_base,
     )
-    notifier_adapter = NotificationPlatformAdapter(notification_platform, clock, ids)
-    active_notifier = notifier_adapter if settings.ntfy_topic else None
-    safety.set_confirmer(CompositeConfirmer(active_notifier, CliConfirmer(), config.notify.confirm_timeout_s))
 
-    # ── Capability infrastructure ─────────────────────────────────── #
-    cap_registry = CapabilityRegistry()
-    cap_health = CapabilityHealth()
-    cap_providers = CapProviderRegistry(cap_health)
-    ext_cap_router = ExtCapabilityRouter(gateway)
-    cap_telemetry = CapabilityTelemetry(cap_audit)
-    cap_dispatcher = CapabilityDispatcher(
-        registry=cap_registry,
-        providers=cap_providers,
-        health=cap_health,
-        safety=safety,
-        telemetry=cap_telemetry,
+    # Build data platforms (require identity and notification)
+    data_platforms = await build_data_platforms(
+        config=config,
+        config_dir=config_dir,
+        db=db,
+        ids=ids,
+        clock=clock,
+        gateway=gateway,
+        retriever=retriever,
+        episodic=episodic,
+        identity=identity_platform,
+        notification_platform=notification_platform,
+        cap_registry=cap_registry,
+        cap_providers=cap_providers,
     )
+    knowledge_platform = data_platforms.knowledge
+    email_platform = data_platforms.email
+    calendar_platform = data_platforms.calendar
+    contacts_platform = data_platforms.contacts
+    known = data_platforms.known_contacts
 
     # ── Sandboxed tools ───────────────────────────────────────────── #
     docker_sandbox = DockerSandbox(
@@ -365,195 +404,18 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         ),
     }
 
-    # ── Memory ────────────────────────────────────────────────────── #
-    from atlas.bootstrap.memory import build_memory
-
-    mem = build_memory(
-        settings=settings,
-        db=db,
-        ids=ids,
-        clock=clock,
-        embedder=embedder,
-        gateway=gateway,
-    )
-    vectors = mem.vectors
-    embedding_worker = mem.embedding_worker
-    episodic, semantic = mem.episodic, mem.semantic
-    user_model, working = mem.user_model, mem.working
-    knowledge_store = mem.knowledge_store
-    retriever, consolidator, pruner = mem.retriever, mem.consolidator, mem.pruner
-    trajectory_store, experience_extractor = mem.trajectory_store, mem.experience_extractor  # Phase 2
-    skill_store, strategy_store = mem.skill_store, mem.strategy_store  # Batch 4
-    world_state, skill_promoter = mem.world_state, mem.skill_promoter  # Batch 4
-
-    # ── Knowledge platform providers ──────────────────────────────── #
-    cap_registry.register(
-        CapabilitySpec(
-            capability=Capability.KNOWLEDGE,
-            safety_tool="knowledge",
-            operations=("search",),
-            default_tier=Tier.AUTO,
-            requires_auth=False,
-            description="Obtain knowledge from memory + official + web sources",
-        )
-    )
-
-    try:
-        ksrc = yaml.safe_load((config_dir / "knowledge_sources.yaml").read_text())
-    except Exception:
-        ksrc = {"official_feeds": {}, "provider_preferences": {}}
-
-    official: list[KnowledgeProvider] = [
-        RSSProvider(name=k, feeds=v) for k, v in ksrc.get("official_feeds", {}).items()
-    ]
-    official += [WikipediaProvider(), ArxivProvider(), GitHubReleasesProvider()]
-    web: list[KnowledgeProvider] = [DuckDuckGoProvider()]
-    if config.models.allow_cloud:
-        try:
-            web.append(BraveSearchProvider(identity_platform, credential_id="brave:default"))
-        except Exception:
-            pass
-        try:
-            web.append(TavilySearchProvider(identity_platform, credential_id="tavily:default"))
-        except Exception:
-            pass
-
-    memory_source = MemoryKnowledgeSource(retriever)
-    parametric = ParametricKnowledgeSource(gateway)
-
-    prefs = ksrc.get("provider_preferences", {})
-
-    def _pref(p_dict: dict[str, int], name: str) -> int:
-        if name in p_dict:
-            return p_dict[name]
-        for k, v in p_dict.items():
-            if k.endswith("*") and name.startswith(k[:-1]):
-                return v
-        return 100
-
-    for p in [*official, *web]:
-        cap_providers.register(p, preference=_pref(prefs, p.name))
-
-    knowledge_router = KnowRouter(gateway)
-    knowledge_platform = KnowledgePlatform(
-        router=knowledge_router,
-        gateway=gateway,
-        episodic=episodic,
-        ids=ids,
-        clock=clock,
-        official=official,
-        web=web,
-        memory_source=memory_source,
-        parametric=parametric,
-    )
-
-    # ── Email platform ────────────────────────────────────────────── #
-    from atlas.capabilities.platforms.email_platform import EmailPlatform
-    from atlas.capabilities.providers.email.gmail import GmailProvider
-
-    cap_registry.register(
-        CapabilitySpec(
-            capability=Capability.EMAIL,
-            safety_tool="email",
-            operations=("read", "search", "compose", "send"),
-            default_tier=Tier.NOTIFY,
-            requires_auth=True,
-            description="Read/search/compose/send email; send is Tier-2 previewed",
-        )
-    )
-
-    try:
-        email_cfg: dict[str, Any] = yaml.safe_load((config_dir / "email.yaml").read_text())
-    except Exception:
-        email_cfg = {"accounts": [{"credential_id": "google:anti@gmail.com"}], "send": {"approval_channels": []}}
-
-    gmail = GmailProvider(identity_platform, credential_id=email_cfg.get("accounts", [{}])[0].get("credential_id", ""))
-    email_platform = EmailPlatform(
-        provider=gmail,
-        notifications=notification_platform,
-        ids=ids,
-        known_contacts=set(email_cfg.get("known_contacts", [])),
-        approval_channels=tuple(email_cfg.get("send", {}).get("approval_channels", [])),
-    )
-
-    # ── Calendar & Contacts ───────────────────────────────────────── #
-    from atlas.capabilities.domain.contacts import KnownContacts
-    from atlas.capabilities.providers.calendar.google_calendar import GoogleCalendarProvider
-    from atlas.capabilities.providers.contacts.google_people import GooglePeopleProvider
-
-    cap_registry.register(
-        CapabilitySpec(
-            capability=Capability.CONTACTS,
-            safety_tool="contacts",
-            operations=("read", "search", "create", "update"),
-            default_tier=Tier.NOTIFY,
-            requires_auth=True,
-            description="Read/search/create/update contacts; writes Tier-2 previewed",
-        )
-    )
-    cap_registry.register(
-        CapabilitySpec(
-            capability=Capability.CALENDAR,
-            safety_tool="calendar",
-            operations=("read", "search", "freebusy", "compose", "create", "update", "delete"),
-            default_tier=Tier.NOTIFY,
-            requires_auth=True,
-            description="Read/search/free-busy + create/update/delete; writes Tier-2 previewed",
-        )
-    )
-
-    try:
-        cal_cfg: dict[str, Any] = yaml.safe_load((config_dir / "calendar.yaml").read_text())
-    except Exception:
-        cal_cfg = {
-            "accounts": [{"credential_id": "google:anti@gmail.com"}],
-            "default_calendar": "primary",
-            "commit": {"approval_channels": []},
-        }
-    try:
-        con_cfg: dict[str, Any] = yaml.safe_load((config_dir / "contacts.yaml").read_text())
-    except Exception:
-        con_cfg = {
-            "accounts": [{"credential_id": "google:anti@gmail.com"}],
-            "known_contacts": {"sync_on_start": False, "seed": []},
-        }
-
-    people = GooglePeopleProvider(identity_platform, credential_id=con_cfg["accounts"][0]["credential_id"])
-    approval_channels = tuple(cal_cfg.get("commit", {}).get("approval_channels", []))
-    contacts_platform = ContactsPlatform(
-        provider=people,
-        notifications=notification_platform,
-        ids=ids,
-        approval_channels=approval_channels,
-        seed=set(con_cfg.get("known_contacts", {}).get("seed", [])),
-    )
-
-    kc_cfg = con_cfg.get("known_contacts", {})
-    if kc_cfg.get("sync_on_start", False):
-        known = await contacts_platform.sync_known()
-    else:
-        known = KnownContacts(set(kc_cfg.get("seed", [])))
-
-    email_platform.set_known_contacts(known)
-
-    gcal = GoogleCalendarProvider(identity_platform, credential_id=cal_cfg["accounts"][0]["credential_id"])
-    calendar_platform = CalendarPlatform(
-        provider=gcal,
-        notifications=notification_platform,
-        ids=ids,
-        known=known,
-        approval_channels=approval_channels,
-        default_calendar=cal_cfg.get("default_calendar", "primary"),
-    )
-
     # ── Browser platform (optional) ───────────────────────────────── #
     browser_platform: BrowserPlatform | None = None
     if config.browser.enabled:
         browser_platform = build_browser_platform(
             ids=ids,
             notifications=notification_platform,
-            approval_channels=tuple(approval_channels),
+            approval_channels=tuple(),  # approval_channels defined in data_platforms builder
         )
+
+    notifier_adapter = NotificationPlatformAdapter(notification_platform, clock, ids)
+    active_notifier = notifier_adapter if settings.ntfy_topic else None
+    safety.set_confirmer(CompositeConfirmer(active_notifier, CliConfirmer(), config.notify.confirm_timeout_s))
 
     # ── Orchestration ─────────────────────────────────────────────── #
     from atlas.bootstrap.orchestration import build_orchestration
@@ -574,6 +436,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         bus=bus,
         tools=tools,
         episodic=episodic,
+        llm_tracker=llm_tracker,  # Batch 10.3: cost tracking for trajectories
         trajectory_store=trajectory_store,  # Phase 2
         experience_extractor=experience_extractor,  # Phase 2
         skill_store=skill_store,  # Batch 4
