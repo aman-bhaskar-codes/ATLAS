@@ -27,7 +27,7 @@
 <!-- ═══ BADGES — ROW 1: STATUS (with pulse animation on hover) ═══ -->
 <p>
   <a href="https://github.com/aman-bhaskar-codes/ATLAS/actions" class="badge-pulse"><img src="https://img.shields.io/badge/CI-passing-00d68f?style=for-the-badge&logo=github-actions&logoColor=white&labelColor=0d1117" alt="CI" /></a>
-  <span data-counter data-target="149"><img src="https://img.shields.io/badge/Tests-149_passing-00d68f?style=for-the-badge&logo=pytest&logoColor=white&labelColor=0d1117" alt="Tests" /></span>
+  <span data-counter data-target="348"><img src="https://img.shields.io/badge/Tests-348_passing-00d68f?style=for-the-badge&logo=pytest&logoColor=white&labelColor=0d1117" alt="Tests" /></span>
   <a href="https://python.org" class="badge-pulse"><img src="https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white&labelColor=0d1117" alt="Python" /></a>
   <a href="https://docs.astral.sh/uv/" class="badge-pulse"><img src="https://img.shields.io/badge/uv-managed-7c3aed?style=for-the-badge&logo=astral&logoColor=white&labelColor=0d1117" alt="uv" /></a>
 </p>
@@ -71,6 +71,8 @@
 <br/>
 
 > **ATLAS is not another LLM wrapper.** It is a ground-up, multi-phase autonomous agent runtime that plans, reasons, acts, and *learns* — while never doing anything without your explicit permission.
+> 
+> 📄 **Latest Update:** ATLAS now supports a fully local **Zero-Cost-First Platform Expansion**. See [ZERO_COST_ARCHITECTURE.md](ZERO_COST_ARCHITECTURE.md) for details on running $0 hardware-first DAGs.
 
 <table>
 <tr>
@@ -92,7 +94,7 @@ A production-grade system with:
 &nbsp;&nbsp;✅&nbsp; **Multi-agent DAG** decomposition with parallel execution  
 &nbsp;&nbsp;✅&nbsp; **OTAR reasoning** — Observe → Think → Act → Reflect  
 &nbsp;&nbsp;✅&nbsp; **4-layer memory** with vector search and user modeling  
-&nbsp;&nbsp;✅&nbsp; **<span data-counter data-target="149">149</span> tests**, zero mocked business logic
+&nbsp;&nbsp;✅&nbsp; **<span data-counter data-target="348">348</span> tests**, zero mocked business logic
 
 </td>
 <td width="50%" data-scroll-reveal>
@@ -512,7 +514,7 @@ Each specialist has **its own system prompt, tool permissions, and model prefere
 </tr>
 <tr class="comparison-row atlas-row">
   <td><strong>🔴 Production-Ready Tests</strong></td>
-  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span> 149</td>
+  <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span> 348</td>
   <td align="center" style="color: #d29922;">⚠️ Limited</td>
   <td align="center"><span class="checkmark" style="color: #3fb950; font-size: 20px;">✅</span></td>
   <td align="center" style="color: #d29922;">⚠️ Limited</td>
@@ -719,7 +721,7 @@ atlas/
 │   │
 │   └── app.py                       # 🎯 Composition root (all DI wiring)
 │
-├── tests/                           # ✅ 149 collected tests
+├── tests/                           # ✅ 348 collected tests
 ├── frontend/                        # 💻 Next.js dashboard
 └── pyproject.toml                   # 📦 Project configuration
 ```
@@ -738,7 +740,7 @@ atlas/
 <br/>
 
 ```bash
-uv run pytest                  # Full suite (149 tests)
+uv run pytest                  # Full suite (348 tests)
 uv run pytest -v               # Verbose output
 uv run ruff check .            # Linter
 uv run mypy                    # Type checking (strict)
@@ -772,13 +774,14 @@ timeline
         Phase 7 ✅ : Multi-Agent DAGs
                    : Evaluation Loop
                    : Workflow Learning
+    section Zero-Cost
+        Expansion ✅ : Local-First Policies
+                     : Offline Embeddings
+                     : Next.js Dashboards
+                     : CLI Dashboards
     section Next
-        Phase 8 🔜 : RAG Pipeline
-                   : Earned Autonomy
-        Phase 9 🔮 : Agent Swarms
-                   : Cross-Agent Learning
-        Phase 10 🔮 : Voice Interface
-                    : Plugin Marketplace
+        Phase 8 🔜 : Cross-Agent Learning
+                   : Autonomous Scrapers
 ```
 
 <!-- ═══════════════════════════════════════════════════════════════ -->

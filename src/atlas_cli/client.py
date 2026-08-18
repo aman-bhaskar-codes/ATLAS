@@ -9,7 +9,7 @@ import websockets
 
 
 class AtlasClient:
-    def __init__(self, base_url: str = "http://127.0.0.1:8000") -> None:
+    def __init__(self, base_url: str = "http://127.0.0.1:8730") -> None:
         self.base_url = base_url.rstrip("/")
         self.ws_url = self.base_url.replace("http://", "ws://").replace("https://", "wss://")
 

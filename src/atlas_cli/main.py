@@ -41,7 +41,7 @@ def run_task(
             # 1. Start the task
             console.print("[dim]Creating task...[/]")
             task_info = await client.create_task(request)
-            task_id = task_info["task_id"]
+            task_id = task_info["id"]
             console.print(f"[green]✓ Task created:[/] [cyan]{task_id}[/]\n")
 
             if watch:
@@ -564,6 +564,48 @@ def providers_health() -> None:
                 f"{p.get('quota_pct', 100)}%",
                 f"{p.get('avg_latency_ms', 0)}ms",
             )
+        console.print(table)
+
+    _run(go())
+
+
+@providers_app.command("verify")
+def providers_verify() -> None:
+    """Verify free-tier provider availability (OpenRouter discovery + local Ollama)."""
+    from rich.table import Table
+
+    async def go() -> None:
+        table = Table(title="Free-Tier Verification")
+        table.add_column("Check", style="cyan")
+        table.add_column("Status", justify="center")
+        table.add_column("Detail", style="dim")
+
+        # Ollama local check
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=3) as c:
+                r = await c.get("http://localhost:11434/api/tags")
+                n = len(r.json().get("models", []))
+            table.add_row("Ollama (local)", "[green]✓[/]", f"{n} models installed")
+        except Exception:
+            table.add_row("Ollama (local)", "[red]✗[/]", "not running (local_free still works once started)")
+
+        # OpenRouter free-model discovery
+        from atlas.intelligence.providers.openrouter_free import discover_free_models
+        discovery = await discover_free_models()
+        if discovery.ok:
+            table.add_row(
+                "OpenRouter free models",
+                "[green]✓[/]",
+                f"{len(discovery.models)} free now · verified {discovery.verified_at:%Y-%m-%d %H:%M} UTC",
+            )
+            for m in discovery.models[:5]:
+                table.add_row(f"  {m.id}", "[blue]FREE[/]", m.name)
+            if len(discovery.models) > 5:
+                table.add_row("  ...", "", f"+{len(discovery.models) - 5} more")
+        else:
+            table.add_row("OpenRouter free models", "[yellow]○ unreachable[/]", "degraded to static config (offline is fine)")
+
         console.print(table)
 
     _run(go())
