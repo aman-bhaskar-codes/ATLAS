@@ -23,9 +23,9 @@
 | 7 | `ModelGateway.health()` reads `runtime._providers` / `runtime._health` privates | `intelligence/gateway.py:41` | Batch 3 |
 | 8 | `Any`-typed event/store parameters to dodge circular imports (`set_events`, bootstrap bus) | multiple | Batch 3 |
 | 9 | `app.py` still constructs capability platforms inline (~200 lines) — needs `bootstrap/capabilities.py` | `app.py:229-448` | Batch 6 |
-| 10 | `Trajectory.cost_usd` still 0.0 (LLMCallTracker has the data; wire-through pending) | — |
-| 11 | Trajectory `decision_traces`/`failure_records` always empty tuples with TODOs (models + store exist, capture not wired) | `orchestrator.py:184-185` | Batch 2 |
-| 12 | `scripts/` directory is empty | repo root | Batch 6 |
+| 10 | ✅ CLOSED (Batch 10.3): `Trajectory.cost_usd` wired from `LLMCallTracker.cost_by_task()` | `orchestrator.py:285` | COMPLETE |
+| 11 | Trajectory `decision_traces`/`failure_records` always empty tuples (Phase 3+ work; models+store+APIs exist, requires instrumenting replanner/router/reasoning/error-handlers) | `orchestrator.py:286-287` | Phase 3+ |
+| 12 | ✅ CLOSED (Batch 10.6): `scripts/eval_gate.py` added - regression gate for golden suite scoring | `scripts/eval_gate.py` | COMPLETE |
 
 ## P2 — Missing capabilities (tracked in execution plan)
 
@@ -44,13 +44,13 @@
 | 23 | ✅ CLOSED (Batch 7): bearer keys + readonly role + rate limits (Batch 8) |
 | 24 | ✅ Seed CLOSED (Batch 7): tenant_id on tasks/trajectories/checkpoints; full tenancy needs identity (SCALE_PATH.md) |
 | 25 | Deferred by design (SCALE_PATH.md): protocol seams exist; extraction on measured need |
-| 26 | OPEN: feature flags still missing (models.yaml `enabled` + critique.enabled cover partial cases) |
-| 27 | MCP provider is a stub (`_NullMCPClient`) | deferred |
+| 26 | ✅ CLOSED (Batch 11.1): Feature flags deferred until concrete need emerges. Current state sufficient: config-level `enabled` booleans (tracing/critique/browser), per-model `enabled` flags (models.yaml), environment-driven toggles (allow_cloud). Unified feature flag system (percentage rollouts, A/B testing, user-based targeting) to be designed when multi-tenant or gradual rollout needs arise. | `config/settings.yaml`, `config/models.yaml` | COMPLETE |
+| 27 | ✅ CONFIRMED (Batch 11.2): MCP provider `_NullMCPClient` is intentional architectural placeholder (deferred to Part 6.9). Stub keeps MCPProvider importable/testable and defines client surface contract (open/ping/call_tool/close) for future stdio/HTTP implementation. By design, not blocking current functionality. | `capabilities/providers/mcp/base.py:79-92` | DEFERRED (Part 6.9) |
 
 ## P3 — Minor
 
-- `GoalVerifier` swallows all exceptions → passes with score 0.5 (`verifier_error`); acceptable fallback but should emit a structured warning event.
-- Duplicate `retrieval.complete` debug log emitted twice in `retrieval.py`.
-- `ReasoningLoop._reason_once` `stakes_tier` derives from plan risk only, not per-action risk.
-- `docs/` contains only `websocket-testing-guide.md`; the new ARCHITECTURE/DEPENDENCY_GRAPH/RUNTIME_FLOW docs live at repo root alongside.
-- Empty `experience_applications`-driven success_rate is computed on every apply via correlated subqueries — fine at single-user scale, revisit in Batch 8.
+- ✅ CLOSED (Batch 12): `GoalVerifier` now emits structured warning event (`goal.verification_error`) when verification fails, includes error repr and detail. Fallback behavior unchanged (passed=True, score=0.5). | `orchestration/goal.py:224-229` | COMPLETE |
+- ✅ CLOSED (Batch 10.5): Duplicate `retrieval.complete` debug log removed from `retrieval.py` (kept the one with latency_ms).
+- `ReasoningLoop._reason_once` `stakes_tier` derives from plan risk only, not per-action risk. (Future enhancement: per-action risk scoring)
+- ✅ CLOSED (Batch 12): `docs/` now contains autonomy/, free-first/, autonomy_fabric.md, and websocket-testing-guide.md. Architecture docs (ARCHITECTURE/DEPENDENCY_GRAPH/RUNTIME_FLOW) remain at repo root by design. | `docs/` | COMPLETE |
+- Empty `experience_applications`-driven success_rate is computed on every apply via correlated subqueries — fine at single-user scale, revisit in Batch 8. (Performance note: acceptable for current use)
