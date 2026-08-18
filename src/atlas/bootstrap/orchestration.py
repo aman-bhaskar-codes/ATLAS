@@ -74,6 +74,7 @@ def build_orchestration(
     bus: Any,
     tools: dict[str, Tool],
     episodic: Any,
+    llm_tracker: Any = None,  # LLMCallTracker for trajectory cost tracking
     trajectory_store: Any = None,  # Phase 2
     experience_extractor: Any = None,  # Phase 2
     skill_store: Any = None,  # Batch 4
@@ -187,6 +188,7 @@ def build_orchestration(
         reasoning=reasoning,
         registry=tool_registry,
         events=events,
+        llm_tracker=llm_tracker,  # Batch 10: cost tracking
         trajectory_store=trajectory_store,  # Phase 2
         experience_extractor=experience_extractor,  # Phase 2
         skill_store=skill_store,  # Batch 4

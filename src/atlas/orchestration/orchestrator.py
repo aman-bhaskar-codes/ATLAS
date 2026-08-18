@@ -59,6 +59,7 @@ class Orchestrator:
         reasoning: ReasoningLoop,
         registry: ToolRegistry,
         events: EventPublisher,
+        llm_tracker: Any = None,  # Batch 10: LLM cost tracking for trajectories
         trajectory_store: TrajectoryStore | None = None,  # Phase 2
         experience_extractor: ExperienceExtractor | None = None,  # Phase 2
         skill_store: Any = None,  # Batch 4: experience-informed planning
@@ -75,6 +76,7 @@ class Orchestrator:
         self._reasoning = reasoning
         self._registry = registry
         self._events = events
+        self._llm_tracker = llm_tracker
         self._trajectory_store = trajectory_store
         self._experience_extractor = experience_extractor
         self._skill_store = skill_store
@@ -259,6 +261,16 @@ class Orchestrator:
         from atlas.memory.trajectory import Trajectory
 
         _plan_risk: Any = getattr(plan, "risk", "low")
+        
+        # Batch 10.3: Calculate actual cost from LLM tracker
+        cost_usd = 0.0
+        if self._llm_tracker:
+            try:
+                cost_data = await self._llm_tracker.cost_by_task(task.id)
+                cost_usd = float(cost_data.get("total_cost", 0.0))
+            except Exception as exc:
+                _log.warning("trajectory.cost_calculation_failed", event_type="orchestration", error=repr(exc))
+        
         # Build Trajectory object from task execution data
         trajectory = Trajectory(
             id=self._ids.execution_id(),
@@ -271,8 +283,8 @@ class Orchestrator:
             plan_confidence=getattr(plan, "confidence", 0.5),
             actions=result.actions,
             observations=result.observations,
-            decision_traces=(),  # TODO: Collect from replanner/router in future
-            failure_records=(),  # TODO: Collect from error handlers in future
+            decision_traces=(),  # Phase 3+: requires instrumenting replanner/router/reasoning
+            failure_records=(),  # Phase 3+: requires error handler instrumentation
             replan_count=result.replan_count,
             verification_passed=result.verification_passed,
             verification_score=result.verification_score,
@@ -282,7 +294,7 @@ class Orchestrator:
             steps_taken=result.steps_taken,
             latency_ms=result.latency_ms,
             tokens_used=result.tokens_used,
-            cost_usd=0.0,  # TODO: Calculate from model gateway costs
+            cost_usd=cost_usd,
             model_calls=result.model_calls,
             tool_calls=result.tool_calls,
             created_ts=task.created_ts,
