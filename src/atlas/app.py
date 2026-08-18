@@ -12,17 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from atlas.capabilities.browser.builder import build_browser_platform
 from atlas.capabilities.browser.platform import BrowserPlatform
 from atlas.capabilities.dispatcher import CapabilityDispatcher
-from atlas.capabilities.identity.auth.api_key import ApiKeyStrategy
-from atlas.capabilities.identity.auth.browser_session import BrowserSessionStrategy
-from atlas.capabilities.identity.auth.jwt import JwtStrategy
-from atlas.capabilities.identity.models import CredentialKind
 from atlas.capabilities.identity.platform import IdentityPlatform
-from atlas.capabilities.identity.secret_store import SecretStore
 from atlas.capabilities.notification.builder import build_notification_platform
 from atlas.capabilities.notification.platform import NotificationPlatform
 from atlas.capabilities.observability.telemetry import CapabilityTelemetry
@@ -30,18 +23,7 @@ from atlas.capabilities.platforms.calendar_platform import CalendarPlatform
 from atlas.capabilities.platforms.contacts_platform import ContactsPlatform
 from atlas.capabilities.platforms.email_platform import EmailPlatform
 from atlas.capabilities.platforms.knowledge_platform import KnowledgePlatform
-from atlas.capabilities.platforms.knowledge_router import KnowledgeRouter as KnowRouter
-from atlas.capabilities.providers.knowledge.arxiv import ArxivProvider
-from atlas.capabilities.providers.knowledge.base import KnowledgeProvider
-from atlas.capabilities.providers.knowledge.brave import BraveSearchProvider
-from atlas.capabilities.providers.knowledge.duckduckgo import DuckDuckGoProvider
-from atlas.capabilities.providers.knowledge.github_releases import GitHubReleasesProvider
-from atlas.capabilities.providers.knowledge.memory_source import MemoryKnowledgeSource
-from atlas.capabilities.providers.knowledge.parametric import ParametricKnowledgeSource
-from atlas.capabilities.providers.knowledge.rss import RSSProvider
-from atlas.capabilities.providers.knowledge.tavily import TavilySearchProvider
-from atlas.capabilities.providers.knowledge.wikipedia import WikipediaProvider
-from atlas.capabilities.registry.capability import Capability, CapabilityRegistry, CapabilitySpec
+from atlas.capabilities.registry.capability import CapabilityRegistry
 from atlas.capabilities.registry.health import CapabilityHealth
 from atlas.capabilities.registry.provider_registry import ProviderRegistry as CapProviderRegistry
 from atlas.capabilities.router import CapabilityRouter as ExtCapabilityRouter
@@ -58,7 +40,6 @@ from atlas.infra.metrics import Metrics
 from atlas.infra.registry import ServiceRegistry
 from atlas.infra.scheduler import CronScheduler
 from atlas.infra.tracing import Tracer
-from atlas.infra.types import Tier
 from atlas.infra.workflows import WorkflowStore
 from atlas.intelligence.gateway import ModelGateway
 from atlas.interfaces.notify import CliConfirmer, CompositeConfirmer
@@ -362,7 +343,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     email_platform = data_platforms.email
     calendar_platform = data_platforms.calendar
     contacts_platform = data_platforms.contacts
-    known = data_platforms.known_contacts
+    _ = data_platforms.known_contacts  # Reserved for future contact-aware features
 
     # ── Sandboxed tools ───────────────────────────────────────────── #
     docker_sandbox = DockerSandbox(

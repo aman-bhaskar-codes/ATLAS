@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class DurabilityTier(str, enum.Enum):
+class DurabilityTier(enum.StrEnum):
     """Event durability tiers."""
 
     EPHEMERAL = "ephemeral"      # In-memory only (or drops if not processed)
@@ -21,7 +21,7 @@ class DurabilityTier(str, enum.Enum):
     REPLAYABLE = "replayable"    # Persisted indefinitely for historical replay
 
 
-class DeliveryStatus(str, enum.Enum):
+class DeliveryStatus(enum.StrEnum):
     """Event delivery statuses."""
 
     PENDING = "pending"

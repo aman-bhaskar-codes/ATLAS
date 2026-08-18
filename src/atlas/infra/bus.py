@@ -150,7 +150,8 @@ class MessageBus:
                 if self._closed:
                     break
                 cur = await self._db.conn.execute(
-                    "SELECT id, type, payload FROM events WHERE delivery_status = 'pending' ORDER BY occurred_at ASC LIMIT 50"
+                    "SELECT id, type, payload FROM events "
+                    "WHERE delivery_status = 'pending' ORDER BY occurred_at ASC LIMIT 50"
                 )
                 rows = await cur.fetchall()
 
@@ -189,7 +190,9 @@ class MessageBus:
                     
                     # Global subscribers
                     if self._global_subs:
-                        global_results = await asyncio.gather(*(g(topic, payload_json) for g in self._global_subs), return_exceptions=True)
+                        global_results = await asyncio.gather(
+                            *(g(topic, payload_json) for g in self._global_subs), return_exceptions=True
+                        )
                         for res in global_results:
                             if isinstance(res, Exception):
                                 _log.warning("bus.global_handler_error", event_type="bus", error=repr(res))
@@ -197,8 +200,9 @@ class MessageBus:
                     delivered_ids.append(eid)
 
                 if delivered_ids:
+                    placeholders = ','.join('?' * len(delivered_ids))
                     await self._db.conn.execute(
-                        f"UPDATE events SET delivery_status = 'delivered' WHERE id IN ({','.join('?' * len(delivered_ids))})", 
+                        f"UPDATE events SET delivery_status = 'delivered' WHERE id IN ({placeholders})",
                         delivered_ids
                     )
                 if dead_letter_ids:

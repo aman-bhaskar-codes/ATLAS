@@ -69,7 +69,7 @@ class TestIdempotencyStore:
         await store.put(key, fingerprint, response)
 
         # Second insert with same key should fail
-        with pytest.raises(Exception):  # aiosqlite.IntegrityError in practice
+        with pytest.raises(Exception):  # noqa: B017 - aiosqlite.IntegrityError in practice
             await store.put(key, "fp2", "{}")
 
     async def test_multiple_keys_isolated(self, store: IdempotencyStore) -> None:

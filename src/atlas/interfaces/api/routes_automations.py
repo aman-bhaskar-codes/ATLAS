@@ -42,7 +42,7 @@ async def get_automation(
     try:
         return await registry.get(auto_id)
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.put("/{auto_id}")
@@ -58,7 +58,7 @@ async def update_automation(
         await registry.update(auto)
         return await registry.get(auto_id)
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.delete("/{auto_id}")
@@ -71,4 +71,4 @@ async def delete_automation(
         await registry.delete(auto_id)
         return {"status": "ok", "id": auto_id}
     except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
