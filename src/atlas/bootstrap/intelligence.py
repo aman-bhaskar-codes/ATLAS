@@ -56,6 +56,7 @@ class IntelligenceComponents:
     llm_tracker: LLMCallTracker
     quota_governor: FreeQuotaGovernor
     profile: ProfileConfig
+    registry: ModelRegistry
 
 
 async def build_intelligence(
@@ -167,42 +168,17 @@ async def build_intelligence(
 
         # ── Paid providers (only if profile allows) ───────────────────
         if "paid" in profile.allowed_cost_classes:
-            if settings.deepseek_api_key:
+            if settings.openrouter_api_key:
                 provider_registry.register(
                     OpenAICompatibleProvider(
-                        name="deepseek",
+                        name="openrouter",
                         base_url="https://openrouter.ai/api/v1",
-                        api_key=settings.deepseek_api_key,
+                        api_key=settings.openrouter_api_key,
                         timeout_s=config.models.cloud_timeout_s,
                     )
                 )
-            if settings.glm_api_key:
-                provider_registry.register(
-                    OpenAICompatibleProvider(
-                        name="glm",
-                        base_url="https://openrouter.ai/api/v1",
-                        api_key=settings.glm_api_key,
-                        timeout_s=config.models.cloud_timeout_s,
-                    )
-                )
-            if settings.kimi_api_key:
-                provider_registry.register(
-                    OpenAICompatibleProvider(
-                        name="kimi",
-                        base_url="https://openrouter.ai/api/v1",
-                        api_key=settings.kimi_api_key,
-                        timeout_s=config.models.cloud_timeout_s,
-                    )
-                )
-            if settings.mimo_api_key:
-                provider_registry.register(
-                    OpenAICompatibleProvider(
-                        name="mimo",
-                        base_url="https://openrouter.ai/api/v1",
-                        api_key=settings.mimo_api_key,
-                        timeout_s=config.models.cloud_timeout_s,
-                    )
-                )
+                _log.info("provider.registered", event_type="lifecycle", provider="openrouter", cost_class="free_quota")
+            
             if settings.anthropic_api_key:
                 try:
                     from atlas.intelligence.providers.anthropic import AnthropicProvider
@@ -227,6 +203,17 @@ async def build_intelligence(
 
     # ── Model registry + selection ────────────────────────────────────
     model_registry = ModelRegistry.from_yaml(config_dir / "models.yaml")
+    
+    if settings.openrouter_api_key:
+        try:
+            from atlas.intelligence.registry.openrouter_sync import sync_openrouter_free_models
+            synced = await sync_openrouter_free_models(model_registry)
+            _log.info("openrouter_sync.startup", event_type="lifecycle", synced=synced)
+        except ImportError:
+            _log.warning("openrouter_sync.unavailable", event_type="lifecycle")
+        except Exception as exc:
+            _log.warning("openrouter_sync.startup_failed", event_type="lifecycle", error=str(exc))
+
     capability_index = CapabilityIndex(model_registry)
 
     # Phase 0: Construct LLMCallTracker before InferenceRuntime so it can be wired in
@@ -264,4 +251,5 @@ async def build_intelligence(
         llm_tracker=llm_tracker,
         quota_governor=quota_governor,
         profile=profile,
+        registry=model_registry,
     )

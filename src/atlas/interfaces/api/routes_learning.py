@@ -11,6 +11,8 @@ GET  /api/v1/learning/strategies        Strategies (optionally only active)
 GET  /api/v1/learning/world             World-state entities by type
 GET  /api/v1/learning/evaluation/recent Recent evaluation runs
 GET  /api/v1/learning/analytics         Aggregate learning analytics
+POST /api/v1/learning/consolidate       Trigger semantic consolidation
+POST /api/v1/learning/promote           Trigger skill promotion
 """
 
 from __future__ import annotations
@@ -280,4 +282,42 @@ async def analytics(request: Request) -> LearningAnalytics:
         active_strategies=st["n"],
         recent_verification_pass_rate=verif["rate"],
         generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+class ConsolidateResultOut(BaseModel):
+    episodes: int
+    applied: int
+    proposed: int
+
+
+@router.post("/learning/consolidate", response_model=ConsolidateResultOut)
+async def consolidate(request: Request) -> ConsolidateResultOut:
+    """Trigger memory consolidation (episodic -> semantic/proposals)."""
+    atlas = request.app.state.atlas
+    if not atlas.consolidator:
+        raise HTTPException(500, "Consolidator not initialized")
+    result = await atlas.consolidator.run()
+    return ConsolidateResultOut(
+        episodes=result.get("episodes", 0),
+        applied=result.get("applied", 0),
+        proposed=result.get("proposed", 0)
+    )
+
+
+class PromoteResultOut(BaseModel):
+    promoted_skills: int
+    skill_names: list[str]
+
+
+@router.post("/learning/promote", response_model=PromoteResultOut)
+async def promote(request: Request, limit: int = Query(20, ge=1, le=100)) -> PromoteResultOut:
+    """Trigger experience-to-skill promotion."""
+    atlas = request.app.state.atlas
+    if not atlas.skill_promoter:
+        raise HTTPException(500, "SkillPromoter not initialized")
+    skills = await atlas.skill_promoter.promote_from_experiences(limit=limit)
+    return PromoteResultOut(
+        promoted_skills=len(skills),
+        skill_names=[s.name for s in skills]
     )

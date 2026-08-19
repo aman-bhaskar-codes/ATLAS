@@ -90,10 +90,9 @@ async def list_tools(request: Request) -> list[ToolOut]:
 
 
 @router.get("/ops/models", response_model=list[ModelOut])
-async def list_models(include_disabled: bool = Query(False)) -> list[ModelOut]:
-    from atlas.intelligence.registry.model_registry import ModelRegistry
-
-    registry = ModelRegistry.from_yaml(_MODELS_YAML)
+async def list_models(request: Request, include_disabled: bool = Query(False)) -> list[ModelOut]:
+    atlas = request.app.state.atlas
+    registry = atlas.model_registry
     return [
         ModelOut(
             id=s.id,

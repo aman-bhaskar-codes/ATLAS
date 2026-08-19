@@ -661,6 +661,47 @@ def providers_verify() -> None:
     _run(go())
 
 
+@providers_app.command("sync-openrouter")
+def providers_sync_openrouter() -> None:
+    """Sync dynamic free models from OpenRouter."""
+    async def go() -> None:
+        try:
+            from pathlib import Path
+
+            from rich.table import Table
+
+            from atlas.intelligence.registry.model_registry import ModelRegistry
+            from atlas.intelligence.registry.openrouter_sync import sync_openrouter_free_models
+            
+            config_dir = Path(__file__).resolve().parents[2] / "config"
+            registry = ModelRegistry.from_yaml(config_dir / "models.yaml")
+            
+            console.print("[dim]Fetching live free models from OpenRouter...[/]")
+            synced = await sync_openrouter_free_models(registry)
+            
+            if synced > 0:
+                console.print(f"[green]✓ Successfully synced {synced} free OpenRouter models.[/]")
+                
+                table = Table(title="Dynamic Free Models")
+                table.add_column("Model ID", style="cyan")
+                table.add_column("Provider Model", style="bold")
+                table.add_column("Context Length", justify="right")
+                
+                for spec in registry.all():
+                    if spec.id.startswith("openrouter-dynamic-"):
+                        table.add_row(spec.id, spec.provider_model, str(spec.context_length))
+                console.print(table)
+            else:
+                console.print("[yellow]⚠ Sync completed but 0 models were returned (check network/API key).[/]")
+                
+        except Exception as exc:
+            console.print(f"[red]Error during OpenRouter sync:[/] {exc}")
+            import traceback
+            console.print("[dim]" + traceback.format_exc() + "[/]")
+
+    _run(go())
+
+
 # ── atlas automations ─────────────────────────────────────────────────────
 
 automations_app = typer.Typer(help="Manage automations")
@@ -798,6 +839,52 @@ def cost_enforce(
         raise typer.Exit(1)
     console.print(f"[green]✓[/] Set ATLAS_COST_POLICY={mode}")
     console.print(f"[dim]To persist: export ATLAS_COST_POLICY={mode}[/]")
+
+
+# ── atlas memory ────────────────────────────────────────────────────────────
+
+memory_app = typer.Typer(help="Manage memory consolidation and skill promotion")
+app.add_typer(memory_app, name="memory")
+
+
+@memory_app.command("consolidate")
+def memory_consolidate() -> None:
+    """Trigger memory consolidation (episodic -> semantic/proposals)."""
+    async def go() -> None:
+        console.print("[dim]Triggering memory consolidation...[/]")
+        try:
+            resp = await client.trigger_consolidation()
+            episodes = resp.get("episodes", 0)
+            applied = resp.get("applied", 0)
+            proposed = resp.get("proposed", 0)
+            console.print("[green]✓ Consolidation complete[/]")
+            console.print(f"Processed: {episodes} episodes")
+            console.print(f"Applied facts: {applied}")
+            console.print(f"Proposed for review: {proposed}")
+        except Exception as exc:
+            console.print(f"[red]Error during consolidation:[/] {exc}")
+    _run(go())
+
+
+@memory_app.command("promote")
+def memory_promote(limit: int = typer.Option(20, help="Max experiences to check")) -> None:
+    """Trigger experience-to-skill promotion."""
+    async def go() -> None:
+        console.print("[dim]Checking for promotable experiences...[/]")
+        try:
+            resp = await client.trigger_promotion(limit=limit)
+            promoted = resp.get("promoted_skills", 0)
+            names = resp.get("skill_names", [])
+            console.print("[green]✓ Promotion check complete[/]")
+            if promoted > 0:
+                console.print(f"Promoted {promoted} new skills:")
+                for n in names:
+                    console.print(f" - {n}")
+            else:
+                console.print("No experiences met promotion thresholds yet.")
+        except Exception as exc:
+            console.print(f"[red]Error during promotion:[/] {exc}")
+    _run(go())
 
 
 # ── atlas models ──────────────────────────────────────────────────────────

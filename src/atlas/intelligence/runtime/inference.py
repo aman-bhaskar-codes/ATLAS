@@ -106,6 +106,7 @@ class InferenceRuntime:
                 usage=comp.usage,
                 latency_ms=latency,
                 tool_calls=comp.tool_calls,
+                reasoning_details=comp.reasoning_details,
             )
 
         try:

@@ -35,13 +35,10 @@ class Settings(BaseSettings):
     ntfy_topic: str = ""
     ntfy_callback_base: str = "http://localhost:8730"
     # ── API keys ──────────────────────────────────────────────────────
-    deepseek_api_key: str = ""
-    glm_api_key: str = ""
-    kimi_api_key: str = ""
-    mimo_api_key: str = ""
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
     groq_api_key: str = ""
+    openrouter_api_key: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
     master_key: str = ""
     api_keys: str = ""  # comma-separated; 'ro:' prefix = readonly key (Batch 7)
     # ── Zero-cost-first policy ────────────────────────────────────────

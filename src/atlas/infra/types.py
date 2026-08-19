@@ -214,6 +214,7 @@ class ModelResponse(_Frozen):
     latency_ms: int = 0
     truncated: bool = False
     tool_calls: tuple[ProviderToolCall, ...] = ()  # non-empty = model chose tools
+    reasoning_details: str | None = None
 
 
 class AuditRecord(_Frozen):

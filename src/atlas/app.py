@@ -141,6 +141,7 @@ class Atlas:
     tool_router: Any = None  # Batch 6: operator surface
     tool_health: Any = None  # Batch 6
     checkpoints: Any = None  # Batch 7
+    model_registry: Any = None  # Added for frontend dynamic model listing
 
     async def start(self) -> None:
         # lifecycle.start() calls db.start() and bus.start() via the service registry
@@ -393,6 +394,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
             notifications=notification_platform,
             approval_channels=tuple(),  # approval_channels defined in data_platforms builder
         )
+        from atlas.tools.browser import BrowserTool
+        tools["browser"] = BrowserTool(platform=browser_platform, ids=ids)
 
     notifier_adapter = NotificationPlatformAdapter(notification_platform, clock, ids)
     active_notifier = notifier_adapter if settings.ntfy_topic else None
@@ -468,6 +471,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         safety=safety,
         tools=tools,
         gateway=gateway,
+        model_registry=intel.registry,
         notification_platform=notification_platform,
         vectors=vectors,
         embedder=embedder,

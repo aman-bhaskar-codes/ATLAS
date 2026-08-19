@@ -486,5 +486,13 @@ class ReasoningLoop:
             step=counter.steps,
         )
         thought, action = self._parser.parse(resp.text, counter.steps)
+        if hasattr(resp, "reasoning_details") and resp.reasoning_details:
+            # Recreate thought with reasoning_details
+            thought = Thought(
+                step=thought.step,
+                content=thought.content,
+                confidence=thought.confidence,
+                reasoning_details=resp.reasoning_details,
+            )
         self._validator.validate(action)
         return thought, action

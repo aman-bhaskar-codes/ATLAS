@@ -27,6 +27,7 @@ class Message(BaseModel):
     model_config = {"frozen": True}
     role: Role
     content: str
+    reasoning_details: str | None = None
 
 
 class Usage(BaseModel):
@@ -111,6 +112,7 @@ class InferenceResponse(BaseModel):
     fell_back: bool = False
     truncated: bool = False
     tool_calls: tuple[ProviderToolCall, ...] = ()
+    reasoning_details: str | None = None
 
 
 class StreamChunk(BaseModel):

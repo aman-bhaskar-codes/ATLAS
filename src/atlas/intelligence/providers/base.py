@@ -20,10 +20,12 @@ class ProviderCompletion:
         text: str,
         usage: Usage,
         tool_calls: tuple[ProviderToolCall, ...] = (),
+        reasoning_details: str | None = None,
     ) -> None:
         self.text = text
         self.usage = usage
         self.tool_calls = tool_calls
+        self.reasoning_details = reasoning_details
 
 
 class Provider(Protocol):

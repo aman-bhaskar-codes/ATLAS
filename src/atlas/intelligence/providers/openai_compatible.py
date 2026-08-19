@@ -59,8 +59,17 @@ class OpenAICompatibleProvider:
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": stream,
-            "messages": [{"role": m.role.value, "content": m.content} for m in messages],
+            "messages": [
+                {
+                    "role": m.role.value,
+                    "content": m.content,
+                    **({"reasoning_details": m.reasoning_details} if m.reasoning_details else {})
+                }
+                for m in messages
+            ],
         }
+        if self._is_openrouter:
+            payload["reasoning"] = {"enabled": True}
         if tools:
             payload["tools"] = [
                 {
@@ -114,7 +123,13 @@ class OpenAICompatibleProvider:
         it, ot = int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0))
         usd = it / 1e6 * usd_in + ot / 1e6 * usd_out
         tool_calls = self._parse_tool_calls(data)
-        return ProviderCompletion(str(text), Usage(input_tokens=it, output_tokens=ot, usd=usd), tool_calls)
+        reasoning_details = data["choices"][0]["message"].get("reasoning_details")
+        return ProviderCompletion(
+            str(text), 
+            Usage(input_tokens=it, output_tokens=ot, usd=usd), 
+            tool_calls, 
+            reasoning_details
+        )
 
     @staticmethod
     def _parse_tool_calls(data: dict[str, Any]) -> tuple[ProviderToolCall, ...]:

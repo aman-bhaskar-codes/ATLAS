@@ -64,6 +64,7 @@ class Thought(BaseModel):
     step: int
     content: str
     confidence: float = 0.5
+    reasoning_details: str | None = None
 
 
 ActionKind = Literal["tool_call", "final_answer", "ask_user", "noop"]

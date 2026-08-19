@@ -42,6 +42,18 @@ class ModelRegistry:
     def all(self, include_disabled: bool = False) -> list[ModelSpec]:
         return [s for s in self._specs.values() if include_disabled or s.enabled]
 
+    def register(self, spec: ModelSpec) -> None:
+        """Runtime registration — used by the OpenRouter free-model sync task
+        to add/refresh specs discovered live, without editing models.yaml."""
+        self._specs[spec.id] = spec
+
+    def disable(self, model_id: str) -> None:
+        """Mark a spec unavailable without deleting it — used when a free
+        model gets delisted, so it can reappear cleanly if OpenRouter adds it back."""
+        spec = self._specs.get(model_id)
+        if spec is not None:
+            self._specs[model_id] = spec.model_copy(update={"enabled": False})
+
     def update_reliability(self, model_id: str, score: float) -> None:
         spec = self._specs.get(model_id)
         if spec is not None:

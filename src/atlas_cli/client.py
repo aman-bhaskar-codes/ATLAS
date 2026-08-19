@@ -123,3 +123,21 @@ class AtlasClient:
         async with httpx.AsyncClient() as client:
             resp = await client.post(f"{self.base_url}/api/v1/events/{event_id}/replay", json={}, timeout=5.0)
             return cast(dict[str, Any], resp.json())
+
+    async def trigger_consolidation(self) -> dict[str, Any]:
+        """Trigger memory consolidation (episodic -> semantic/proposals)."""
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(f"{self.base_url}/api/v1/learning/consolidate", timeout=30.0)
+            resp.raise_for_status()
+            return cast(dict[str, Any], resp.json())
+
+    async def trigger_promotion(self, limit: int = 20) -> dict[str, Any]:
+        """Trigger experience-to-skill promotion."""
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self.base_url}/api/v1/learning/promote",
+                params={"limit": limit},
+                timeout=30.0
+            )
+            resp.raise_for_status()
+            return cast(dict[str, Any], resp.json())

@@ -119,11 +119,158 @@ models:
       - routing
     enabled: false  # enable when ATLAS_GROQ_API_KEY is set
 
+  # -- OpenRouter Free Models --
+  - id: openrouter-gpt-oss-20b
+    provider: openrouter
+    provider_model: openai/gpt-oss-20b:free
+    context_length: 131072
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
+    cost_class: free_quota
+    latency_estimate_ms: 700
+    capabilities:
+      - reasoning
+      - coding
+      - tool_calling
+      - structured_output
+      - classification
+      - summarization
+      - json_generation
+    max_concurrency: 2
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: true
+    supports_vision: false
+    supports_tool_calling: true
+    quality_score: 0.80
+    reliability_score: 0.85
+    enabled: true
+
+  - id: openrouter-nemotron-3-nano
+    provider: openrouter
+    provider_model: nvidia/nemotron-3-nano-30b-a3b:free
+    context_length: 32768
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
+    cost_class: free_quota
+    latency_estimate_ms: 500
+    capabilities:
+      - reasoning
+      - planning
+      - coding
+      - tool_calling
+      - structured_output
+    max_concurrency: 2
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: true
+    supports_vision: false
+    supports_tool_calling: true
+    quality_score: 0.85
+    reliability_score: 0.85
+    enabled: true
+
+  - id: openrouter-deepseek-v4-flash
+    provider: openrouter
+    provider_model: deepseek/deepseek-v4-flash:free
+    context_length: 1048576
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
+    cost_class: free_quota
+    latency_estimate_ms: 1500
+    capabilities:
+      - reasoning
+      - long_context
+      - summarization
+      - structured_output
+    max_concurrency: 2
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: true
+    supports_vision: false
+    supports_tool_calling: true
+    quality_score: 0.82
+    reliability_score: 0.85
+    enabled: true
+
+  - id: openrouter-gemma-4-31b-it
+    provider: openrouter
+    provider_model: google/gemma-4-31b-it:free
+    context_length: 262144
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
+    cost_class: free_quota
+    latency_estimate_ms: 800
+    capabilities:
+      - reasoning
+      - vision
+      - structured_output
+      - classification
+    max_concurrency: 2
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: true
+    supports_vision: true
+    supports_tool_calling: false
+    quality_score: 0.80
+    reliability_score: 0.85
+    enabled: true
+
+  - id: openrouter-gemma-4-26b
+    provider: openrouter
+    provider_model: google/gemma-4-26b-a4b-it:free
+    context_length: 32768
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
+    cost_class: free_quota
+    latency_estimate_ms: 300
+    capabilities:
+      - classification
+      - summarization
+      - json_generation
+    max_concurrency: 2
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: false
+    supports_vision: false
+    supports_tool_calling: false
+    quality_score: 0.70
+    reliability_score: 0.85
+    enabled: true
+
+  - id: openrouter-free-fallback
+    provider: openrouter
+    provider_model: openrouter/free
+    context_length: 32768
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
+    cost_class: free_quota
+    latency_estimate_ms: 1000
+    capabilities:
+      - reasoning
+      - coding
+      - tool_calling
+      - structured_output
+      - classification
+      - summarization
+      - json_generation
+      - vision
+    max_concurrency: 2
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: true
+    supports_vision: true
+    supports_tool_calling: true
+    quality_score: 0.65
+    reliability_score: 0.85
+    enabled: true
+
+
   # ─── PAID CLOUD MODELS ───────────────────────────────────────────────
   # Blocked in ZERO_COST / FREE_ONLY modes even if API keys exist.
 
   - id: glm-5.2
-    provider: glm
+    provider: openrouter
     provider_model: z-ai/glm-5.2
     context_length: 128000
     usd_per_1m_input: 0.15
@@ -151,7 +298,7 @@ models:
     enabled: false
 
   - id: deepseek-v4-pro
-    provider: deepseek
+    provider: openrouter
     provider_model: deepseek/deepseek-v4-pro
     context_length: 64000
     usd_per_1m_input: 0.14
@@ -175,7 +322,7 @@ models:
     enabled: false
 
   - id: kimi-k2.7-code
-    provider: kimi
+    provider: openrouter
     provider_model: moonshotai/kimi-k2.7-code
     context_length: 8192
     usd_per_1m_input: 0.08
@@ -197,7 +344,7 @@ models:
     enabled: false
 
   - id: mimo-v2.5-pro
-    provider: mimo
+    provider: openrouter
     provider_model: xiaomi/mimo-v2.5-pro
     context_length: 128000
     usd_per_1m_input: 0.10
@@ -217,3 +364,26 @@ models:
     quality_score: 0.88
     reliability_score: 0.97
     enabled: false
+
+  - id: nemotron-3.5-lightning
+    provider: openrouter
+    provider_model: nvidia/nemotron-3.5-lightning
+    context_length: 32768
+    usd_per_1m_input: 0.10
+    usd_per_1m_output: 0.20
+    cost_class: paid
+    latency_estimate_ms: 500
+    capabilities:
+      - reasoning
+      - coding
+      - tool_calling
+      - structured_output
+    max_concurrency: 4
+    supports_streaming: true
+    supports_structured_output: true
+    supports_reasoning: true
+    supports_vision: false
+    supports_tool_calling: true
+    quality_score: 0.90
+    reliability_score: 0.95
+    enabled: true

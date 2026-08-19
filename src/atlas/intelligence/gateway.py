@@ -97,4 +97,5 @@ class ModelGateway:
                 input_tokens=resp.usage.input_tokens, output_tokens=resp.usage.output_tokens, usd=resp.usage.usd
             ),
             latency_ms=resp.latency_ms,
+            reasoning_details=resp.reasoning_details,
         )
