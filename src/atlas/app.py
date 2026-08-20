@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from atlas.bootstrap.runtime import RuntimeSupervisor
 from atlas.capabilities.browser.builder import build_browser_platform
 from atlas.capabilities.browser.platform import BrowserPlatform
 from atlas.capabilities.dispatcher import CapabilityDispatcher
@@ -117,8 +118,6 @@ class Atlas:
     consolidator: Consolidator
     pruner: Pruner
     knowledge_store: KnowledgeStore
-    trajectory_store: Any  # Phase 2: TrajectoryStore
-    experience_extractor: Any  # Phase 2: ExperienceExtractor
     bus: MessageBus
     orchestrator: Orchestrator
     cap_registry: CapabilityRegistry
@@ -135,6 +134,9 @@ class Atlas:
     weather_platform: WeatherPlatform
     location_platform: LocationPlatform
     currency_platform: CurrencyPlatform
+    # Optional/phase-dependent fields (with defaults)
+    trajectory_store: Any = None  # Phase 2: TrajectoryStore
+    experience_extractor: Any = None  # Phase 2: ExperienceExtractor
     browser_platform: BrowserPlatform | None = None
     feedback: FeedbackStore | None = None
     scheduler: CronScheduler | None = None
@@ -147,9 +149,23 @@ class Atlas:
     tool_router: Any = None  # Batch 6: operator surface
     tool_health: Any = None  # Batch 6
     checkpoints: Any = None  # Batch 7
-    model_registry: Any = None  # Added for frontend dynamic model listing
+    model_registry: Any = None  # Model registry for frontend
+    runtime_supervisor: RuntimeSupervisor | None = None  # Runtime orchestration layer
 
     async def start(self) -> None:
+        # Initialize runtime supervisor if not already initialized
+        if self.runtime_supervisor is None:
+            self.runtime_supervisor = RuntimeSupervisor(
+                settings=self.settings,
+                config=self.config,
+                clock=self.clock,
+                metrics=self.metrics,
+            )
+        
+        # Use runtime supervisor for managed startup
+        await self.runtime_supervisor.start(self)
+        
+        # Legacy startup for compatibility (will be phased out)
         # lifecycle.start() calls db.start() and bus.start() via the service registry
         await self.lifecycle.start()
         # Phase 0: Connect memory subsystems to event bus in ALL execution paths (not just API)
@@ -171,6 +187,11 @@ class Atlas:
             )
 
     async def close(self) -> None:
+        # Use runtime supervisor for managed shutdown if available
+        if self.runtime_supervisor is not None:
+            await self.runtime_supervisor.shutdown()
+        
+        # Legacy shutdown for compatibility (will be phased out)
         await self.embedding_worker.stop()
         if self.browser_platform is not None:
             await self.browser_platform.shutdown()
@@ -383,7 +404,9 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         from atlas.infra.errors import FatalError
 
         _log.error(
-            "sandbox.docker_required", event_type="lifecycle", detail="Docker is required in non-dev environments but is unavailable"
+            "sandbox.docker_required",
+            event_type="lifecycle",
+            detail="Docker is required in non-dev environments but is unavailable",
         )
         raise FatalError(
             "Docker sandbox required but unavailable in non-dev environment. "
@@ -475,6 +498,15 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     cron_scheduler.register_job(name="memory_consolidation", cron="0 2 * * *", fn=_consolidate_job)
 
     _log.info("core.ready", event_type="lifecycle", providers=str(type(gateway)))
+    
+    # Initialize runtime supervisor (will be started in Atlas.start())
+    runtime_supervisor = RuntimeSupervisor(
+        settings=settings,
+        config=config,
+        clock=clock,
+        metrics=metrics,
+    )
+    
     return Atlas(
         settings=settings,
         config=config,
@@ -492,7 +524,6 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         safety=safety,
         tools=tools,
         gateway=gateway,
-        model_registry=intel.registry,
         notification_platform=notification_platform,
         vectors=vectors,
         embedder=embedder,
@@ -515,6 +546,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         ext_cap_router=ext_cap_router,
         cap_dispatcher=cap_dispatcher,
         cap_telemetry=cap_telemetry,
+        runtime_supervisor=runtime_supervisor,  # Runtime orchestration layer
         identity=identity_platform,
         knowledge_platform=knowledge_platform,
         email_platform=email_platform,
@@ -535,4 +567,5 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         tool_router=tool_router,  # Batch 6
         tool_health=tool_health,  # Batch 6
         checkpoints=checkpoints,  # Batch 7
+        model_registry=intel.registry,  # Model registry for frontend
     )

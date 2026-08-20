@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from importlib.metadata import version
 from typing import TYPE_CHECKING
 
@@ -153,6 +154,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.version = version("atlas")
     app.state.active_task_count = 0
     app.state.active_task_lock = asyncio.Lock()
+    app.state.startup_time = datetime.now(UTC)  # For liveness probe
     yield
     await memory_ws_broadcaster.stop()
     await ws_broadcaster.stop()
@@ -205,6 +207,7 @@ def create_app() -> FastAPI:
 
     # Register routers (imported here to keep the factory free of circular deps)
     from atlas.interfaces.api.events import router as events_router
+    from atlas.interfaces.api.health import router as health_router  # Runtime health endpoints
     from atlas.interfaces.api.routes_approvals import router as approvals_router
     from atlas.interfaces.api.routes_attachments import router as attachments_router
     from atlas.interfaces.api.routes_automations import router as automations_router  # Phase 3
@@ -232,6 +235,7 @@ def create_app() -> FastAPI:
     #   - trajectory_router: GET /trajectory/* (Phase 2 learning endpoints)
     # trust_router still declares prefix="/api/v1" internally (see routes_trust.py),
     # so it is mounted with an empty prefix here to avoid doubling it.
+    app.include_router(health_router, prefix="/api/v1")  # Runtime health endpoints
     app.include_router(runtime_router, prefix="/api/v1")
     app.include_router(tasks_router, prefix="/api/v1")
     app.include_router(approvals_router, prefix="/api/v1")

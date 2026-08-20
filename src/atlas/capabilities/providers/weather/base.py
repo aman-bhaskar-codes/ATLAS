@@ -1,0 +1,26 @@
+"""Weather provider protocol. Mirrors KnowledgeProvider's shape: generic Provider
+protocol methods + one typed domain method the platform calls directly."""
+
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+from atlas.capabilities.domain.weather import WeatherReport
+from atlas.capabilities.providers.base import CapabilityRequest, RetryPolicy
+from atlas.capabilities.registry.capability import Capability
+
+
+class WeatherProvider(Protocol):
+    name: str
+    capability: Capability
+    is_local: bool
+    requires_auth: bool
+
+    async def initialize(self) -> None: ...
+    async def authenticate(self) -> None: ...
+    async def health(self) -> bool: ...
+    async def forecast(self, *, latitude: float, longitude: float, days: int) -> WeatherReport: ...
+    async def execute(self, request: CapabilityRequest) -> Any: ...
+    def normalize(self, raw: Any) -> Any: ...
+    def retry_policy(self) -> RetryPolicy: ...
+    async def shutdown(self) -> None: ...

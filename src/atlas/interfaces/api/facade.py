@@ -160,7 +160,7 @@ class DefaultAtlasControlPlane:
             content=command.request,
             task_id=task_id,
         )
-        async def _run_safely():
+        async def _run_safely() -> None:
             try:
                 await self.atlas.orchestrator.run(inbound)
             except Exception as e:

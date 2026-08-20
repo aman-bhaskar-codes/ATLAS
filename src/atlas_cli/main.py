@@ -8,8 +8,10 @@ from rich.console import Console
 
 from atlas_cli.client import AtlasClient
 from atlas_cli.render import TaskRenderer
+from atlas_cli.start import app as start_app  # Runtime management commands
 
 app = typer.Typer(add_completion=False, help="ATLAS CLI")
+app.add_typer(start_app, name="runtime", help="Manage the ATLAS runtime lifecycle")
 
 console = Console()
 client = AtlasClient()

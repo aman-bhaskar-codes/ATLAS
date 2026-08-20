@@ -1,0 +1,26 @@
+"""Currency provider protocol. Mirrors WeatherProvider/LocationProvider shape:
+generic Provider protocol methods + one typed domain method the platform calls directly."""
+
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+from atlas.capabilities.domain.currency import ExchangeRate
+from atlas.capabilities.providers.base import CapabilityRequest, RetryPolicy
+from atlas.capabilities.registry.capability import Capability
+
+
+class CurrencyProvider(Protocol):
+    name: str
+    capability: Capability
+    is_local: bool
+    requires_auth: bool
+
+    async def initialize(self) -> None: ...
+    async def authenticate(self) -> None: ...
+    async def health(self) -> bool: ...
+    async def convert(self, *, base: str, target: str) -> ExchangeRate | None: ...
+    async def execute(self, request: CapabilityRequest) -> Any: ...
+    def normalize(self, raw: Any) -> Any: ...
+    def retry_policy(self) -> RetryPolicy: ...
+    async def shutdown(self) -> None: ...
