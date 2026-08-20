@@ -166,19 +166,20 @@ async def build_intelligence(
             except Exception as exc:
                 _log.warning("provider.gemini_failed", event_type="lifecycle", error=str(exc))
 
-        # ── Paid providers (only if profile allows) ───────────────────
-        if "paid" in profile.allowed_cost_classes:
-            if settings.openrouter_api_key:
-                provider_registry.register(
-                    OpenAICompatibleProvider(
-                        name="openrouter",
-                        base_url="https://openrouter.ai/api/v1",
-                        api_key=settings.openrouter_api_key,
-                        timeout_s=config.models.cloud_timeout_s,
-                    )
+        # ── Paid/Hybrid providers (if profile allows paid OR free_quota) ────────
+        allow_openrouter = "paid" in profile.allowed_cost_classes or "free_quota" in profile.allowed_cost_classes
+        if allow_openrouter and settings.openrouter_api_key:
+            provider_registry.register(
+                OpenAICompatibleProvider(
+                    name="openrouter",
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=settings.openrouter_api_key,
+                    timeout_s=config.models.cloud_timeout_s,
                 )
-                _log.info("provider.registered", event_type="lifecycle", provider="openrouter", cost_class="free_quota")
+            )
+            _log.info("provider.registered", event_type="lifecycle", provider="openrouter", cost_class="hybrid")
             
+        if "paid" in profile.allowed_cost_classes:
             if settings.anthropic_api_key:
                 try:
                     from atlas.intelligence.providers.anthropic import AnthropicProvider

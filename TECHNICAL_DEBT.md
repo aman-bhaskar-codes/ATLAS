@@ -16,6 +16,7 @@
 | 6.1 | ✅ CLOSED (Batch 9.2): Provider lifecycle events calling `.emit()` instead of `.publish()` with typed Event | `intelligence/runtime/inference.py`, `intelligence/runtime/fallback.py` | COMPLETE |
 | 6.2 | ✅ CLOSED (Batch 9.3): Two incompatible `QuotaExhaustedError` classes consolidated into one with proper constructor | `intelligence/errors.py`, `intelligence/governance/quota_governor.py` | COMPLETE |
 
+| 7 | ✅ CLOSED (Batch A): Implemented free capability providers for Weather (Open-Meteo), Location (Nominatim+REST Countries), Currency (Frankfurter) with read-only, no-side-effect pattern; wired into bootstrap/capabilities.py and app.py | bootstrap/capabilities.py, app.py, config/permissions.yaml, tests/capabilities/currency/__init__.py, tests/capabilities/currency/test_frankfurter.py | COMPLETE |
 ## P1 — Architecture hygiene
 
 | # | Debt | Location | Plan |

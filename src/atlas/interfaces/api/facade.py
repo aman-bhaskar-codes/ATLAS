@@ -158,9 +158,18 @@ class DefaultAtlasControlPlane:
             correlation_id=corr_id,
             source="api",
             content=command.request,
+            task_id=task_id,
         )
+        async def _run_safely():
+            try:
+                await self.atlas.orchestrator.run(inbound)
+            except Exception as e:
+                import logging
+                import traceback
+                logging.getLogger("atlas.api").error(f"BACKGROUND TASK FAILED: {e}\n{traceback.format_exc()}")
+
         asyncio.create_task(
-            self.atlas.orchestrator.run(inbound),
+            _run_safely(),
             name=f"atlas-task-{task_id}",
         )
 

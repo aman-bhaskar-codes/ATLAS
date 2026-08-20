@@ -248,6 +248,7 @@ models:
     latency_estimate_ms: 1000
     capabilities:
       - reasoning
+      - planning
       - coding
       - tool_calling
       - structured_output

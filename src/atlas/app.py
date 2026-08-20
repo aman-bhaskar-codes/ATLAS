@@ -21,8 +21,11 @@ from atlas.capabilities.notification.platform import NotificationPlatform
 from atlas.capabilities.observability.telemetry import CapabilityTelemetry
 from atlas.capabilities.platforms.calendar_platform import CalendarPlatform
 from atlas.capabilities.platforms.contacts_platform import ContactsPlatform
+from atlas.capabilities.platforms.currency_platform import CurrencyPlatform
 from atlas.capabilities.platforms.email_platform import EmailPlatform
 from atlas.capabilities.platforms.knowledge_platform import KnowledgePlatform
+from atlas.capabilities.platforms.location_platform import LocationPlatform
+from atlas.capabilities.platforms.weather_platform import WeatherPlatform
 from atlas.capabilities.registry.capability import CapabilityRegistry
 from atlas.capabilities.registry.health import CapabilityHealth
 from atlas.capabilities.registry.provider_registry import ProviderRegistry as CapProviderRegistry
@@ -129,6 +132,9 @@ class Atlas:
     email_platform: EmailPlatform
     calendar_platform: CalendarPlatform
     contacts_platform: ContactsPlatform
+    weather_platform: WeatherPlatform
+    location_platform: LocationPlatform
+    currency_platform: CurrencyPlatform
     browser_platform: BrowserPlatform | None = None
     feedback: FeedbackStore | None = None
     scheduler: CronScheduler | None = None
@@ -166,6 +172,8 @@ class Atlas:
 
     async def close(self) -> None:
         await self.embedding_worker.stop()
+        if self.browser_platform is not None:
+            await self.browser_platform.shutdown()
         # Close bus first so background queue-processor exits before DB closes
         await self.bus.close()
         await self.embedder.close()
@@ -344,6 +352,9 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     email_platform = data_platforms.email
     calendar_platform = data_platforms.calendar
     contacts_platform = data_platforms.contacts
+    weather_platform = data_platforms.weather_platform
+    location_platform = data_platforms.location_platform
+    currency_platform = data_platforms.currency_platform
     _ = data_platforms.known_contacts  # Reserved for future contact-aware features
 
     # ── Sandboxed tools ───────────────────────────────────────────── #
@@ -366,9 +377,17 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
             "sandbox.native", event_type="lifecycle", detail="Docker unavailable — using native sandbox (dev only)"
         )
     else:
-        sandbox = docker_sandbox
+        # Docker is required in non-dev environments, but the health check failed.
+        # Raise a fatal error instead of assigning a broken sandbox that will fail
+        # at runtime when the first tool runs. This fails fast with a clear message.
+        from atlas.infra.errors import FatalError
+
         _log.error(
-            "sandbox.docker_required", event_type="lifecycle", detail="Docker is required in non-dev environments"
+            "sandbox.docker_required", event_type="lifecycle", detail="Docker is required in non-dev environments but is unavailable"
+        )
+        raise FatalError(
+            "Docker sandbox required but unavailable in non-dev environment. "
+            "Either start Docker, set ATLAS_ENV=dev, or configure a permitted sandbox."
         )
 
     ws = str(_REPO_ROOT)
@@ -393,6 +412,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
             ids=ids,
             notifications=notification_platform,
             approval_channels=tuple(),  # approval_channels defined in data_platforms builder
+            safe_browsing_api_key=settings.safe_browsing_api_key,
+            virustotal_api_key=settings.virustotal_api_key,
         )
         from atlas.tools.browser import BrowserTool
         tools["browser"] = BrowserTool(platform=browser_platform, ids=ids)
@@ -499,6 +520,9 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         email_platform=email_platform,
         calendar_platform=calendar_platform,
         contacts_platform=contacts_platform,
+        weather_platform=weather_platform,
+        location_platform=location_platform,
+        currency_platform=currency_platform,
         browser_platform=browser_platform,
         feedback=feedback_store,
         scheduler=cron_scheduler,

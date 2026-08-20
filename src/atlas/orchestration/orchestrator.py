@@ -95,7 +95,7 @@ class Orchestrator:
 
     async def run(self, event: InboundEvent) -> TaskResult:
         task = Task(
-            id=self._ids.task_id(),
+            id=getattr(event, "task_id", None) or self._ids.task_id(),
             correlation_id=event.correlation_id,
             source=event.source,
             request=event.content,

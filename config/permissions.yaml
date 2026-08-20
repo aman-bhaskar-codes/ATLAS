@@ -82,6 +82,10 @@ rules:
   - {tool: system,     operation: config,    tier: 3}
   - {tool: payment,    operation: "*",       tier: 3}
 
+  - {tool: weather, operation: forecast, tier: 0}
+  - {tool: location, operation: geocode, tier: 0}
+  - {tool: location, operation: country_info, tier: 0}
+  - {tool: currency, operation: convert, tier: 0}
 hard_block:
   - {tool: "*",        operation: "*",      match: credential_access}
   - {tool: "*",        operation: "*",      match: financial_transaction}

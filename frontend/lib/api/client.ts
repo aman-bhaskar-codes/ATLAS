@@ -56,7 +56,10 @@ export const atlasApi = {
   runtimeStatus: () => request("/runtime/status", RuntimeStatusSchema),
   runtimeHealth: () => request("/runtime/health", RuntimeHealthSchema),
 
-  tasks: () => request("/tasks?limit=20", z.array(TaskSchema)),
+  tasks: async () => {
+    const data = await requestJSON("/tasks?limit=20") as { items: unknown[] };
+    return z.array(TaskSchema).parse(data.items);
+  },
   task: (id: string) => request(`/tasks/${encodeURIComponent(id)}`, TaskSchema),
 
   taskEvents: (id: string, afterSequence?: number) => {

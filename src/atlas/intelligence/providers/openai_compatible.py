@@ -124,6 +124,11 @@ class OpenAICompatibleProvider:
         usd = it / 1e6 * usd_in + ot / 1e6 * usd_out
         tool_calls = self._parse_tool_calls(data)
         reasoning_details = data["choices"][0]["message"].get("reasoning_details")
+        if isinstance(reasoning_details, list):
+            reasoning_details = "\n".join(str(r.get("text", r)) if isinstance(r, dict) else str(r) for r in reasoning_details)
+        elif reasoning_details is not None and not isinstance(reasoning_details, str):
+            reasoning_details = str(reasoning_details)
+
         return ProviderCompletion(
             str(text), 
             Usage(input_tokens=it, output_tokens=ot, usd=usd), 

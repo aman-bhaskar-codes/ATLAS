@@ -28,6 +28,7 @@ class Capability(StrEnum):
     GITHUB = "github"
     WEATHER = "weather"
     LOCATION = "location"
+    CURRENCY = "currency"
     FILES = "files"
     # extend freely; each needs a CapabilitySpec + at least one provider
 

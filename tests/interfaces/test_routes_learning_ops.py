@@ -154,9 +154,15 @@ class TestOpsRoutes:
         assert tools[0]["side_effects"] is True
         assert 0 < tools[0]["health"] <= 1.0
 
-    def test_models_listing(self) -> None:
+    def test_models_listing(self, db: Database) -> None:
+        # Ensure model_registry is populated so the route can render even
+        # when the full atlas build graph isn't wired (matches real startup).
+        from atlas.intelligence.registry.model_registry import ModelRegistry
+
+        registry = ModelRegistry.from_yaml(Path(__file__).resolve().parents[2] / "config" / "models.yaml")
         app = FastAPI()
         app.include_router(ops_router, prefix="/api/v1")
+        app.state.atlas = SimpleNamespace(model_registry=registry)
         TestClient(app).get("/api/v1/ops/models")  # must not 500 without atlas
 
     @pytest.mark.asyncio

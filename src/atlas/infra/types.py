@@ -238,3 +238,4 @@ class InboundEvent(BaseModel):
     correlation_id: CorrelationId
     source: Source
     content: str
+    task_id: str | None = None

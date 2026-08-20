@@ -23,11 +23,15 @@ from atlas.capabilities.identity.secret_store import SecretStore
 from atlas.capabilities.notification.platform import NotificationPlatform
 from atlas.capabilities.platforms.calendar_platform import CalendarPlatform
 from atlas.capabilities.platforms.contacts_platform import ContactsPlatform
+from atlas.capabilities.platforms.currency_platform import CurrencyPlatform
 from atlas.capabilities.platforms.email_platform import EmailPlatform
 from atlas.capabilities.platforms.knowledge_platform import KnowledgePlatform
 from atlas.capabilities.platforms.knowledge_router import KnowledgeRouter
+from atlas.capabilities.platforms.location_platform import LocationPlatform
+from atlas.capabilities.platforms.weather_platform import WeatherPlatform
 from atlas.capabilities.providers.calendar.google_calendar import GoogleCalendarProvider
 from atlas.capabilities.providers.contacts.google_people import GooglePeopleProvider
+from atlas.capabilities.providers.currency.frankfurter import FrankfurterProvider
 from atlas.capabilities.providers.email.gmail import GmailProvider
 from atlas.capabilities.providers.knowledge.arxiv import ArxivProvider
 from atlas.capabilities.providers.knowledge.base import KnowledgeProvider
@@ -39,6 +43,8 @@ from atlas.capabilities.providers.knowledge.parametric import ParametricKnowledg
 from atlas.capabilities.providers.knowledge.rss import RSSProvider
 from atlas.capabilities.providers.knowledge.tavily import TavilySearchProvider
 from atlas.capabilities.providers.knowledge.wikipedia import WikipediaProvider
+from atlas.capabilities.providers.location.nominatim import NominatimProvider
+from atlas.capabilities.providers.weather.open_meteo import OpenMeteoProvider
 from atlas.capabilities.registry.capability import Capability, CapabilityRegistry, CapabilitySpec
 from atlas.capabilities.registry.provider_registry import ProviderRegistry as CapProviderRegistry
 from atlas.infra.clock import Clock
@@ -83,6 +89,9 @@ class DataPlatformsComponents:
     calendar: CalendarPlatform
     contacts: ContactsPlatform
     known_contacts: KnownContacts
+    weather_platform: WeatherPlatform
+    location_platform: LocationPlatform
+    currency_platform: CurrencyPlatform
 
 
 async def build_data_platforms(
@@ -167,6 +176,51 @@ async def build_data_platforms(
         parametric=parametric,
     )
     _log.info("knowledge.ready", event_type="lifecycle", official_count=len(official), web_count=len(web))
+
+    # ── Weather Platform ───────────────────────────────────────────────
+    cap_registry.register(
+        CapabilitySpec(
+            capability=Capability.WEATHER,
+            safety_tool="weather",
+            operations=("forecast",),
+            default_tier=Tier.AUTO,
+            requires_auth=False,
+            description="Get weather forecast for a location",
+        )
+    )
+
+    weather_platform = WeatherPlatform(provider=OpenMeteoProvider())
+    _log.info("weather.ready", event_type="lifecycle")
+
+    # ── Location Platform ──────────────────────────────────────────────
+    cap_registry.register(
+        CapabilitySpec(
+            capability=Capability.LOCATION,
+            safety_tool="location",
+            operations=("geocode", "country_info"),
+            default_tier=Tier.AUTO,
+            requires_auth=False,
+            description="Geocode addresses and look up country metadata",
+        )
+    )
+
+    location_platform = LocationPlatform(provider=NominatimProvider())
+    _log.info("location.ready", event_type="lifecycle")
+
+    # ── Currency Platform ──────────────────────────────────────────────
+    cap_registry.register(
+        CapabilitySpec(
+            capability=Capability.CURRENCY,
+            safety_tool="currency",
+            operations=("convert",),
+            default_tier=Tier.AUTO,
+            requires_auth=False,
+            description="Convert between currencies using live exchange rates",
+        )
+    )
+
+    currency_platform = CurrencyPlatform(provider=FrankfurterProvider())
+    _log.info("currency.ready", event_type="lifecycle")
 
     # ── Email Platform ────────────────────────────────────────────────
     cap_registry.register(
@@ -269,4 +323,7 @@ async def build_data_platforms(
         calendar=calendar_platform,
         contacts=contacts_platform,
         known_contacts=known,
+        weather_platform=weather_platform,
+        location_platform=location_platform,
+        currency_platform=currency_platform,
     )

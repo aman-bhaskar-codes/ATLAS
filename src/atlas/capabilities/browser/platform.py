@@ -159,3 +159,8 @@ class BrowserPlatform:
         if not self._crawler:
             raise RuntimeError("Crawler engine not initialized")
         return await self._crawler.crawl(session_id, seed_url, depth, budget, cid)
+
+
+    async def shutdown(self) -> None:
+        """Shut down the browser platform."""
+        await self._nav.shutdown()

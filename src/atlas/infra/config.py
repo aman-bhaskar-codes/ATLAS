@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     openrouter_api_key: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
     master_key: str = ""
     api_keys: str = ""  # comma-separated; 'ro:' prefix = readonly key (Batch 7)
+    safe_browsing_api_key: str = ""
+    virustotal_api_key: str = ""
     # ── Zero-cost-first policy ────────────────────────────────────────
     profile: str = "local_free"  # local_free | free_hybrid | free_demo | production
     cost_policy: str = "zero_cost"  # zero_cost | free_only | free_preferred | balanced | unrestricted

@@ -52,3 +52,7 @@ class DOMError(BrowserError): ...
 
 
 class RecoveryError(BrowserError): ...
+
+class UnsafeURLError(BrowserError):
+    """Raised when navigation is blocked due to unsafe URL reputation."""
+    provider_switch_helps = False

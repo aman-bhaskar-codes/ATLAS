@@ -20,6 +20,7 @@ from atlas.capabilities.browser.registry.provider_registry import ProviderRegist
 from atlas.capabilities.browser.research.crawler import CrawlerEngine
 from atlas.capabilities.browser.research.reader import ReaderEngine
 from atlas.capabilities.browser.research.source_ranker import SourceRanker
+from atlas.capabilities.browser.security.url_checker import URLReputationChecker
 from atlas.capabilities.browser.session.manager import SessionManager
 from atlas.capabilities.browser.session.pool import BrowserPool
 from atlas.capabilities.notification.platform import NotificationPlatform
@@ -30,11 +31,20 @@ def build_browser_platform(
     ids: IdGenerator,
     notifications: NotificationPlatform,
     approval_channels: tuple[str, ...] = ("push",),
+    safe_browsing_api_key: str = "",
+    virustotal_api_key: str = "",
 ) -> BrowserPlatform:
     """Wire the full browser automation platform.
 
     Only ONE function in the entire codebase knows about this wiring — the DI root.
     Engines and engines-under-test wire themselves independently via fakes.
+
+    Args:
+        ids: ID generator
+        notifications: Notification platform
+        approval_channels: Channels for approval requests
+        safe_browsing_api_key: Google Safe Browsing API key for URL reputation checking
+        virustotal_api_key: VirusTotal API key for URL reputation checking
     """
     # 1. Provider registry
     registry = ProviderRegistry()
@@ -53,7 +63,18 @@ def build_browser_platform(
 
     # 4. Read engines (Tier-0/1 — no gating needed)
     reader_engine = ReaderEngine()
-    nav_engine = NavigationEngine(page_manager=page_manager, state_builder=state_builder)
+    # URL reputation checker for navigation engine
+    reputation_checker: URLReputationChecker | None = None
+    if safe_browsing_api_key or virustotal_api_key:
+        reputation_checker = URLReputationChecker(
+            safe_browsing_api_key=safe_browsing_api_key,
+            virustotal_api_key=virustotal_api_key,
+        )
+    nav_engine = NavigationEngine(
+        page_manager=page_manager,
+        state_builder=state_builder,
+        reputation_checker=reputation_checker,
+    )
     dom_engine = DOMEngine(page_manager=page_manager)
     screen_engine = ScreenshotEngine(page_manager=page_manager)
     extract_engine = ExtractionEngine(page_manager=page_manager, reader=reader_engine)
