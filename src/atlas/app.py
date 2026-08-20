@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from atlas.bootstrap.runtime import RuntimeSupervisor
+from atlas.bootstrap.runtime import RuntimeSupervisor, SystemState
 from atlas.capabilities.browser.builder import build_browser_platform
 from atlas.capabilities.browser.platform import BrowserPlatform
 from atlas.capabilities.dispatcher import CapabilityDispatcher
@@ -152,7 +152,26 @@ class Atlas:
     model_registry: Any = None  # Model registry for frontend
     runtime_supervisor: RuntimeSupervisor | None = None  # Runtime orchestration layer
 
-    async def start(self) -> None:
+    async def start(self) -> Any:
+        if self.runtime_supervisor is not None and self.runtime_supervisor.state in {
+            SystemState.READY,
+            SystemState.DEGRADED,
+            SystemState.BUSY,
+        }:
+            return
+
+        # The supervisor verifies infrastructure during its startup phases. The
+        # lifecycle owns the database connection, so it must run first.
+        await self.lifecycle.start()
+
+        # These subscriptions and the durable event processor are runtime-wide,
+        # not API-only. Establish them before readiness is reported.
+        self.episodic.set_bus(self.bus)
+        self.semantic.set_bus(self.bus)
+        self.user_model.set_bus(self.bus)
+        self.knowledge_store.set_bus(self.bus)
+        await self.bus.start()
+
         # Initialize runtime supervisor if not already initialized
         if self.runtime_supervisor is None:
             self.runtime_supervisor = RuntimeSupervisor(
@@ -163,18 +182,8 @@ class Atlas:
             )
         
         # Use runtime supervisor for managed startup
-        await self.runtime_supervisor.start(self)
+        health_report = await self.runtime_supervisor.start(self)
         
-        # Legacy startup for compatibility (will be phased out)
-        # lifecycle.start() calls db.start() and bus.start() via the service registry
-        await self.lifecycle.start()
-        # Phase 0: Connect memory subsystems to event bus in ALL execution paths (not just API)
-        self.episodic.set_bus(self.bus)
-        self.semantic.set_bus(self.bus)
-        self.user_model.set_bus(self.bus)
-        self.knowledge_store.set_bus(self.bus)
-        await self.bus.start()
-        await self.embedding_worker.start()
         # Batch 7: fail-clean recovery for tasks orphaned by a previous crash.
         from atlas.orchestration.recovery import recover_interrupted_tasks
 
@@ -185,6 +194,7 @@ class Atlas:
                 self.clock,
                 live_task_ids=frozenset(),
             )
+        return health_report
 
     async def close(self) -> None:
         # Use runtime supervisor for managed shutdown if available
@@ -193,6 +203,8 @@ class Atlas:
         
         # Legacy shutdown for compatibility (will be phased out)
         await self.embedding_worker.stop()
+        if self.scheduler is not None:
+            await self.scheduler.stop()
         if self.browser_platform is not None:
             await self.browser_platform.shutdown()
         # Close bus first so background queue-processor exits before DB closes

@@ -24,11 +24,11 @@ from enum import Enum
 from typing import Any
 
 from atlas.infra.clock import Clock
-from atlas.infra.ids import IdGenerator
+from atlas.infra.ids import CorrelationId, IdGenerator
 from atlas.infra.logging import get_logger
 from atlas.intelligence.contracts import Constraints, InferenceRequest, Message, Role
 from atlas.intelligence.gateway import ModelGateway
-from atlas.orchestration.types import Plan, PlanStep
+from atlas.orchestration.types import Plan, PlanStep, RiskLevel
 
 _log = get_logger("atlas.agents.hierarchical")
 
@@ -118,7 +118,7 @@ class HierarchicalPlanner:
         self._decomposition_cache: dict[str, TaskDecomposition] = {}
         
         # Statistics for adaptive planning
-        self._stats = {
+        self._stats: dict[str, Any] = {
             "decompositions": 0,
             "cache_hits": 0,
             "fallbacks": 0,
@@ -217,6 +217,7 @@ Output as JSON:
 
         resp = await self._gw.infer(
             InferenceRequest(
+                correlation_id=CorrelationId(self._ids.execution_id()),
                 messages=[
                     Message(role=Role.SYSTEM, content=self._strategic_system_prompt()),
                     Message(role=Role.USER, content=prompt),
@@ -227,7 +228,7 @@ Output as JSON:
             )
         )
         
-        data = self._parse_json_response(resp.content)
+        data = self._parse_json_response(resp.text)
         
         return TaskDecomposition(
             parent_task=ctx.objective,
@@ -235,12 +236,13 @@ Output as JSON:
             strategy=DecompositionStrategy(data.get("strategy", "hierarchical")),
             subtasks=[
                 PlanStep(
+                    index=0,
                     intent=g["goal"],
                     tool=None,
                     operation=None,
                     args={},
-                    dependencies=[],
-                )
+                    depends_on=(),
+                    )
                 for g in data.get("goals", [])
             ],
             confidence=data.get("confidence", 0.7),
@@ -308,6 +310,7 @@ Output as JSON:
 
         resp = await self._gw.infer(
             InferenceRequest(
+                correlation_id=CorrelationId(self._ids.execution_id()),
                 messages=[
                     Message(role=Role.SYSTEM, content=self._tactical_system_prompt()),
                     Message(role=Role.USER, content=prompt),
@@ -318,7 +321,7 @@ Output as JSON:
             )
         )
         
-        data = self._parse_json_response(resp.content)
+        data = self._parse_json_response(resp.text)
         
         return TaskDecomposition(
             parent_task=goal_step.intent,
@@ -326,13 +329,13 @@ Output as JSON:
             strategy=DecompositionStrategy(data.get("strategy", "sequential")),
             subtasks=[
                 PlanStep(
+                    index=i,
                     intent=s["description"],
                     tool=s.get("tools_needed", [None])[0],
                     operation=None,
                     args={},
-                    dependencies=s.get("dependencies", []),
                 )
-                for s in data.get("steps", [])
+                for i, s in enumerate(data.get("steps", []))
             ],
             confidence=data.get("confidence", 0.7),
             estimated_cost=0.0,
@@ -377,9 +380,9 @@ Output as JSON:
         
         plan = Plan(
             goal=ctx.objective,
-            steps=operational_steps,
-            constraints=list(ctx.constraints.keys()),
-            risk=tactical.strategy,  # Placeholder
+            steps=tuple(operational_steps),
+            constraints=tuple(ctx.constraints.keys()),
+            risk=RiskLevel.LOW,
             confidence=tactical.confidence,
         )
         
@@ -419,6 +422,7 @@ Output as JSON:
 
         resp = await self._gw.infer(
             InferenceRequest(
+                correlation_id=CorrelationId(self._ids.execution_id()),
                 messages=[
                     Message(role=Role.SYSTEM, content="You are a tool selection expert."),
                     Message(role=Role.USER, content=prompt),
@@ -429,15 +433,15 @@ Output as JSON:
             )
         )
         
-        data = self._parse_json_response(resp.content)
+        data = self._parse_json_response(resp.text)
         
         return [
             PlanStep(
+                index=0,
                 intent=step.intent,
                 tool=data.get("tool"),
                 operation=data.get("operation"),
                 args=data.get("args", {}),
-                dependencies=step.dependencies,
             )
         ]
 
@@ -497,7 +501,7 @@ Output as JSON:
         if len(primary.plan.steps) > 2:
             simpler = Plan(
                 goal=primary.plan.goal,
-                steps=primary.plan.steps[:2],  # First two steps only
+                steps=primary.plan.steps[:2],
                 constraints=primary.plan.constraints,
                 risk=primary.plan.risk,
                 confidence=primary.total_confidence * 0.8,
@@ -509,17 +513,17 @@ Output as JSON:
             # Try to make steps more parallel
             parallel_steps = [
                 PlanStep(
+                    index=i,
                     intent=step.intent,
                     tool=step.tool,
                     operation=step.operation,
-                    args=step.args,
-                    dependencies=[],  # Remove dependencies
+                    args=dict(step.args),
                 )
-                for step in primary.plan.steps
+                for i, step in enumerate(primary.plan.steps)
             ]
             parallel = Plan(
                 goal=primary.plan.goal,
-                steps=parallel_steps,
+                steps=tuple(parallel_steps),
                 constraints=primary.plan.constraints,
                 risk=primary.plan.risk,
                 confidence=primary.total_confidence * 0.7,
@@ -540,7 +544,7 @@ Output as JSON:
         risks["complexity"] = min(len(plan.steps) / 10.0, 1.0)
         
         # Dependency risk
-        dep_count = sum(len(s.dependencies) for s in plan.steps)
+        dep_count = sum(len(s.depends_on) for s in plan.steps)
         risks["dependencies"] = min(dep_count / 10.0, 1.0)
         
         # Tool availability risk
@@ -580,7 +584,7 @@ Be specific and practical."""
             end = text.rfind("}") + 1
             if start == -1 or end == 0:
                 return {}
-            return json.loads(text[start:end])
+            return dict(json.loads(text[start:end]))
         except json.JSONDecodeError:
             return {}
 
@@ -591,17 +595,14 @@ Be specific and practical."""
         confidence: float,
     ) -> None:
         """Update planning statistics for adaptive improvement."""
-        
-        self._stats["decompositions"] += 1
-        
+        n_prev = int(self._stats.get("decompositions", 0))
+        n = n_prev + 1
+        self._stats["decompositions"] = n
         # Update running average confidence
-        n = self._stats["decompositions"]
-        self._stats["avg_confidence"] = (
-            self._stats["avg_confidence"] * (n - 1) + confidence
-        ) / n
-        
+        prev_conf = float(self._stats.get("avg_confidence", 0.0))
+        self._stats["avg_confidence"] = (prev_conf * n_prev + confidence) / n
         # Update success rate by strategy
-        current = self._stats["success_rate_by_strategy"][strategy.value]
-        self._stats["success_rate_by_strategy"][strategy.value] = (
-            current * 0.9 + (1.0 if success else 0.0) * 0.1
-        )
+        rate_dict = self._stats["success_rate_by_strategy"]
+        if isinstance(rate_dict, dict):
+            current_rate = float(rate_dict.get(strategy.value, 0.5))
+            rate_dict[strategy.value] = current_rate * 0.9 + (1.0 if success else 0.0) * 0.1

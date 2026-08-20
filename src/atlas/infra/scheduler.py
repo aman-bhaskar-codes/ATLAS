@@ -8,6 +8,7 @@ the main event loop or a background timer).
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from datetime import datetime
@@ -63,6 +64,8 @@ class CronScheduler:
         self._clock = clock
         # In-process jobs: name -> (cron_expression, callable)
         self._jobs: dict[str, tuple[str, _InProcessJob]] = {}
+        self._task: asyncio.Task[None] | None = None
+        self._stop_event = asyncio.Event()
 
     def register_job(self, name: str, cron: str, fn: _InProcessJob) -> None:
         """Register an in-process recurring job (not persisted to DB).
@@ -73,6 +76,37 @@ class CronScheduler:
         """
         self._jobs[name] = (cron, fn)
         _log.info("scheduler.job_registered", event_type="scheduler", name=name, cron=cron)
+
+    async def start(self, interval_seconds: float = 60.0) -> None:
+        """Start the scheduler once for the lifetime of the runtime."""
+        if self._task is not None:
+            return
+        self._stop_event.clear()
+        self._task = asyncio.create_task(self._run(interval_seconds), name="atlas-scheduler")
+        _log.info("scheduler.started", event_type="scheduler", interval_seconds=interval_seconds)
+
+    async def stop(self) -> None:
+        """Stop the scheduler and wait for its loop to exit."""
+        self._stop_event.set()
+        if self._task is not None:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        _log.info("scheduler.stopped", event_type="scheduler")
+
+    async def _run(self, interval_seconds: float) -> None:
+        while not self._stop_event.is_set():
+            try:
+                await self.tick()
+            except Exception as exc:
+                _log.error("scheduler.tick_error", event_type="scheduler", error=str(exc))
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=interval_seconds)
+            except TimeoutError:
+                continue
 
     async def add_schedule(
         self,

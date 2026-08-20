@@ -24,7 +24,7 @@ from enum import Enum
 from typing import Any
 
 from atlas.infra.clock import Clock
-from atlas.infra.ids import IdGenerator
+from atlas.infra.ids import CorrelationId, IdGenerator
 from atlas.infra.logging import get_logger
 from atlas.intelligence.contracts import Constraints, InferenceRequest, Message, Role
 from atlas.intelligence.gateway import ModelGateway
@@ -170,7 +170,7 @@ class DynamicToolOrchestrator:
         # Step 2: Bind tools to requirements
         bindings = await self._bind_tools(
             requirements,
-            available_tools or list(self._registry.tools.keys()),
+            available_tools or list(self._registry.registered().keys()),
             constraints or {},
         )
         
@@ -304,6 +304,7 @@ Output JSON:
 
         resp = await self._gw.infer(
             InferenceRequest(
+                correlation_id=CorrelationId(self._ids.execution_id()),
                 messages=[
                     Message(role=Role.SYSTEM, content="You are a tool requirement analyst."),
                     Message(role=Role.USER, content=prompt),
@@ -314,7 +315,7 @@ Output JSON:
             )
         )
         
-        data = self._parse_json(resp.content)
+        data = self._parse_json(resp.text)
         
         requirements = []
         for idx, req_data in enumerate(data.get("requirements", [])):
@@ -365,7 +366,7 @@ Output JSON:
         """Bind a single requirement to the best matching tool."""
         
         # Get tool catalog
-        catalog = self._registry.catalog()
+        # catalog() returns a formatted string summary; list tools directly
         
         prompt = f"""Select the best tool for this requirement:
 
@@ -374,7 +375,7 @@ CAPABILITIES NEEDED: {', '.join(requirement.capabilities)}
 CATEGORY: {requirement.category.value if requirement.category else 'any'}
 
 AVAILABLE TOOLS:
-{chr(10).join(f'- {name}: {catalog.get(name, "")[:80]}' for name in available_tools[:20])}
+{chr(10).join(f'- {name}' for name in available_tools[:20])}
 
 Select the best tool and specify how to use it.
 
@@ -390,6 +391,7 @@ Output JSON:
 
         resp = await self._gw.infer(
             InferenceRequest(
+                correlation_id=CorrelationId(self._ids.execution_id()),
                 messages=[
                     Message(role=Role.SYSTEM, content="You are a tool selection expert."),
                     Message(role=Role.USER, content=prompt),
@@ -400,7 +402,7 @@ Output JSON:
             )
         )
         
-        data = self._parse_json(resp.content)
+        data = self._parse_json(resp.text)
         
         return ToolBinding(
             requirement_id=requirement.requirement_id,
@@ -545,7 +547,7 @@ Output JSON:
         for orig in original_bindings:
             # Try to find a different tool
             other_tools = [
-                t for t in self._registry.tools.keys()
+                t for t in self._registry.registered().keys()
                 if t != orig.tool_name
             ]
             
@@ -590,7 +592,7 @@ Output JSON:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
             for result in results:
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     # Convert exception to result
                     all_results.append(ToolExecutionResult(
                         requirement_id="unknown",
@@ -601,7 +603,7 @@ Output JSON:
                         duration_ms=0,
                         cost_usd=0.0,
                     ))
-                else:
+                elif isinstance(result, ToolExecutionResult):
                     all_results.append(result)
         
         return all_results
@@ -662,7 +664,7 @@ Output JSON:
         start = time.perf_counter()
         
         try:
-            tool = self._registry.tools.get(binding.tool_name)
+            tool = self._registry.get(binding.tool_name)
             if not tool:
                 return ToolExecutionResult(
                     requirement_id=binding.requirement_id,
@@ -679,11 +681,8 @@ Output JSON:
             for arg_name, source_field in binding.args_mapping.items():
                 args[arg_name] = context.get(source_field)
             
-            # Execute
-            if asyncio.iscoroutinefunc(tool.execute):
-                output = await tool.execute(args)
-            else:
-                output = tool.execute(args)
+            # Execute (Tool.execute is always async per the base protocol)
+            output = await tool.execute(args)
             
             duration_ms = int((time.perf_counter() - start) * 1000)
             
@@ -737,7 +736,7 @@ Output JSON:
             end = text.rfind("}") + 1
             if start == -1 or end == 0:
                 return {}
-            return json.loads(text[start:end])
+            return dict(json.loads(text[start:end]))
         except json.JSONDecodeError:
             return {}
 

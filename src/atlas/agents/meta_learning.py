@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Any
 
 from atlas.infra.clock import Clock
-from atlas.infra.ids import IdGenerator
+from atlas.infra.ids import CorrelationId, IdGenerator
 from atlas.infra.logging import get_logger
 from atlas.intelligence.contracts import Constraints, InferenceRequest, Message, Role
 from atlas.intelligence.gateway import ModelGateway
@@ -140,10 +140,10 @@ class Pattern:
     expected_cost_usd: float
     prerequisites: list[str]
     pitfalls: list[str]
-    success_count: int = 0
-    failure_count: int = 0
     created_ts: datetime
     updated_ts: datetime
+    success_count: int = 0
+    failure_count: int = 0
 
 
 class MetaLearningEngine:
@@ -229,6 +229,7 @@ Output JSON:
 
         resp = await self._gw.infer(
             InferenceRequest(
+                correlation_id=CorrelationId(self._ids.execution_id()),
                 messages=[
                     Message(role=Role.SYSTEM, content="You are a task classification expert."),
                     Message(role=Role.USER, content=prompt),
@@ -239,7 +240,7 @@ Output JSON:
             )
         )
         
-        data = self._parse_json(resp.content)
+        data = self._parse_json(resp.text)
         category_str = data.get("category", "reasoning")
         
         try:
@@ -536,7 +537,7 @@ Output JSON:
         score += (perf.avg_user_feedback + 1) / 2 * 0.2  # Normalize -1..1 to 0..1
         
         # Cost efficiency (10% weight)
-        max_cost = constraints.get("max_cost_usd", 1.0)
+        max_cost = float(constraints.get("max_cost_usd", 1.0))
         cost_efficiency = 1.0 - min(perf.avg_cost_usd / max_cost, 1.0)
         score += cost_efficiency * 0.1
         
@@ -679,7 +680,7 @@ Output JSON:
             end = text.rfind("}") + 1
             if start == -1 or end == 0:
                 return {}
-            return json.loads(text[start:end])
+            return dict(json.loads(text[start:end]))
         except json.JSONDecodeError:
             return {}
 

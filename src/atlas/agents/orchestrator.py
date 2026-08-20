@@ -53,7 +53,7 @@ from atlas.agents.uncertainty import (
     UncertaintyQuantifier,
 )
 from atlas.infra.clock import Clock
-from atlas.infra.ids import IdGenerator
+from atlas.infra.ids import CorrelationId, IdGenerator
 from atlas.infra.logging import get_logger
 from atlas.intelligence.contracts import Constraints, InferenceRequest, Message, Role
 from atlas.intelligence.gateway import ModelGateway
@@ -233,7 +233,7 @@ class AgenticOrchestrator:
             config=self._config.__dict__,
         )
 
-    def set_tool_registry(self, registry) -> None:
+    def set_tool_registry(self, registry: Any) -> None:
         """Set the tool registry for dynamic tool orchestration."""
         
         self._tool_orchestrator = DynamicToolOrchestrator(
@@ -339,7 +339,7 @@ class AgenticOrchestrator:
                 category=category,
                 strategy=strategy,
                 execution_result=execution_result,
-                uncertainty=uncertainty_result,
+                uncertainty_result=uncertainty_result,
             )
             
             # Step 9: Memory graph consolidation
@@ -362,7 +362,10 @@ class AgenticOrchestrator:
                     causal_insights,
                 ),
                 reflections=[reflection_result.__dict__] if reflection_result else [],
-                improvements_identified=self._reflection_engine.get_improvement_priorities(5),
+                improvements_identified=[
+                    vars(imp)
+                    for imp in await self._reflection_engine.get_improvement_priorities(5)
+                ],
                 causal_insights=causal_insights,
                 knowledge_updated=knowledge_updated,
                 metadata={
@@ -420,6 +423,7 @@ class AgenticOrchestrator:
                     replan_count=0,
                     error_type=type(e).__name__,
                     error_message=str(e),
+                    user_feedback=None,
                     timestamp=datetime.now(UTC),
                 )
             )
@@ -437,11 +441,11 @@ class AgenticOrchestrator:
         """Determine if a task requires collaborative reasoning."""
         
         # Complex if multiple constraints, many tools, or high priority
-        return (
-            len(ctx.constraints) > 2 or
-            len(ctx.available_tools) > 3 or
-            ctx.priority >= 8 or
-            (ctx.time_limit and ctx.time_limit > timedelta(minutes=30))
+        return bool(
+            len(ctx.constraints) > 2
+            or len(ctx.available_tools) > 3
+            or ctx.priority >= 8
+            or (ctx.time_limit is not None and ctx.time_limit > timedelta(minutes=30))
         )
 
     async def _perform_causal_analysis(
@@ -539,6 +543,7 @@ class AgenticOrchestrator:
         
         resp = await self._gw.infer(
             InferenceRequest(
+                correlation_id=CorrelationId(self._ids.execution_id()),
                 messages=[
                     Message(role=Role.SYSTEM, content="You are an expert agent executing tasks."),
                     Message(role=Role.USER, content=prompt),
@@ -549,11 +554,11 @@ class AgenticOrchestrator:
             )
         )
         
-        return resp.content
+        return resp.text
 
     def _aggregate_results(
         self,
-        results: list,
+        results: list[Any],
     ) -> Any:
         """Aggregate tool execution results."""
         
@@ -606,6 +611,7 @@ class AgenticOrchestrator:
             replan_count=0,
             error_type=None if execution_result else "execution_failed",
             error_message=str(execution_result.get("error")) if isinstance(execution_result, dict) else None,
+            user_feedback=None,
             timestamp=datetime.now(UTC),
         )
         

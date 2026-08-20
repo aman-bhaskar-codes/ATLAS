@@ -24,7 +24,7 @@ from enum import Enum
 from typing import Any
 
 from atlas.infra.clock import Clock
-from atlas.infra.ids import IdGenerator
+from atlas.infra.ids import CorrelationId, IdGenerator
 from atlas.infra.logging import get_logger
 from atlas.intelligence.contracts import Constraints, InferenceRequest, Message, Role
 from atlas.intelligence.gateway import ModelGateway
@@ -295,7 +295,7 @@ class MemoryGraphConsolidator:
                     "timestamp": fact.valid_from.isoformat(),
                     "event": "fact_valid",
                     "description": fact.statement,
-                    "valid_until": fact.valid_until.isoformat() if fact.valid_until else None,
+                    "valid_until": fact.valid_until.isoformat() if fact.valid_until else "",
                 })
         
         # Sort by timestamp
@@ -309,9 +309,9 @@ class MemoryGraphConsolidator:
     ) -> tuple[dict[str, Entity], dict[str, Relation], list[TemporalFact]]:
         """Extract entities, relations, and facts from episodes."""
         
-        all_entities = {}
-        all_relations = {}
-        all_facts = []
+        all_entities: dict[str, Entity] = {}
+        all_relations: dict[str, Relation] = {}
+        all_facts: list[TemporalFact] = []
         
         # Process episodes in batches
         for episode in episodes:
@@ -376,6 +376,7 @@ Output JSON:
 
         resp = await self._gw.infer(
             InferenceRequest(
+                correlation_id=CorrelationId(self._ids.execution_id()),
                 messages=[
                     Message(role=Role.SYSTEM, content="You are a knowledge extraction expert."),
                     Message(role=Role.USER, content=prompt),
@@ -386,7 +387,7 @@ Output JSON:
             )
         )
         
-        data = self._parse_json(resp.content)
+        data = self._parse_json(resp.text)
         
         entities = {}
         relations = {}
@@ -399,7 +400,7 @@ Output JSON:
             except ValueError:
                 ent_type = EntityType.CONCEPT
             
-            entity_id = self._ids.execution_id()
+            entity_id = str(self._ids.execution_id())
             entity = Entity(
                 entity_id=entity_id,
                 name=ent_data.get("name", f"entity_{idx}"),
@@ -532,9 +533,9 @@ Output JSON:
 
     def _merge_dicts(
         self,
-        existing: dict,
-        new_items: dict,
-    ) -> dict:
+        existing: dict[str, Any],
+        new_items: dict[str, Any],
+    ) -> dict[str, Any]:
         """Merge two dictionaries."""
         result = dict(existing)
         result.update(new_items)
@@ -616,7 +617,7 @@ Output JSON:
         self,
         entity_ids: list[str],
         max_hops: int = 2,
-    ) -> dict[str, dict]:
+    ) -> dict[str, dict[str, Any]]:
         """Get subgraph around entities."""
         
         subgraph_entities = {}
@@ -669,6 +670,7 @@ Output JSON: {{"entity_ids": ["id1", "id2", ...]}}"""
 
         resp = await self._gw.infer(
             InferenceRequest(
+                correlation_id=CorrelationId(self._ids.execution_id()),
                 messages=[
                     Message(role=Role.SYSTEM, content="You are a knowledge retrieval expert."),
                     Message(role=Role.USER, content=prompt),
@@ -679,8 +681,8 @@ Output JSON: {{"entity_ids": ["id1", "id2", ...]}}"""
             )
         )
         
-        data = self._parse_json(resp.content)
-        return data.get("entity_ids", [])
+        data = self._parse_json(resp.text)
+        return list(data.get("entity_ids", []))
 
     def _parse_json(
         self,
@@ -693,7 +695,7 @@ Output JSON: {{"entity_ids": ["id1", "id2", ...]}}"""
             end = text.rfind("}") + 1
             if start == -1 or end == 0:
                 return {}
-            return json.loads(text[start:end])
+            return dict(json.loads(text[start:end]))
         except json.JSONDecodeError:
             return {}
 

@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from atlas.bootstrap.runtime import SystemState
+from atlas.bootstrap.runtime import RuntimeSupervisor, SystemState
 
 router = APIRouter(tags=["health"])
 
@@ -54,13 +54,16 @@ class HealthResponse(BaseModel):
     uptime_seconds: float
 
 
-def get_runtime_supervisor(request: Request):
+def get_runtime_supervisor(request: Request) -> RuntimeSupervisor | None:
     """Get the runtime supervisor from app state."""
     atlas = request.app.state.atlas
     if atlas.runtime_supervisor is None:
         # Fallback for backward compatibility
         return None
-    return atlas.runtime_supervisor
+    supervisor = atlas.runtime_supervisor
+    if not isinstance(supervisor, RuntimeSupervisor):
+        return None
+    return supervisor
 
 
 @router.get("/live")
@@ -83,7 +86,7 @@ async def liveness_probe(request: Request) -> LivenessResponse:
 
 @router.get("/ready")
 async def readiness_probe(
-    supervisor: Annotated[object, Depends(get_runtime_supervisor)],
+    supervisor: Annotated[RuntimeSupervisor | None, Depends(get_runtime_supervisor)],
     request: Request,
 ) -> ReadinessResponse:
     """Readiness check - can the system accept tasks?
@@ -116,7 +119,7 @@ async def readiness_probe(
 
 @router.get("/health")
 async def health_probe(
-    supervisor: Annotated[object, Depends(get_runtime_supervisor)],
+    supervisor: Annotated[RuntimeSupervisor | None, Depends(get_runtime_supervisor)],
     request: Request,
 ) -> HealthResponse:
     """Detailed health check - component-level health information.

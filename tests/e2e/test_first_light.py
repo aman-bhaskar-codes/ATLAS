@@ -22,6 +22,8 @@ import pytest
 from atlas.app import build
 from atlas.bootstrap.runtime import SystemState
 from atlas.infra.types import InboundEvent
+from atlas.intelligence.providers.base import ProviderCompletion
+from atlas.intelligence.contracts import Usage
 
 
 @pytest.mark.asyncio
@@ -51,9 +53,9 @@ async def test_first_light_simple_task(tmp_path: Path) -> None:
         patch(
             "atlas.intelligence.providers.ollama.OllamaProvider.complete",
             new_callable=AsyncMock,
-            return_value=MagicMock(
+            return_value=ProviderCompletion(
                 text="I found 42 Python files in the repository.",
-                usage=MagicMock(input_tokens=10, output_tokens=5, usd=0.0),
+                usage=Usage(input_tokens=10, output_tokens=5, usd=0.0),
             ),
         ),
         patch(
@@ -78,7 +80,7 @@ async def test_first_light_simple_task(tmp_path: Path) -> None:
             task_request = "List the Python files in the current directory"
             event = InboundEvent(
                 correlation_id="test_first_light",
-                source="e2e_test",
+                source="system",
                 content=task_request,
             )
             
@@ -241,9 +243,9 @@ async def test_task_state_transitions(tmp_path: Path) -> None:
         patch(
             "atlas.intelligence.providers.ollama.OllamaProvider.complete",
             new_callable=AsyncMock,
-            return_value=MagicMock(
+            return_value=ProviderCompletion(
                 text="Task completed successfully",
-                usage=MagicMock(input_tokens=10, output_tokens=5, usd=0.0),
+                usage=Usage(input_tokens=10, output_tokens=5, usd=0.0),
             ),
         ),
         patch(
@@ -260,7 +262,7 @@ async def test_task_state_transitions(tmp_path: Path) -> None:
             # Submit a task
             event = InboundEvent(
                 correlation_id="test_state",
-                source="e2e_test",
+                source="system",
                 content="Test task",
             )
             

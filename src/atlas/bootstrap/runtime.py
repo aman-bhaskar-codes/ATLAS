@@ -133,7 +133,7 @@ class RuntimeSupervisor:
         
         # Lifecycle control
         self._shutdown_event = asyncio.Event()
-        self._background_tasks: set[asyncio.Task] = set()
+        self._background_tasks: set[asyncio.Task[None]] = set()
         
         # Component references (set during startup)
         self._atlas: Any = None
@@ -141,7 +141,7 @@ class RuntimeSupervisor:
         
         # Health monitoring
         self._health_check_interval = 60.0  # seconds
-        self._health_check_task: asyncio.Task | None = None
+        self._health_check_task: asyncio.Task[None] | None = None
 
     @property
     def state(self) -> SystemState:
@@ -175,7 +175,7 @@ class RuntimeSupervisor:
                 
                 # Transition state after each phase
                 if self._state == SystemState.BOOTING:
-                    self._state = SystemState.INIALIZING
+                    self._state = SystemState.INITIALIZING
             
             # Run final readiness checks
             health_report = await self._run_readiness_checks()
@@ -340,19 +340,21 @@ class RuntimeSupervisor:
         if not available:
             _log.warning("intelligence.no_providers", health=health)
             # This is a degradation, not a failure
-            self._set_component_health("intelligence_gateway", ComponentStatus.DEGRADED, "No providers available")
+            self._set_component_health(
+                "intelligence_gateway", ComponentStatus.DEGRADED, detail="No providers available"
+            )
 
     async def _verify_memory(self) -> None:
         """Verify memory subsystems are operational."""
         # Vector store should be initialized
         if not self._atlas.vectors:
             _log.warning("memory.vectorstore.unavailable")
-            self._set_component_health("vectorstore", ComponentStatus.DEGRADED, "Vector store not initialized")
+            self._set_component_health("vectorstore", ComponentStatus.DEGRADED, detail="Vector store not initialized")
         
         # Episodic memory should be initialized
         if not self._atlas.episodic:
             _log.warning("memory.episodic.unavailable")
-            self._set_component_health("episodic", ComponentStatus.DEGRADED, "Episodic memory not initialized")
+            self._set_component_health("episodic", ComponentStatus.DEGRADED, detail="Episodic memory not initialized")
 
     async def _verify_capabilities(self) -> None:
         """Verify capability platforms are operational."""
@@ -363,7 +365,7 @@ class RuntimeSupervisor:
         # Browser is optional
         if not self._atlas.browser_platform:
             _log.info("capabilities.browser.disabled")
-            self._set_component_health("browser", ComponentStatus.UNAVAILABLE, "Browser platform disabled")
+            self._set_component_health("browser", ComponentStatus.UNAVAILABLE, detail="Browser platform disabled")
 
     async def _verify_orchestration(self) -> None:
         """Verify orchestration components are operational."""
@@ -602,7 +604,7 @@ class RuntimeSupervisor:
         now = self._clock.now()
         
         if name not in self._component_health:
-            self._component_health[name] = ComponentHealth(name=name)
+            self._component_health[name] = ComponentHealth(name=name, status=ComponentStatus.UNAVAILABLE)
         
         health = self._component_health[name]
         health.status = status
@@ -654,20 +656,18 @@ class RuntimeSupervisor:
     async def _start_background_workers(self) -> None:
         """Start background workers."""
         _log.info("runtime.workers.starting")
-        
+
         # Start embedding worker
         if self._atlas.embedding_worker:
-            task = asyncio.create_task(self._atlas.embedding_worker.run_forever())
-            self._background_tasks.add(task)
-            self._worker_registry["embedding_worker"] = task
-        
+            await self._atlas.embedding_worker.start()
+            self._worker_registry["embedding_worker"] = self._atlas.embedding_worker
+
         # Start scheduler if available
         if self._atlas.scheduler:
-            task = asyncio.create_task(self._atlas.scheduler.run_forever())
-            self._background_tasks.add(task)
-            self._worker_registry["scheduler"] = task
-        
-        _log.info("runtime.workers.started", count=len(self._background_tasks))
+            await self._atlas.scheduler.start()
+            self._worker_registry["scheduler"] = self._atlas.scheduler
+
+        _log.info("runtime.workers.started", count=len(self._worker_registry))
 
     async def shutdown(self, timeout_seconds: float = 30.0) -> None:
         """Gracefully shutdown the runtime supervisor.
@@ -698,10 +698,6 @@ class RuntimeSupervisor:
             
             # Stop background workers
             await self._stop_background_workers(timeout_seconds)
-            
-            # Close Atlas instance
-            if self._atlas:
-                await self._atlas.close()
             
             _log.info("runtime.shutdown.completed", uptime_seconds=self.uptime_seconds)
             
@@ -737,6 +733,11 @@ class RuntimeSupervisor:
                 _log.warning("runtime.workers.timeout", some_workers_still_running=True)
         
         self._background_tasks.clear()
+        if self._atlas is not None:
+            if self._atlas.embedding_worker is not None:
+                await self._atlas.embedding_worker.stop()
+            if self._atlas.scheduler is not None:
+                await self._atlas.scheduler.stop()
         self._worker_registry.clear()
         _log.info("runtime.workers.stopped")
 
