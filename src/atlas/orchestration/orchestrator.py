@@ -28,10 +28,10 @@ from atlas.orchestration.managers.cancellation import CancellationToken
 from atlas.orchestration.planner import Planner
 from atlas.orchestration.reasoning import ReasoningLoop
 from atlas.orchestration.registry import ToolRegistry
-from atlas.orchestration.router import Router
 from atlas.orchestration.state import TaskState, TaskStateMachine
 from atlas.orchestration.stores import CancellationStore, ExecutionStore
 from atlas.orchestration.types import Task, TaskResult
+from atlas.orchestration.understanding import IntentExtractor, capabilities_from_intent
 
 if TYPE_CHECKING:
     from atlas.memory.experience_extractor import ExperienceExtractor
@@ -53,7 +53,7 @@ class Orchestrator:
         clock: Clock,
         execution_store: Any,
         cancellation_store: Any,
-        router: Router,
+        understanding: IntentExtractor,
         planner: Planner,
         context_builder: ContextBuilder,
         reasoning: ReasoningLoop,
@@ -70,7 +70,7 @@ class Orchestrator:
         self._clock = clock
         self._exec_store: ExecutionStore = execution_store
         self._cancel_store: CancellationStore = cancellation_store
-        self._router = router
+        self._understanding = understanding
         self._planner = planner
         self._context = context_builder
         self._reasoning = reasoning
@@ -124,7 +124,22 @@ class Orchestrator:
             await self._events.emit(
                 task_id=task.id, correlation_id=task.correlation_id, state=machine.state.value, kind="context.building"
             )
-            caps = await self._router.route(task.request, task.correlation_id)
+            # Phase 2: understand ONCE. Every downstream stage reads this intent
+            # instead of re-deriving what the user wanted.
+            intent = await self._understanding.understand(task.request, task.correlation_id)
+            caps = capabilities_from_intent(intent)
+            await self._events.emit(
+                task_id=task.id,
+                correlation_id=task.correlation_id,
+                state=machine.state.value,
+                kind="intent.created",
+                domain=intent.domain.value,
+                risk=intent.risk.value,
+                complexity=intent.complexity.value,
+                reasoning_level=int(intent.reasoning_level),
+                criteria_count=len(intent.success_criteria),
+                confidence=intent.confidence,
+            )
             context = await self._context.build(
                 task.request,
                 safety_constraints=_SAFETY_CONSTRAINTS,
@@ -155,10 +170,15 @@ class Orchestrator:
                 confidence=plan.confidence,
             )
 
-            # Phase 1: Build GoalState from plan so the loop can track and replan
+            # Phase 12: success criteria come from the INTENT, not the plan.
+            # WHY this line matters: the verifier short-circuits to
+            # "not applicable" when criteria are empty, and nothing used to
+            # populate them — so every task reported verification_passed=True
+            # without a single check ever running.
             goal = GoalState(
-                objective=plan.goal,
-                constraints=list(plan.constraints),
+                objective=plan.goal or intent.objective,
+                constraints=tuple(plan.constraints) or intent.constraints,
+                success_criteria=intent.success_criteria,
                 current_state="planning_complete",
                 confidence=plan.confidence,
             )
@@ -174,7 +194,7 @@ class Orchestrator:
                         f"- step {idx}: {'ok' if obs.ok else 'FAILED'} {str(obs.content or obs.error or '')[:200]}"
                         for idx, obs in sorted(dag_results.items())
                     )
-                    goal.update_progress(
+                    goal = goal.with_progress(
                         len(dag_results) / max(1, len(plan.steps)),
                         "dag_execution_complete",
                     )
@@ -188,6 +208,7 @@ class Orchestrator:
                 token=token,
                 goal=goal,
                 caps=caps,
+                intent=intent,
             )
 
             # Phase 2: Save trajectory for durable learning

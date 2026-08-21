@@ -74,6 +74,10 @@ rules:
   - {tool: browser,    operation: upload,    tier: 2}
   - {tool: browser,    operation: download,  tier: 2}
   - {tool: browser,    operation: dialog,    tier: 2}
+  # ── Computer Use (universal perception/control: browser + macOS + Android) ──
+  - {tool: computer_use, operation: perceive, tier: 0}   # read-only perception
+  - {tool: computer_use, operation: health,   tier: 0}   # environment introspection
+  - {tool: computer_use, operation: act,      tier: 1}   # UI action, evidence-verified
   # ── Notification ──
   - {tool: notify,     operation: send,      tier: 0}
   # ── DANGEROUS tier (3) — high-impact actions needing approval + confirmation code ──
@@ -105,4 +109,7 @@ require_confirm:
   - {tool: browser,    operation: click,    match: destructive_ui, tier: 2}
   - {tool: browser,    operation: type,     match: credential_entry, tier: 2}
   - {tool: browser,    operation: submit,   match: submits_form, tier: 2}
+  - {tool: computer_use, operation: act,    match: financial_ui, tier: 2}
+  - {tool: computer_use, operation: act,    match: credential_entry, tier: 2}
+  - {tool: computer_use, operation: act,    match: destructive_ui, tier: 2}
 

@@ -620,6 +620,356 @@ _MIGRATIONS: tuple[str, ...] = (
     );
     CREATE INDEX IF NOT EXISTS idx_automations_enabled ON automations(enabled);
     """,
+    """
+    -- 016 — Prompt 3 Knowledge Fabric: canonical documents, chunks, evidence,
+    -- research sessions, RAG telemetry, retrieval feedback, adapter registry.
+    CREATE TABLE IF NOT EXISTS fabric_documents (
+        document_id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        uri TEXT NOT NULL DEFAULT '',
+        canonical_uri TEXT NOT NULL DEFAULT '',
+        content TEXT NOT NULL,
+        content_type TEXT NOT NULL DEFAULT 'text/plain',
+        language TEXT NOT NULL DEFAULT 'en',
+        author TEXT NOT NULL DEFAULT '',
+        published_at TEXT,
+        retrieved_at TEXT NOT NULL,
+        modified_at TEXT,
+        content_hash TEXT NOT NULL,
+        authority REAL NOT NULL DEFAULT 0.5,
+        trust_score REAL NOT NULL DEFAULT 0.5,
+        freshness REAL NOT NULL DEFAULT 0.5,
+        license TEXT NOT NULL DEFAULT '',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        provenance_json TEXT NOT NULL DEFAULT '{}',
+        security_status TEXT NOT NULL DEFAULT 'SAFE',
+        security_flags_json TEXT NOT NULL DEFAULT '[]',
+        pipeline_version TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'READY',
+        chunk_count INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_fdoc_hash ON fabric_documents(content_hash);
+    CREATE INDEX IF NOT EXISTS idx_fdoc_type ON fabric_documents(source_type);
+    CREATE INDEX IF NOT EXISTS idx_fdoc_status ON fabric_documents(status);
+    CREATE INDEX IF NOT EXISTS idx_fdoc_retrieved ON fabric_documents(retrieved_at DESC);
+
+    CREATE TABLE IF NOT EXISTS fabric_chunks (
+        chunk_id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        heading TEXT NOT NULL DEFAULT '',
+        chunk_index INTEGER NOT NULL,
+        total_chunks INTEGER NOT NULL,
+        char_start INTEGER NOT NULL DEFAULT 0,
+        char_end INTEGER NOT NULL DEFAULT 0,
+        token_estimate INTEGER NOT NULL DEFAULT 0,
+        embedding_id TEXT,
+        kind TEXT NOT NULL DEFAULT 'text',           -- text | table | code
+        FOREIGN KEY (document_id) REFERENCES fabric_documents(document_id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fchunk_doc ON fabric_chunks(document_id, chunk_index);
+
+    CREATE TABLE IF NOT EXISTS fabric_evidence (
+        evidence_id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL,
+        chunk_id TEXT NOT NULL,
+        quote TEXT NOT NULL,
+        location TEXT NOT NULL DEFAULT '',
+        authority REAL NOT NULL DEFAULT 0.5,
+        confidence REAL NOT NULL DEFAULT 0.5,
+        provenance_json TEXT NOT NULL DEFAULT '{}',
+        hash TEXT NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_fevid_doc ON fabric_evidence(document_id);
+    CREATE INDEX IF NOT EXISTS idx_fevid_chunk ON fabric_evidence(chunk_id);
+
+    CREATE TABLE IF NOT EXISTS research_sessions (
+        session_id TEXT PRIMARY KEY,
+        goal TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'OPEN',          -- OPEN | IN_PROGRESS | ANSWERED | BLOCKED | DISPUTED
+        questions_json TEXT NOT NULL DEFAULT '[]',
+        visited_urls_json TEXT NOT NULL DEFAULT '[]',
+        document_ids_json TEXT NOT NULL DEFAULT '[]',
+        budget_used_json TEXT NOT NULL DEFAULT '{}',
+        started_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rsess_status ON research_sessions(status, updated_ts DESC);
+
+    CREATE TABLE IF NOT EXISTS rag_records (
+        id TEXT PRIMARY KEY,
+        query TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        route TEXT NOT NULL,
+        latency_ms INTEGER NOT NULL DEFAULT 0,
+        retrieve_ms INTEGER NOT NULL DEFAULT 0,
+        rerank_ms INTEGER NOT NULL DEFAULT 0,
+        synthesize_ms INTEGER NOT NULL DEFAULT 0,
+        candidate_count INTEGER NOT NULL DEFAULT 0,
+        evidence_count INTEGER NOT NULL DEFAULT 0,
+        answered INTEGER NOT NULL DEFAULT 0,
+        degraded INTEGER NOT NULL DEFAULT 0,
+        failure TEXT,                                  -- failure taxonomy code
+        detail_json TEXT NOT NULL DEFAULT '{}',
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rag_mode ON rag_records(mode, created_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_rag_failure ON rag_records(failure, created_ts DESC);
+
+    CREATE TABLE IF NOT EXISTS retrieval_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        query TEXT NOT NULL,
+        chunk_id TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        label TEXT NOT NULL,                           -- §125 feedback labels
+        used_in_answer INTEGER NOT NULL DEFAULT 0,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rf_chunk ON retrieval_feedback(chunk_id);
+    CREATE INDEX IF NOT EXISTS idx_rf_label ON retrieval_feedback(label, created_ts DESC);
+
+    CREATE TABLE IF NOT EXISTS knowledge_adapters (
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL,                            -- retriever | reranker | router | rewriter
+        version TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'EXPERIMENTAL',    -- EXPERIMENTAL | VALIDATED | ACTIVE | DEPRECATED
+        metrics_json TEXT NOT NULL DEFAULT '{}',
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL,
+        PRIMARY KEY (kind, name, version)
+    );
+    CREATE INDEX IF NOT EXISTS idx_kadapter_state ON knowledge_adapters(kind, state);
+    """,
+    # 015 — Prompt 4: adaptation control plane (learning objects, §1-§24)
+    """
+    ALTER TABLE trajectories ADD COLUMN atlas_version TEXT;
+    ALTER TABLE trajectories ADD COLUMN git_commit TEXT;
+    ALTER TABLE trajectories ADD COLUMN config_hash TEXT;
+    ALTER TABLE trajectories ADD COLUMN strategy_id TEXT;
+    ALTER TABLE trajectories ADD COLUMN strategy_version INTEGER;
+    ALTER TABLE trajectories ADD COLUMN model_version TEXT;
+    ALTER TABLE trajectories ADD COLUMN capability_snapshot_version TEXT;
+    ALTER TABLE trajectories ADD COLUMN safety_events TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE trajectories ADD COLUMN completion_confidence REAL;
+
+    CREATE TABLE IF NOT EXISTS failure_taxonomy (
+        failure_id TEXT PRIMARY KEY,
+        trajectory_id TEXT NOT NULL,
+        failure_class TEXT NOT NULL,
+        step_id INTEGER,
+        evidence_json TEXT NOT NULL DEFAULT '[]',
+        root_cause_candidate INTEGER NOT NULL DEFAULT 0,
+        recoverable INTEGER NOT NULL DEFAULT 0,
+        recovery_attempts INTEGER NOT NULL DEFAULT 0,
+        final_resolution TEXT NOT NULL DEFAULT 'FAILED',
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ft_traj ON failure_taxonomy(trajectory_id);
+    CREATE INDEX IF NOT EXISTS idx_ft_class ON failure_taxonomy(failure_class, created_ts DESC);
+
+    CREATE TABLE IF NOT EXISTS failure_analyses (
+        trajectory_id TEXT PRIMARY KEY,
+        primary_cause TEXT NOT NULL,
+        secondary_causes_json TEXT NOT NULL DEFAULT '[]',
+        evidence_json TEXT NOT NULL DEFAULT '[]',
+        confidence REAL NOT NULL DEFAULT 0,
+        avoidable INTEGER NOT NULL DEFAULT 0,
+        recommended_intervention TEXT NOT NULL DEFAULT '',
+        created_ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS trajectory_evaluations (
+        trajectory_id TEXT PRIMARY KEY,
+        scores_json TEXT NOT NULL,
+        evaluator_levels_json TEXT NOT NULL DEFAULT '[]',
+        created_ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS outcome_evaluations (
+        trajectory_id TEXT PRIMARY KEY,
+        verdict TEXT NOT NULL,
+        overall_score REAL NOT NULL,
+        rationale TEXT NOT NULL DEFAULT '',
+        created_ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS hypotheses (
+        hypothesis_id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        problem_statement TEXT NOT NULL,
+        evidence_json TEXT NOT NULL DEFAULT '[]',
+        affected_component TEXT NOT NULL,
+        proposed_change TEXT NOT NULL,
+        change_type TEXT NOT NULL,
+        expected_effect TEXT NOT NULL DEFAULT '',
+        risk TEXT NOT NULL DEFAULT 'LOW',
+        constraints_json TEXT NOT NULL DEFAULT '[]',
+        evaluation_plan TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'PROPOSED',
+        experiment_id TEXT,
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_hyp_status ON hypotheses(status, updated_ts DESC);
+
+    CREATE TABLE IF NOT EXISTS experiments (
+        experiment_id TEXT PRIMARY KEY,
+        hypothesis_id TEXT NOT NULL,
+        baseline_json TEXT NOT NULL,
+        candidate_json TEXT NOT NULL,
+        dataset_version TEXT NOT NULL,
+        pipeline_version TEXT NOT NULL,
+        atlas_version TEXT NOT NULL,
+        metrics_json TEXT NOT NULL DEFAULT '[]',
+        resource_limits_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        created_ts TEXT NOT NULL,
+        completed_ts TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_exp_status ON experiments(status, created_ts DESC);
+
+    CREATE TABLE IF NOT EXISTS comparison_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        experiment_id TEXT NOT NULL,
+        metric TEXT NOT NULL,
+        baseline_version TEXT NOT NULL,
+        candidate_version TEXT NOT NULL,
+        dataset_version TEXT NOT NULL,
+        model_version TEXT NOT NULL DEFAULT '',
+        atlas_version TEXT NOT NULL,
+        n INTEGER NOT NULL,
+        baseline_mean REAL NOT NULL,
+        candidate_mean REAL NOT NULL,
+        baseline_median REAL,
+        candidate_median REAL,
+        baseline_variance REAL,
+        candidate_variance REAL,
+        ci_low REAL,
+        ci_high REAL,
+        effect_size REAL,
+        paired INTEGER NOT NULL DEFAULT 0,
+        significant INTEGER NOT NULL DEFAULT 0,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_cmp_exp ON comparison_results(experiment_id, metric);
+
+    CREATE TABLE IF NOT EXISTS generalization_results (
+        experiment_id TEXT PRIMARY KEY,
+        baseline_score REAL NOT NULL,
+        candidate_score REAL NOT NULL,
+        n_tasks INTEGER NOT NULL,
+        holds_on_unseen INTEGER NOT NULL DEFAULT 0,
+        score_by_domain_json TEXT NOT NULL DEFAULT '{}',
+        created_ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS promotion_decisions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        experiment_id TEXT NOT NULL,
+        hypothesis_id TEXT NOT NULL,
+        decision TEXT NOT NULL,
+        reasons_json TEXT NOT NULL DEFAULT '[]',
+        safety_regression INTEGER NOT NULL DEFAULT 0,
+        promotion_state TEXT NOT NULL DEFAULT 'PROPOSED',
+        promoted_strategy_id TEXT,
+        promoted_version INTEGER,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_promo_exp ON promotion_decisions(experiment_id);
+
+    CREATE TABLE IF NOT EXISTS strategy_versions (
+        strategy_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        definition TEXT NOT NULL,
+        task_type_pattern TEXT NOT NULL DEFAULT '*',
+        skills_json TEXT NOT NULL DEFAULT '[]',
+        retrieval_policy TEXT NOT NULL DEFAULT '',
+        model_preference TEXT NOT NULL DEFAULT '',
+        tool_preference TEXT NOT NULL DEFAULT '',
+        verification_policy TEXT NOT NULL DEFAULT '',
+        change_reason TEXT NOT NULL DEFAULT '',
+        source_experiments_json TEXT NOT NULL DEFAULT '[]',
+        created_ts TEXT NOT NULL,
+        PRIMARY KEY (strategy_id, version)
+    );
+
+    CREATE TABLE IF NOT EXISTS strategy_performance (
+        strategy_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        runs INTEGER NOT NULL DEFAULT 0,
+        success_rate REAL NOT NULL DEFAULT 0,
+        quality_score REAL NOT NULL DEFAULT 0,
+        latency_ms_avg REAL NOT NULL DEFAULT 0,
+        cost_usd_avg REAL NOT NULL DEFAULT 0,
+        recovery_rate REAL NOT NULL DEFAULT 0,
+        verification_rate REAL NOT NULL DEFAULT 0,
+        generalization REAL NOT NULL DEFAULT 0,
+        user_feedback REAL NOT NULL DEFAULT 0,
+        updated_ts TEXT NOT NULL,
+        PRIMARY KEY (strategy_id, version)
+    );
+
+    CREATE TABLE IF NOT EXISTS decision_preferences (
+        preference_id TEXT PRIMARY KEY,
+        adaptation_point TEXT NOT NULL,
+        context_key TEXT NOT NULL DEFAULT '',
+        preferred_option TEXT NOT NULL,
+        evidence_count INTEGER NOT NULL DEFAULT 0,
+        success_rate REAL NOT NULL DEFAULT 0,
+        source_experiment TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_pref_point ON decision_preferences(adaptation_point, context_key, active);
+
+    CREATE TABLE IF NOT EXISTS adaptation_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        ref_id TEXT NOT NULL DEFAULT '',
+        detail_json TEXT NOT NULL DEFAULT '{}'
+    );
+    CREATE INDEX IF NOT EXISTS idx_ae_ts ON adaptation_events(ts);
+
+    CREATE TABLE IF NOT EXISTS negative_experiences (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trajectory_id TEXT NOT NULL,
+        lesson TEXT NOT NULL,
+        why_rejected TEXT NOT NULL DEFAULT '',
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_neg_traj ON negative_experiences(trajectory_id);
+    """,
+    # 016 — Prompt 4: structured experiences + skill lifecycle (§9-§11)
+    """
+    CREATE TABLE IF NOT EXISTS structured_experiences (
+        experience_id TEXT PRIMARY KEY,
+        trajectory_id TEXT NOT NULL,
+        problem_pattern TEXT NOT NULL,
+        what_worked TEXT NOT NULL DEFAULT '',
+        what_failed TEXT NOT NULL DEFAULT '',
+        successful_actions_json TEXT NOT NULL DEFAULT '[]',
+        failed_actions_json TEXT NOT NULL DEFAULT '[]',
+        recovery_pattern TEXT NOT NULL DEFAULT '',
+        useful_evidence_json TEXT NOT NULL DEFAULT '[]',
+        lesson_candidate TEXT NOT NULL DEFAULT '',
+        validated INTEGER NOT NULL DEFAULT 0,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_se_pattern ON structured_experiences(problem_pattern, created_ts DESC);
+
+    CREATE TABLE IF NOT EXISTS skill_lifecycle (
+        skill_name TEXT PRIMARY KEY,
+        state TEXT NOT NULL DEFAULT 'EXPERIMENTAL',
+        applications INTEGER NOT NULL DEFAULT 0,
+        successes INTEGER NOT NULL DEFAULT 0,
+        reason TEXT NOT NULL DEFAULT '',
+        updated_ts TEXT NOT NULL
+    );
+    """,
 )
 
 

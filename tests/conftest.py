@@ -12,6 +12,12 @@ import yaml
 from atlas.infra.config import LoggingCfg
 from atlas.infra.db import Database
 from atlas.infra.logging import configure_logging
+from tests.knowledge.harness import clock as clock
+from tests.knowledge.harness import fabric as fabric
+from tests.knowledge.harness import ids as ids
+from tests.knowledge.harness import pipeline as pipeline
+from tests.knowledge.harness import retriever as retriever
+from tests.knowledge.harness import store as store
 
 
 @pytest.fixture(scope="session", autouse=True)

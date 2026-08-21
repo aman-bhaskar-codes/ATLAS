@@ -22,6 +22,7 @@ models:
       - json_generation
       - coding
       - reasoning
+      - planning
     max_concurrency: 4
     supports_streaming: true
     supports_structured_output: true

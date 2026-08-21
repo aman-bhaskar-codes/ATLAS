@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "source": "curated seed from the public-apis corpus (offline sync, never imported wholesale at runtime)",
+  "apis": [
+    {
+      "api_id": "open_meteo",
+      "name": "Open-Meteo",
+      "description": "Weather forecast, current weather and historical climate for coordinates",
+      "category": "Weather",
+      "auth": "No",
+      "https": true,
+      "cors": "yes",
+      "url": "https://api.open-meteo.com/v1/forecast",
+      "free": true
+    },
+    {
+      "api_id": "open_meteo_geocoding",
+      "name": "Open-Meteo Geocoding",
+      "description": "Geocoding: convert city and place names to latitude and longitude coordinates",
+      "category": "Geocoding",
+      "auth": "No",
+      "https": true,
+      "cors": "yes",
+      "url": "https://geocoding-api.open-meteo.com/v1/search",
+      "free": true
+    },
+    {
+      "api_id": "wttr_in",
+      "name": "wttr.in",
+      "description": "Weather forecast in text and JSON format for a city",
+      "category": "Weather",
+      "auth": "No",
+      "https": true,
+      "cors": "unknown",
+      "url": "https://wttr.in",
+      "free": true
+    },
+    {
+      "api_id": "rest_countries",
+      "name": "REST Countries",
+      "description": "Country information: capital, population, area, currency, languages, flags",
+      "category": "Geography",
+      "auth": "No",
+      "https": true,
+      "cors": "yes",
+      "url": "https://restcountries.com/v3.1",
+      "free": true
+    },
+    {
+      "api_id": "frankfurter",
+      "name": "Frankfurter",
+      "description": "Currency exchange rates and conversion, published by the European Central Bank",
+      "category": "Currency",
+      "auth": "No",
+      "https": true,
+      "cors": "yes",
+      "url": "https://api.frankfurter.app",
+      "free": true
+    },
+    {
+      "api_id": "coingecko_simple",
+      "name": "CoinGecko",
+      "description": "Cryptocurrency prices, market cap and volume",
+      "category": "Cryptocurrency",
+      "auth": "No",
+      "https": true,
+      "cors": "yes",
+      "url": "https://api.coingecko.com/api/v3",
+      "free": true
+    },
+    {
+      "api_id": "github",
+      "name": "GitHub",
+      "description": "Repositories, users, issues and code search (higher rate limit with token)",
+      "category": "Development",
+      "auth": "apiKey (optional)",
+      "https": true,
+      "cors": "yes",
+      "url": "https://api.github.com",
+      "free": true
+    },
+    {
+      "api_id": "wikipedia_summary",
+      "name": "Wikipedia REST",
+      "description": "Article summaries and page metadata from Wikipedia",
+      "category": "Knowledge",
+      "auth": "No",
+      "https": true,
+      "cors": "yes",
+      "url": "https://en.wikipedia.org/api/rest_v1",
+      "free": true
+    },
+    {
+      "api_id": "ip_api",
+      "name": "ip-api",
+      "description": "IP geolocation and network information",
+      "category": "Geocoding",
+      "auth": "No",
+      "https": false,
+      "cors": "unknown",
+      "url": "http://ip-api.com/json",
+      "free": true
+    },
+    {
+      "api_id": "nager_date",
+      "name": "Nager.Date",
+      "description": "Public holidays for countries and years",
+      "category": "Calendar",
+      "auth": "No",
+      "https": true,
+      "cors": "yes",
+      "url": "https://date.nager.at/api/v3",
+      "free": true
+    },
+    {
+      "api_id": "open_library",
+      "name": "Open Library",
+      "description": "Books, authors, editions and cover images",
+      "category": "Books",
+      "auth": "No",
+      "https": true,
+      "cors": "unknown",
+      "url": "https://openlibrary.org",
+      "free": true
+    },
+    {
+      "api_id": "dictionary_api",
+      "name": "Free Dictionary",
+      "description": "Word definitions, phonetics and examples",
+      "category": "Knowledge",
+      "auth": "No",
+      "https": true,
+      "cors": "yes",
+      "url": "https://api.dictionaryapi.dev/api/v2/entries/en",
+      "free": true
+    },
+    {
+      "api_id": "official_joke",
+      "name": "Official Joke API",
+      "description": "Random jokes and joke categories",
+      "category": "Entertainment",
+      "auth": "No",
+      "https": true,
+      "cors": "unknown",
+      "url": "https://official-joke-api.appspot.com",
+      "free": true
+    },
+    {
+      "api_id": "httpbin",
+      "name": "httpbin",
+      "description": "HTTP request and response testing endpoints",
+      "category": "Development",
+      "auth": "No",
+      "https": true,
+      "cors": "yes",
+      "url": "https://httpbin.org",
+      "free": true
+    }
+  ]
+}

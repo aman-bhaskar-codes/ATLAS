@@ -12,6 +12,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 
+from atlas.infra.cognition import ModelTier
 from atlas.infra.ids import CorrelationId
 from atlas.infra.types import CostClass, CostPolicy, NetworkPolicy, PrivacyClass, ProviderToolCall, ToolCallSpec
 from atlas.intelligence.capabilities import CapabilitySet
@@ -73,6 +74,17 @@ class Constraints(BaseModel):
     cost_policy and network_policy are injected from the active profile.
     They flow through the ModelSelector to hard-filter ineligible models
     before scoring. privacy_class is set per-request from the task.
+
+    WHY ``tier`` exists (Phase 4): FAST and DEEP work want opposite trade-offs.
+    Intent extraction, routing and short summaries run on every task and must
+    be cheap and quick; planning, recovery and verification are worth a slower,
+    stronger model. Without a tier the selector maximised one blended score for
+    both, so either the cheap path overpaid or the hard path under-thought.
+
+    WHY ``preferred_models`` is a preference and not a pin: Phase 5 forbids the
+    router from silently violating cost/privacy policy. A configured tier model
+    is a ranking boost applied AFTER the hard policy filters, so an operator
+    naming a paid model cannot smuggle it past a ZERO_COST profile.
     """
 
     model_config = {"frozen": True}
@@ -86,6 +98,9 @@ class Constraints(BaseModel):
     cost_policy: CostPolicy = CostPolicy.UNRESTRICTED
     network_policy: NetworkPolicy = NetworkPolicy.UNRESTRICTED
     privacy_class: PrivacyClass = PrivacyClass.PUBLIC
+    # Phase 4 inference tiering
+    tier: ModelTier = ModelTier.FAST
+    preferred_models: tuple[str, ...] = ()
 
 
 class InferenceRequest(BaseModel):

@@ -1,34 +1,15 @@
-from atlas.infra.ids import CorrelationId
-from atlas.infra.types import ModelCapability, ModelRequest, ModelResponse, ModelTarget
-from atlas.orchestration.router import Router
-from atlas.orchestration.types import RiskLevel
+"""SUPERSEDED — the Router (a per-task model call to classify capabilities) was
+replaced by the deterministic ``capabilities_from_intent`` projection in
+``atlas.orchestration.understanding``. Its two behaviours now live in
+``test_phase2_understanding.py``:
 
+  * capability parsing  -> test_capabilities_projection_* (no model call at all)
+  * cautious-on-failure -> test_bad_json_fails_toward_caution_not_toward_speed
 
-class FakeGateway:
-    def __init__(self, text: str) -> None:
-        self._t = text
-        self.requests: list[ModelRequest] = []
+This file is kept only because the deletion could not run while the Bash safety
+classifier was unavailable; it intentionally imports nothing and defines no
+tests so collection stays green. Delete it (and ``orchestration/router.py``)
+once ``rm`` is available again.
+"""
 
-    async def complete(self, req: ModelRequest) -> ModelResponse:
-        self.requests.append(req)
-        return ModelResponse(text=self._t, target=ModelTarget.LOCAL_FAST, model="fake")
-
-
-async def test_router_parses_capabilities() -> None:
-    gw = FakeGateway(
-        '{"needs_tools":true,"needs_reasoning":true,"needs_cloud":false,"needs_confirmation":true,"max_risk":"high"}'
-    )
-    caps = await Router(gw).route("delete my temp files", CorrelationId("c"))  # type: ignore[arg-type]
-    assert caps.needs_tools and caps.needs_confirmation and caps.max_risk == RiskLevel.HIGH
-    assert gw.requests[0].required_capabilities == frozenset(
-        {
-            ModelCapability.CLASSIFICATION,
-            ModelCapability.JSON_GENERATION,
-        }
-    )
-
-
-async def test_router_fails_cautious() -> None:
-    gw = FakeGateway("not json")
-    caps = await Router(gw).route("do a thing", CorrelationId("c"))  # type: ignore[arg-type]
-    assert caps.needs_confirmation and caps.max_risk == RiskLevel.MEDIUM
+from __future__ import annotations

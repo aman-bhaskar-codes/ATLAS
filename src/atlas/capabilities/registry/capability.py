@@ -30,6 +30,8 @@ class Capability(StrEnum):
     LOCATION = "location"
     CURRENCY = "currency"
     FILES = "files"
+    COMPUTER_USE = "computer_use"  # one logical capability over browser/macOS/Android bodies
+    PUBLIC_API = "public_api"  # catalog-discovered external APIs (validation-gated)
     # extend freely; each needs a CapabilitySpec + at least one provider
 
 

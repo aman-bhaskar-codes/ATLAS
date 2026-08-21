@@ -151,6 +151,9 @@ class Atlas:
     checkpoints: Any = None  # Batch 7
     model_registry: Any = None  # Model registry for frontend
     runtime_supervisor: RuntimeSupervisor | None = None  # Runtime orchestration layer
+    computer_use: Any = None  # Prompt 2: ComputerUseComponents (engine + tool + env report)
+    public_api: Any = None  # Prompt 2: PublicAPIPlatform (catalog → validation → execution)
+    knowledge_fabric: Any = None  # Prompt 3: KnowledgeFabricComponents (fabric + bridges + research)
 
     async def start(self) -> Any:
         if self.runtime_supervisor is not None and self.runtime_supervisor.state in {
@@ -207,6 +210,8 @@ class Atlas:
             await self.scheduler.stop()
         if self.browser_platform is not None:
             await self.browser_platform.shutdown()
+        if self.computer_use is not None:
+            await self.computer_use.engine.shutdown()
         # Close bus first so background queue-processor exits before DB closes
         await self.bus.close()
         await self.embedder.close()
@@ -390,6 +395,24 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     currency_platform = data_platforms.currency_platform
     _ = data_platforms.known_contacts  # Reserved for future contact-aware features
 
+    # ── Knowledge Fabric (Prompt 3) — ONE pipeline over all sources ── #
+    from atlas.bootstrap.knowledge_fabric import build_knowledge_fabric
+
+    try:
+        knowledge_fabric = await build_knowledge_fabric(
+            db=db,
+            ids=ids,
+            clock=clock,
+            gateway=gateway,
+            embedder=embedder,
+            vectors=vectors,
+            memory_retriever=retriever,
+            providers=knowledge_platform.providers,
+        )
+    except Exception as exc:  # fabric failure degrades, never blocks startup
+        _log.error("knowledge_fabric.unavailable", event_type="lifecycle", error=repr(exc))
+        knowledge_fabric = None
+
     # ── Sandboxed tools ───────────────────────────────────────────── #
     docker_sandbox = DockerSandbox(
         SandboxSpec(
@@ -452,6 +475,13 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         )
         from atlas.tools.browser import BrowserTool
         tools["browser"] = BrowserTool(platform=browser_platform, ids=ids)
+
+    # ── Computer use (universal perception/control across bodies) ──── #
+    from atlas.bootstrap.computer_use import build_computer_use
+
+    computer_use = await build_computer_use(browser_platform=browser_platform)
+    tools["computer_use"] = computer_use.tool
+    public_api = computer_use.public_api
 
     notifier_adapter = NotificationPlatformAdapter(notification_platform, clock, ids)
     active_notifier = notifier_adapter if settings.ntfy_topic else None
@@ -568,6 +598,9 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         location_platform=location_platform,
         currency_platform=currency_platform,
         browser_platform=browser_platform,
+        computer_use=computer_use,
+        public_api=public_api,
+        knowledge_fabric=knowledge_fabric,
         feedback=feedback_store,
         scheduler=cron_scheduler,
         llm_tracker=llm_tracker,

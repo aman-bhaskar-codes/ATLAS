@@ -11,8 +11,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from atlas.infra.logging import get_logger
 from atlas.memory.retrieval import Retriever
+from atlas.memory.types import RetrievedContext
 from atlas.memory.working import WorkingMemory
+from atlas.orchestration.managers.timeout import with_timeout
+
+_log = get_logger("atlas.orch.context")
 
 
 @dataclass(frozen=True)
@@ -30,15 +35,50 @@ class ContextBuilder:
         working: WorkingMemory,
         system_prompt: str,
         token_budget: int = 3000,
+        retrieval_timeout_s: float = 10.0,
     ) -> None:
         self._retriever = retriever
         self._working = working
         self._system = system_prompt
         self._budget = token_budget
+        self._retrieval_timeout_s = retrieval_timeout_s
 
     @staticmethod
     def _tokens(text: str) -> int:
         return max(1, len(text) // 4)
+
+    async def _retrieve_resilient(
+        self,
+        request: str,
+        *,
+        task_id: str | None,
+        correlation_id: str | None,
+    ) -> RetrievedContext:
+        """Retrieve memory under a hard time bound, degrading to empty context
+        on timeout or error.
+
+        WHY: retrieval touches the vector store and SQLite; a hiccup there (lock
+        contention, a slow first-time index load, a backend error) must never
+        stall or fail the task. A RECOVERABLE runtime proceeds with the
+        deterministic layers it always has (system, safety, tools) and treats
+        retrieved memory as best-effort enrichment — the same graceful path it
+        already takes when memory is simply empty. The bound is a safety ceiling,
+        not the expected latency (retrieval targets < 200 ms).
+        """
+        try:
+            return await with_timeout(
+                self._retriever.retrieve(request, task_id=task_id, correlation_id=correlation_id),
+                seconds=self._retrieval_timeout_s,
+                what="memory.retrieve",
+            )
+        except Exception as exc:
+            _log.warning(
+                "context.retrieval_degraded",
+                event_type="orchestration",
+                error=repr(exc),
+                task_id=task_id,
+            )
+            return RetrievedContext(user_model="")
 
     async def build(
         self,
@@ -50,7 +90,7 @@ class ContextBuilder:
         task_id: str | None = None,
         correlation_id: str | None = None,
     ) -> str:
-        retrieved = await self._retriever.retrieve(request, task_id=task_id, correlation_id=correlation_id)
+        retrieved = await self._retrieve_resilient(request, task_id=task_id, correlation_id=correlation_id)
         working = "\n".join(e.content[:200] for e in self._working.recent(10))
 
         layers: list[ContextLayer] = [

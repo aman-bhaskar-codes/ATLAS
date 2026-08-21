@@ -1,88 +1,14 @@
-"""Capability router.
+"""SUPERSEDED — retired in Pass 1 (Phase 2).
 
-WHY capabilities, not model choice: separation of concerns. The router answers
-'does this need tools/memory/confirmation/cloud/reasoning?'. The Model Gateway
-(Phase 1) independently decides WHICH model serves a given call. This keeps the
-router model-agnostic and lets model routing evolve (Phase 5) without touching
-orchestration. A cheap local classification fills gaps deterministic rules miss.
+The old ``Router`` made a per-task model call to classify a request's
+capabilities. That is now a deterministic, zero-model-call projection:
+``atlas.orchestration.understanding.capabilities_from_intent`` derives the same
+``Capabilities`` from the already-extracted ``TaskIntent``, so we neither pay a
+second model round-trip nor risk the classifier disagreeing with the intent.
+
+The ``Router`` class is intentionally gone (not left as disconnected code). This
+file remains only because ``rm`` was unavailable when it was retired; delete it
+once the shell is available again. Nothing imports it.
 """
 
 from __future__ import annotations
-
-import json
-
-from atlas.infra.ids import CorrelationId
-from atlas.infra.logging import get_logger
-from atlas.infra.types import ModelCapability, ModelRequest
-from atlas.intelligence.gateway import ModelGateway
-from atlas.orchestration.types import Capabilities, RiskLevel
-
-_log = get_logger("atlas.orch.router")
-
-_CLASSIFY_SYSTEM = (
-    "Classify a user request for an agent runtime. Output ONLY JSON: "
-    '{"needs_tools":bool,"needs_reasoning":bool,"needs_cloud":bool,'
-    '"needs_confirmation":bool,"max_risk":"low|medium|high"}'
-)
-
-
-class Router:
-    def __init__(self, gateway: ModelGateway) -> None:
-        self._gw = gateway
-
-    async def route(self, request: str, correlation_id: CorrelationId) -> Capabilities:
-        # 1) cheap deterministic signals
-        low = request.lower()
-        tool_hint = any(k in low for k in ("file", "open", "run", "delete", "send", "install", "search"))
-        # 2) local classification (thinking off; cheap)
-        raw_text: str | None = None
-        try:
-            resp = await self._gw.complete(
-                ModelRequest(
-                    correlation_id=correlation_id,
-                    system=_CLASSIFY_SYSTEM,
-                    prompt=request,
-                    required_capabilities=frozenset(
-                        {
-                            ModelCapability.CLASSIFICATION,
-                            ModelCapability.JSON_GENERATION,
-                        }
-                    ),
-                    max_tokens=1024,
-                    temperature=0.0,
-                )
-            )
-            raw_text = str(resp.text)
-            data = json.loads(self._json(raw_text))
-        except Exception as exc:  # fail toward MORE caution, not less
-            _log.warning(
-                "router.classify_failed",
-                event_type="orch",
-                correlation_id=correlation_id,
-                error=repr(exc),
-                raw_text=raw_text,
-            )
-            return Capabilities(needs_tools=tool_hint, needs_confirmation=True, max_risk=RiskLevel.MEDIUM)
-        return Capabilities(
-            needs_tools=bool(data.get("needs_tools", tool_hint)),
-            needs_reasoning=bool(data.get("needs_reasoning", True)),
-            needs_cloud=bool(data.get("needs_cloud", False)),
-            needs_confirmation=bool(data.get("needs_confirmation", False)),
-            needs_memory=True,
-            needs_retrieval=True,
-            max_risk=self._risk(data.get("max_risk", "low")),
-        )
-
-    @staticmethod
-    def _risk(raw: object) -> RiskLevel:
-        try:
-            return RiskLevel(str(raw))
-        except ValueError:
-            return RiskLevel.MEDIUM  # unknown -> cautious
-
-    @staticmethod
-    def _json(text: str) -> str:
-        s, e = text.find("{"), text.rfind("}")
-        if s == -1 or e == -1:
-            raise ValueError("no JSON")
-        return text[s : e + 1]

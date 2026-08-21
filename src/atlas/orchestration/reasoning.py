@@ -24,6 +24,7 @@ import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from atlas.infra.cognition import Evidence, TaskDomain, TaskIntent
 from atlas.infra.ids import CorrelationId, TaskId
 from atlas.infra.logging import get_logger
 from atlas.infra.types import ModelCapability, ModelRequest, Tier
@@ -115,6 +116,7 @@ class ReasoningLoop:
         token: CancellationToken,
         goal: GoalState | None = None,
         caps: Capabilities | None = None,
+        intent: TaskIntent | None = None,
     ) -> TaskResult:
         """Execute the OTAR loop.
 
@@ -125,15 +127,22 @@ class ReasoningLoop:
         Phase 2 additions:
           - Trajectory capture: collects actions, observations, decision traces
           - Returns trajectory data in TaskResult for orchestrator to save
+          - intent: selects the domain-appropriate verifier (Phase 12). Without
+            it every task falls back to model judgement, which is the weakest
+            available check.
         """
         # Build a GoalState from the plan when none is provided (backward compat)
         if goal is None:
             goal = GoalState(objective=plan.goal)
+        domain = intent.domain if intent is not None else TaskDomain.UNKNOWN
 
         counter = LimitCounter(self._limits)
         history: list[tuple[Thought, Observation | None]] = []
         current_plan = plan
         verification: VerificationResult | None = None
+        # Phase 12/14: bounded provenance the verifier is allowed to rely on.
+        # Summaries only — raw tool output never travels with this.
+        evidence: list[Evidence] = []
 
         # Phase 2: Trajectory capture initialization
         from atlas.memory.trajectory import ActionRecord, ObservationRecord
@@ -192,7 +201,9 @@ class ReasoningLoop:
                     # ── Phase 1: Verify the answer before returning ──────────
                     machine.transition(TaskState.VALIDATING)
                     answer_text = action.final_text or ""
-                    verification = await self._verifier.verify(goal, answer_text, context)
+                    verification = await self._verifier.verify(
+                        goal, answer_text, correlation_id, context, domain, tuple(evidence)
+                    )
 
                     if not verification.passed and goal.can_replan() and self._replanner:
                         # Verification failed — try replanning
@@ -209,10 +220,10 @@ class ReasoningLoop:
                             f"The answer failed verification "
                             f"(score {verification.score:.2f}). "
                             f"Reason: {verification.failure_reason or 'unspecified'}. "
-                            f"Suggestions: {'; '.join(verification.suggestions) or 'none'}. "
+                            f"Suggestions: {verification.suggested_next_action or 'none'}. "
                             f"Previous answer: {answer_text[:400]}"
                         )
-                        goal.record_replan()
+                        goal = goal.with_replan()
                         current_plan = await self._replanner.replan(
                             goal=goal,
                             original_plan=current_plan,
@@ -307,6 +318,17 @@ class ReasoningLoop:
                     )
                 )
 
+                # Phase 12: record bounded provenance for the verifier. The
+                # summary is capped here so no verifier can be handed raw output.
+                evidence.append(
+                    Evidence(
+                        source=action.tool or "unknown",
+                        operation=action.operation or "",
+                        ok=obs.ok,
+                        summary=(str(obs.content) if obs.ok else str(obs.error or ""))[:400],
+                    )
+                )
+
                 # Phase 0: Push observation into WorkingMemory
                 if self._working:
                     self._working.add(
@@ -341,7 +363,7 @@ class ReasoningLoop:
                         f"Tried: {action.args}. "
                         f"Step {counter.steps} of the plan."
                     )
-                    goal.record_replan()
+                    goal = goal.with_replan()
                     current_plan = await self._replanner.replan(
                         goal=goal,
                         original_plan=current_plan,

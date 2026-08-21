@@ -90,8 +90,11 @@ class TrajectoryStore:
                 decision_trace_ids, failure_record_ids, replan_count,
                 verification_passed, verification_score, success, answer, error,
                 steps_taken, latency_ms, tokens_used, cost_usd, model_calls,
-                tool_calls, created_ts, completed_ts
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                tool_calls, created_ts, completed_ts,
+                atlas_version, git_commit, config_hash, strategy_id,
+                strategy_version, model_version, capability_snapshot_version,
+                safety_events, completion_confidence
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 trajectory.id,
@@ -120,6 +123,15 @@ class TrajectoryStore:
                 trajectory.tool_calls,
                 trajectory.created_ts.isoformat(),
                 trajectory.completed_ts.isoformat(),
+                trajectory.atlas_version,
+                trajectory.git_commit,
+                trajectory.config_hash,
+                trajectory.strategy_id,
+                trajectory.strategy_version,
+                trajectory.model_version,
+                trajectory.capability_snapshot_version,
+                json.dumps(list(trajectory.safety_events)),
+                trajectory.completion_confidence,
             ),
         )
         await self._db.conn.commit()
@@ -668,6 +680,15 @@ class TrajectoryStore:
             tool_calls=d["tool_calls"],
             created_ts=datetime.fromisoformat(d["created_ts"]),
             completed_ts=datetime.fromisoformat(d["completed_ts"]),
+            atlas_version=d.get("atlas_version"),
+            git_commit=d.get("git_commit"),
+            config_hash=d.get("config_hash"),
+            strategy_id=d.get("strategy_id"),
+            strategy_version=d.get("strategy_version"),
+            model_version=d.get("model_version"),
+            capability_snapshot_version=d.get("capability_snapshot_version"),
+            safety_events=tuple(json.loads(d.get("safety_events") or "[]")),
+            completion_confidence=d.get("completion_confidence"),
         )
 
     @staticmethod

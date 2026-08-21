@@ -64,6 +64,11 @@ class KnowledgePlatform:
         self._memory = memory_source
         self._parametric = parametric
 
+    @property
+    def providers(self) -> list[KnowledgeProvider]:
+        """All searchable providers — the Knowledge Fabric reuses them as live sources."""
+        return [self._memory, *self._official, *self._web, self._parametric]
+
     async def obtain_knowledge(self, query: KnowledgeQuery, correlation_id: CorrelationId) -> Answer:
         intent = await self._router.classify(query, correlation_id)
         _log.info("knowledge.route", event_type="knowledge", intent=intent.value, q=query.text[:80])

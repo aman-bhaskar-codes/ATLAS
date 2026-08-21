@@ -13,14 +13,28 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from atlas.infra.cognition import RiskLevel
 from atlas.infra.ids import CorrelationId, TaskId
 from atlas.infra.types import Source
 
-
-class RiskLevel(StrEnum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+# WHY re-exported instead of redeclared: TaskIntent (infra) carries a risk
+# level, so infra owns the enum. Existing imports of
+# ``atlas.orchestration.types.RiskLevel`` keep working against the one
+# canonical definition.
+__all__ = [
+    "Action",
+    "ActionKind",
+    "Capabilities",
+    "Critique",
+    "CritiqueVerdict",
+    "Observation",
+    "Plan",
+    "PlanStep",
+    "RiskLevel",
+    "Task",
+    "TaskResult",
+    "Thought",
+]
 
 
 class Capabilities(BaseModel):

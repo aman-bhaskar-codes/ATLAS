@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from atlas.infra.clock import Clock
+from atlas.infra.cognition import TaskDomain
 from atlas.infra.config import AppConfig
 from atlas.infra.db import Database
 from atlas.infra.execution_store import SQLiteCancellationStore, SQLiteExecutionStore
@@ -21,7 +22,7 @@ from atlas.orchestration.context_engine import ContextCompactor
 from atlas.orchestration.dag_executor import DagExecutor
 from atlas.orchestration.dispatcher import ToolDispatcher
 from atlas.orchestration.events import EventPublisher
-from atlas.orchestration.goal import GoalVerifier, NullVerifier
+from atlas.orchestration.goal import GoalVerifier, NullVerifier, Verifier
 from atlas.orchestration.limits import ExecutionLimits
 from atlas.orchestration.managers.retry import RetryManager
 from atlas.orchestration.monitor import ExecutionMonitor
@@ -34,12 +35,18 @@ from atlas.orchestration.recorder import ExecutionRecorder
 from atlas.orchestration.reflection import NoOpReflection
 from atlas.orchestration.registry import ToolMetadata, ToolRegistry
 from atlas.orchestration.replanner import Replanner
-from atlas.orchestration.router import Router
 from atlas.orchestration.self_critique import SelfCritique
 from atlas.orchestration.tiering import TierEstimator
 from atlas.orchestration.tool_routing import ToolHealthTracker, ToolRouter
 from atlas.orchestration.types import Action, Critique
+from atlas.orchestration.understanding import IntentExtractor
 from atlas.orchestration.validator import OutputValidator
+from atlas.orchestration.verification import (
+    CommandVerifier,
+    DomainVerifierRouter,
+    FilesystemStateVerifier,
+    GroundingVerifier,
+)
 from atlas.safety.audit import AuditLog
 from atlas.safety.classifier import TierClassifier
 from atlas.safety.engine import SafetyEngine
@@ -109,7 +116,9 @@ def build_orchestration(
     safety.set_events(events)
     retriever.set_events(events)
 
-    router = Router(gateway)
+    # Phase 2: the one understanding stage. Replaces Router, which made a
+    # second model call to classify what this now derives from the intent.
+    understanding = IntentExtractor(gateway)
     planner = Planner(gateway)
     context_builder = ContextBuilder(retriever=retriever, working=working, system_prompt="You are an autonomous agent.")
     parser = ResponseParser()
@@ -153,9 +162,41 @@ def build_orchestration(
     dispatcher = ToolDispatcher(tool_registry, safety, health=tool_health)
     limits = ExecutionLimits(max_steps=15)
 
-    # Phase 1: Replanner and Verifier
+    # Phase 1/12: Replanner and capability-aware verification.
     replanner = Replanner(gateway)
-    verifier = GoalVerifier(gateway) if config.critique.enabled else NullVerifier()
+    # WHY annotated: every arm must satisfy the Verifier protocol, and mypy
+    # would otherwise infer the union of the concrete classes.
+    verifier: Verifier
+    if not config.verification.enabled:
+        verifier = NullVerifier()
+    else:
+        # The general-purpose fallback: model judgement against the intent's
+        # success criteria. Domains that can be checked mechanically override it.
+        default_verifier = GoalVerifier(
+            gateway, min_pass_score=config.verification.min_pass_score
+        )
+        by_domain: dict[TaskDomain, Verifier] = {}
+        # Coding work is verified by running the configured check command
+        # (tests/lint), not by asking the model whether it worked. Only wired
+        # when an operator has configured a command — an empty command must not
+        # masquerade as a verifier.
+        if config.verification.command:
+            by_domain[TaskDomain.CODING] = CommandVerifier(
+                dispatcher,
+                command=config.verification.command,
+                timeout_s=config.verification.command_timeout_s,
+            )
+        # Filesystem work is verified by re-reading the affected paths.
+        if "filesystem" in tools:
+            by_domain[TaskDomain.FILESYSTEM] = FilesystemStateVerifier(dispatcher)
+        # Research and self-knowledge answers must be grounded in evidence the
+        # run actually gathered. GroundingVerifier fails an ungrounded answer
+        # and returns not_applicable for a grounded one — at which point the
+        # router's deferral hands it to the judge for criteria evaluation.
+        grounding = GroundingVerifier()
+        by_domain[TaskDomain.RESEARCH] = grounding
+        by_domain[TaskDomain.SELF_KNOWLEDGE] = grounding
+        verifier = DomainVerifierRouter(default=default_verifier, by_domain=by_domain)
 
     reasoning = ReasoningLoop(
         gateway=gateway,
@@ -182,7 +223,7 @@ def build_orchestration(
         clock=clock,
         execution_store=SQLiteExecutionStore(db),
         cancellation_store=SQLiteCancellationStore(db),
-        router=router,
+        understanding=understanding,
         planner=planner,
         context_builder=context_builder,
         reasoning=reasoning,

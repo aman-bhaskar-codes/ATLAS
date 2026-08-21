@@ -984,6 +984,84 @@ def profile_cmd(
         console.print(f"\n[dim]Activate: export ATLAS_PROFILE={name}[/]")
 
 
+# ── atlas smoke-test ─────────────────────────────────────────────────────
+
+@app.command("smoke-test")
+def smoke_test_cmd() -> None:
+    """Offline smoke test for the computer-use + connector stack.
+
+    Verifies (without network or side effects):
+    1. Environment detection reports substrates honestly.
+    2. The capability catalog loads and retrieval returns candidates.
+    3. The connector safety gate refuses execution of DISCOVERED APIs.
+    """
+    import asyncio
+
+    from rich.table import Table
+
+    from atlas.perception.contracts import Substrate
+
+    async def go() -> int:
+        failures = 0
+
+        from atlas.capabilities.computer_use.environment import EnvironmentDetector
+
+        report = await EnvironmentDetector().detect()
+        table = Table(title="Substrates", show_header=True)
+        table.add_column("Substrate", style="cyan")
+        table.add_column("Available", style="bold")
+        table.add_column("Detail", style="dim")
+        for s in report.substrates:
+            mark = "[green]✓[/]" if s.available else "[yellow]○[/]"
+            table.add_row(s.substrate.value, mark, s.detail)
+        console.print(table)
+        if not report.available(Substrate.API):
+            failures += 1
+            console.print("[red]✗ API substrate should always be available[/]")
+
+        from atlas.capabilities.public_api.catalog import PublicAPICatalog
+        from atlas.capabilities.public_api.connector import ConnectorRegistry
+        from atlas.capabilities.public_api.platform import (
+            ConnectorNotExecutableError,
+            PublicAPIPlatform,
+        )
+        from atlas.capabilities.public_api.retrieval import CapabilityRetriever
+        from atlas.capabilities.public_api.validation import ConnectorValidator, HttpxFetcher
+
+        catalog = PublicAPICatalog.load_default()
+        connectors = ConnectorRegistry(catalog)
+        platform = PublicAPIPlatform(
+            catalog, connectors, ConnectorValidator(HttpxFetcher()), CapabilityRetriever(catalog, connectors)
+        )
+        console.print(f"\n[bold]Catalog:[/] {len(catalog)} APIs seeded, all DISCOVERED")
+        if len(catalog) == 0 or connectors.executable_ids():
+            failures += 1
+            console.print("[red]✗ catalog empty or connectors pre-executable[/]")
+
+        candidates = platform.discover("weather forecast", limit=3)
+        if candidates:
+            console.print(f"[green]✓[/] retrieval: {', '.join(c.entry.name for c in candidates)}")
+        else:
+            failures += 1
+            console.print("[red]✗ retrieval returned no candidates for 'weather forecast'[/]")
+
+        first = catalog.all()[0].api_id
+        try:
+            await platform.execute(first)
+            failures += 1
+            console.print(f"[red]✗ DISCOVERED connector {first} executed — safety gate broken[/]")
+        except ConnectorNotExecutableError:
+            console.print(f"[green]✓[/] safety gate: execution of DISCOVERED '{first}' refused")
+
+        if failures == 0:
+            console.print("\n[bold green]SMOKE TEST PASSED[/]")
+        else:
+            console.print(f"\n[bold red]{failures} CHECK(S) FAILED[/]")
+        return failures
+
+    raise typer.Exit(asyncio.run(go()))
+
+
 if __name__ == "__main__":
     app()
 

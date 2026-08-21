@@ -16,6 +16,7 @@ ZERO-COST-FIRST ADDITIONS (Phase 1):
 
 from __future__ import annotations
 
+from atlas.infra.cognition import ModelTier
 from atlas.infra.types import CostClass, CostPolicy, NetworkPolicy, PrivacyClass
 from atlas.intelligence.capabilities import CapabilitySet
 from atlas.intelligence.contracts import Constraints, ModelSpec
@@ -94,6 +95,28 @@ class ModelSelector:
         latency_pen = 1.0 / (1.0 + m.latency_estimate_ms / 1000.0)
         health = self._health.reliability(m.provider)
 
+        # Phase 4 tier weighting. WHY the weights differ rather than the
+        # candidate pool: a tier is a trade-off preference, not a capability
+        # filter — the pool is already correct after _passes(). FAST buys
+        # latency and cost; DEEP buys quality and reasoning.
+        if c.tier == ModelTier.DEEP:
+            w_quality, w_reliability, w_cost, w_latency, w_health = 0.45, 0.20, 0.05, 0.03, 0.15
+        else:
+            w_quality, w_reliability, w_cost, w_latency, w_health = 0.15, 0.20, 0.22, 0.25, 0.15
+
+        # A model that cannot actually reason is a poor DEEP pick regardless of
+        # its curated quality prior.
+        reasoning_bonus = 0.10 if (c.tier == ModelTier.DEEP and m.supports_reasoning) else 0.0
+
+        # Configured tier preference (fast_model/deep_model). Applied here, after
+        # _passes(), so it can reorder eligible models but never admit an
+        # ineligible one — Phase 5's "never silently violate policy".
+        preference_bonus = 0.0
+        if m.id in c.preferred_models:
+            # Earlier entries win: index 0 is the configured model for this tier,
+            # later entries are the declared fallbacks.
+            preference_bonus = 0.30 - (0.05 * c.preferred_models.index(m.id))
+
         # Local bonus: stronger when cost policy is free-preferred or zero-cost
         local_bonus = 0.0
         if m.cost_class == CostClass.LOCAL:
@@ -117,11 +140,13 @@ class ModelSelector:
                 privacy_bonus = 0.10
 
         return (
-            0.30 * quality
-            + 0.20 * reliability
-            + 0.15 * cost_pen
-            + 0.10 * latency_pen
-            + 0.15 * health
+            w_quality * quality
+            + w_reliability * reliability
+            + w_cost * cost_pen
+            + w_latency * latency_pen
+            + w_health * health
+            + reasoning_bonus
+            + preference_bonus
             + local_bonus
             + free_bonus
             + privacy_bonus

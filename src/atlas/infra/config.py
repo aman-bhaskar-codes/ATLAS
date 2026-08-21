@@ -69,6 +69,16 @@ class ModelCfg(BaseModel):
     weekly_usd: float = 5.0
     monthly_usd: float = 15.0
     per_task_usd: float = 0.50
+    # Phase 4 inference tiers. Logical model ids from models.yaml, in
+    # preference order — index 0 is the primary for that tier. These are
+    # ranking preferences applied AFTER the selector's hard policy filters, so
+    # naming a paid model here cannot bypass a zero-cost profile; it simply has
+    # no eligible candidates and the next preference wins.
+    # WHY lists rather than a single id: Phase 4 requires a declared fallback,
+    # and a single "best model" string is exactly the hard-coding it forbids.
+    fast_models: tuple[str, ...] = ()
+    deep_models: tuple[str, ...] = ()
+    fallback_models: tuple[str, ...] = ()
 
 
 class SafetyCfg(BaseModel):
@@ -119,6 +129,31 @@ class CritiqueCfg(BaseModel):
     revise_max: int = 1
 
 
+class VerificationCfg(BaseModel):
+    """Post-hoc checking of delivered work (Phase 12).
+
+    WHY separate from ``CritiqueCfg``: self-critique reviews a *proposed*
+    action before dispatch; verification checks *delivered* work against the
+    intent's success criteria afterwards. They were previously sharing
+    ``critique.enabled``, so disabling action review silently disabled all
+    verification and every task reported itself verified.
+    """
+
+    model_config = {"frozen": True}
+    enabled: bool = True
+    max_replans: int = 3
+    # Below this score a "passed" verdict is not trusted. WHY a floor exists:
+    # a model that returns passed=true with score 0.2 is contradicting itself.
+    min_pass_score: float = 0.5
+    # Read-only check command for CODING tasks (e.g. "uv run pytest -q").
+    # Empty by default: the command executes through the SafetyEngine like any
+    # other action, so it is opt-in rather than assumed. WHY not model-supplied:
+    # a verifier that runs a string the model produced would be an arbitrary
+    # code execution path, which Phase 31 forbids.
+    command: str = ""
+    command_timeout_s: int = 120
+
+
 class BrowserCfg(BaseModel):
     """Optional browser automation platform config."""
 
@@ -139,6 +174,7 @@ class AppConfig(BaseModel):
     sandbox: SandboxCfg = Field(default_factory=SandboxCfg)
     memory: MemoryCfg = Field(default_factory=MemoryCfg)
     critique: CritiqueCfg = Field(default_factory=CritiqueCfg)
+    verification: VerificationCfg = Field(default_factory=VerificationCfg)
     browser: BrowserCfg = Field(default_factory=BrowserCfg)
 
 

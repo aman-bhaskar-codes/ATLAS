@@ -22,6 +22,30 @@ models:
   weekly_usd: 0.00
   monthly_usd: 0.00
   per_task_usd: 0.00
+  # ── Phase 4 inference tiers ──────────────────────────────────────────
+  # Logical model ids (must exist in models.yaml), in preference order.
+  # These are RANKING preferences applied AFTER the selector's hard cost/
+  # network/privacy filters — listing a paid model cannot bypass a zero-cost
+  # profile, it simply has no eligible candidate. Change these to retune
+  # tiers without touching code.
+  # FAST: cheap, low-latency work that runs on every task (intent extraction,
+  #       routing, short summaries).
+  fast_models:
+    - qwen3-4b                       # local, ~100ms, always available
+    - groq-llama-3.1-8b              # free-quota, ~80ms
+    - openrouter-gemma-4-26b         # free-quota fallback
+  # DEEP: quality reasoning worth a slower/stronger model (planning, recovery,
+  #       verification). Cloud models lead; qwen3-4b is the local floor so a
+  #       zero-cost profile still resolves a deep pick.
+  deep_models:
+    - openrouter-nemotron-3-nano
+    - groq-llama-3.3-70b
+    - gemini-2.0-flash
+    - qwen3-4b
+  # Last-resort chain when a tier's picks are all unavailable.
+  fallback_models:
+    - qwen3-4b
+    - openrouter-free-fallback
 safety:
   stop_flag_path: STOP.flag
   confirm_timeout_s: 300
@@ -44,3 +68,17 @@ critique:
   enabled: true          # master switch
   min_tier: 2            # only critique actions at/above this tier (Tier.CONFIRM)
   revise_max: 1          # bounded regeneration (no ping-pong)
+
+# ── Phase 12 verification ─────────────────────────────────────────────
+# Post-hoc checking of DELIVERED work against the intent's success criteria.
+# Separate from `critique` (which reviews a PROPOSED action before dispatch):
+# disabling critique must NOT disable verification.
+verification:
+  enabled: true
+  max_replans: 3         # bounded recovery loop (Phase 11)
+  min_pass_score: 0.5    # a "passed" verdict below this is treated as a fail
+  # Read-only check for CODING tasks. Runs THROUGH the SafetyEngine like any
+  # other action; empty = disabled. The command is fixed here, never model-
+  # supplied (a model-chosen command would be arbitrary code execution).
+  command: ""            # e.g. "uv run pytest -q" or "uv run ruff check"
+  command_timeout_s: 120

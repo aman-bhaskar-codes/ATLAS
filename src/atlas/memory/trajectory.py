@@ -197,6 +197,18 @@ class Trajectory(BaseModel):
     created_ts: datetime
     completed_ts: datetime
 
+    # Reproducibility (Prompt 4 §2) — additive; old rows deserialize as None.
+    # Together these make future baseline/candidate comparisons reproducible.
+    atlas_version: str | None = None
+    git_commit: str | None = None
+    config_hash: str | None = None
+    strategy_id: str | None = None
+    strategy_version: int | None = None
+    model_version: str | None = None
+    capability_snapshot_version: str | None = None
+    safety_events: tuple[str, ...] = ()  # safety decisions/blocks observed
+    completion_confidence: float | None = None  # confidence at completion (calibration)
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Experience: Extracted Lessons

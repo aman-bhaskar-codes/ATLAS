@@ -21,9 +21,9 @@ from atlas.infra.ids import CorrelationId, IdGenerator
 from atlas.infra.llm_tracker import LLMCallTracker
 from atlas.infra.logging import get_logger
 from atlas.infra.profiles import ProfileConfig, resolve_profile
-from atlas.infra.types import AuditRecord
+from atlas.infra.types import AuditRecord, NetworkPolicy
 from atlas.intelligence.cache import SemanticCache
-from atlas.intelligence.contracts import Usage
+from atlas.intelligence.contracts import Constraints, Usage
 from atlas.intelligence.gateway import ModelGateway
 from atlas.intelligence.governance.budget import Budgets
 from atlas.intelligence.governance.cost_governor import CostGovernor
@@ -238,12 +238,32 @@ async def build_intelligence(
     cache_vectors = ChromaVectorStore(str(settings.data_dir / "chroma"), collection="atlas_cache")
     semantic_cache = SemanticCache(db, cache_vectors, embedder)
 
+    # ── Phase 4/5: policy-bearing default constraints ─────────────────
+    # WHY the gateway holds the profile's policy: legacy callers hand the
+    # gateway a bare ModelRequest with no Constraints. Before this, complete()
+    # built a fresh Constraints() per call, leaving cost/network/privacy at
+    # UNRESTRICTED — so every Zero-Cost-First filter in ModelSelector._passes()
+    # was dead on the real path. Carrying the profile's policy on the single
+    # egress point means it cannot be dropped at a call site.
+    # prefer_local is derived from the network policy, NOT from the reasoning
+    # tier: locality is the profile's decision; the tier only trades quality
+    # for latency (see gateway._constraints_for).
+    default_constraints = Constraints(
+        cost_policy=profile.cost_policy,
+        network_policy=profile.network_policy,
+        privacy_class=profile.default_privacy,
+        prefer_local=profile.network_policy in (NetworkPolicy.OFFLINE, NetworkPolicy.LOCAL_ONLY),
+    )
+
     gateway = ModelGateway(
         router=cap_router,
         selector=selector,
         fallback=fallback,
         runtime=runtime,
         cache=semantic_cache,
+        default_constraints=default_constraints,
+        fast_models=config.models.fast_models,
+        deep_models=config.models.deep_models,
     )
 
     return IntelligenceComponents(
