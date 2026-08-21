@@ -212,7 +212,7 @@ class HypothesisStore:
 def _from_row(row: object) -> Hypothesis | None:
     if row is None:
         return None
-    d = dict(row)
+    d = dict(row)  # type: ignore[call-overload]
     return Hypothesis(
         hypothesis_id=d["hypothesis_id"],
         title=d["title"],

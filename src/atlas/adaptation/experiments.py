@@ -342,7 +342,7 @@ def _from_row(row: object) -> Experiment | None:
         return None
     from atlas.adaptation.domain import ResourceLimits
 
-    d = dict(row)
+    d = dict(row)  # type: ignore[call-overload]
     return Experiment(
         experiment_id=d["experiment_id"],
         hypothesis_id=d["hypothesis_id"],

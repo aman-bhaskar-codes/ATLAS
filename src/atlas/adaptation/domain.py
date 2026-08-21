@@ -408,12 +408,153 @@ class DecisionPreference(BaseModel):
     created_ts: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
+# ---------------------------------------------------------------------------
+# Shadow mode (§25)
+
+
+class ShadowVerdict(StrEnum):
+    EQUIVALENT = "EQUIVALENT"
+    CANDIDATE_BETTER = "CANDIDATE_BETTER"
+    CANDIDATE_WORSE = "CANDIDATE_WORSE"
+
+
+class ShadowDecision(BaseModel):
+    """What the candidate strategy says it WOULD have done for a task the
+    active strategy already handled for real (§25)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    decision: str = ""
+    plan: tuple[str, ...] = ()
+    tool_choice: str = ""
+    retrieval: tuple[str, ...] = ()
+    expected_result: float = 0.0  # predicted quality 0..1
+
+
+class ShadowComparison(BaseModel):
+    """Active-vs-candidate comparison for one trajectory (§25)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    comparison_id: str = Field(default_factory=lambda: f"shdw_{uuid.uuid4().hex[:12]}")
+    trajectory_id: str
+    strategy_id: str
+    baseline_version: int
+    candidate_version: int
+    decision_agreement: float = 0.0
+    plan_similarity: float = 0.0
+    tool_choice_agreement: float = 0.0
+    retrieval_similarity: float = 0.0
+    expected_result_delta: float = 0.0
+    verdict: ShadowVerdict = ShadowVerdict.EQUIVALENT
+    created_ts: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+# ---------------------------------------------------------------------------
+# Canary adaptation (§26)
+
+
+class CanaryStatus(StrEnum):
+    SHADOWING = "SHADOWING"
+    CANARY = "CANARY"
+    EXPANDING = "EXPANDING"
+    FULL = "FULL"
+    ROLLED_BACK = "ROLLED_BACK"
+
+
+class CanaryDeployment(BaseModel):
+    """A graduated rollout of one strategy version (§26: 5/10/25/50/100%)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    deployment_id: str = Field(default_factory=lambda: f"cnry_{uuid.uuid4().hex[:12]}")
+    strategy_id: str
+    version: int
+    percentage: float = 5.0
+    status: CanaryStatus = CanaryStatus.CANARY
+    tasks_seen: int = 0
+    created_ts: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_ts: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+class CanaryObservation(BaseModel):
+    """One live outcome observed while the canary handled a task (§26)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    deployment_id: str
+    trajectory_id: str
+    success: bool = False
+    regression: bool = False
+    safety_event: bool = False
+    latency_ms: float = 0.0
+    cost_usd: float = 0.0
+    ts: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+# ---------------------------------------------------------------------------
+# Counterfactual learning (§27-§30)
+
+
+class CounterfactualMode(StrEnum):
+    """How the alternative outcome was obtained. Every mode is side-effect
+    free (§28) — real external mutations are never replayed."""
+
+    DETERMINISTIC = "DETERMINISTIC"
+    SANDBOX = "SANDBOX"
+    GOLDEN = "GOLDEN"
+    RECORDED = "RECORDED"
+    SIMULATION = "SIMULATION"
+    DRY_RUN = "DRY_RUN"
+
+
+class CounterfactualResult(BaseModel):
+    """"What would have happened if ATLAS had chosen differently?" (§27)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    counterfactual_id: str = Field(default_factory=lambda: f"cf_{uuid.uuid4().hex[:12]}")
+    trajectory_id: str
+    adaptation_point: AdaptationPoint
+    original_option: str
+    alternative_option: str
+    original_outcome: str  # DecisionOutcome value of the original choice
+    alternative_outcome: str = ""  # measured/simulated outcome of the alternative
+    mode: CounterfactualMode = CounterfactualMode.SIMULATION
+    delta: float = 0.0  # alternative score minus original score
+    created_ts: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+# ---------------------------------------------------------------------------
+# Decision quality (§31)
+
+
+class DecisionQuality(BaseModel):
+    """Retrospective quality of one class of runtime decision (§31)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    trajectory_id: str
+    dimension: str  # model_selection | tool_selection | strategy | retrieval | verification | recovery
+    score: float
+    evidence: tuple[str, ...] = ()
+    better_alternative: str = ""
+    confidence: float = 0.0
+    created_ts: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
 __all__ = [
     "MIN_EVIDENCE_DEFAULT",
     "AdaptationPoint",
     "AllowedChangeType",
+    "CanaryDeployment",
+    "CanaryObservation",
+    "CanaryStatus",
     "ComparisonResult",
+    "CounterfactualMode",
+    "CounterfactualResult",
     "DecisionPreference",
+    "DecisionQuality",
     "EvaluationVerdict",
     "Experiment",
     "ExperimentArm",

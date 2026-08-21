@@ -970,6 +970,76 @@ _MIGRATIONS: tuple[str, ...] = (
         updated_ts TEXT NOT NULL
     );
     """,
+    # 017 — Prompt 4: shadow, canary, counterfactual, decision quality (§25-§31)
+    """
+    CREATE TABLE IF NOT EXISTS shadow_comparisons (
+        comparison_id TEXT PRIMARY KEY,
+        trajectory_id TEXT NOT NULL,
+        strategy_id TEXT NOT NULL,
+        baseline_version INTEGER NOT NULL,
+        candidate_version INTEGER NOT NULL,
+        decision_agreement REAL NOT NULL DEFAULT 0,
+        plan_similarity REAL NOT NULL DEFAULT 0,
+        tool_choice_agreement REAL NOT NULL DEFAULT 0,
+        retrieval_similarity REAL NOT NULL DEFAULT 0,
+        expected_result_delta REAL NOT NULL DEFAULT 0,
+        verdict TEXT NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_shadow_traj ON shadow_comparisons(trajectory_id);
+
+    CREATE TABLE IF NOT EXISTS canary_deployments (
+        deployment_id TEXT PRIMARY KEY,
+        strategy_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        percentage REAL NOT NULL,
+        status TEXT NOT NULL DEFAULT 'CANARY',
+        tasks_seen INTEGER NOT NULL DEFAULT 0,
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_canary_strategy ON canary_deployments(strategy_id, status);
+
+    CREATE TABLE IF NOT EXISTS canary_observations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        deployment_id TEXT NOT NULL,
+        trajectory_id TEXT NOT NULL,
+        success INTEGER NOT NULL DEFAULT 0,
+        regression INTEGER NOT NULL DEFAULT 0,
+        safety_event INTEGER NOT NULL DEFAULT 0,
+        latency_ms REAL NOT NULL DEFAULT 0,
+        cost_usd REAL NOT NULL DEFAULT 0,
+        ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_canary_obs ON canary_observations(deployment_id);
+
+    CREATE TABLE IF NOT EXISTS counterfactuals (
+        counterfactual_id TEXT PRIMARY KEY,
+        trajectory_id TEXT NOT NULL,
+        adaptation_point TEXT NOT NULL,
+        original_option TEXT NOT NULL,
+        alternative_option TEXT NOT NULL,
+        original_outcome TEXT NOT NULL,
+        alternative_outcome TEXT NOT NULL DEFAULT '',
+        mode TEXT NOT NULL DEFAULT 'SIMULATION',
+        delta REAL NOT NULL DEFAULT 0,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_cf_point
+        ON counterfactuals(adaptation_point, original_option, alternative_option);
+
+    CREATE TABLE IF NOT EXISTS decision_quality (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trajectory_id TEXT NOT NULL,
+        dimension TEXT NOT NULL,
+        score REAL NOT NULL,
+        evidence_json TEXT NOT NULL DEFAULT '[]',
+        better_alternative TEXT NOT NULL DEFAULT '',
+        confidence REAL NOT NULL DEFAULT 0,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_dq_traj ON decision_quality(trajectory_id);
+    """,
 )
 
 

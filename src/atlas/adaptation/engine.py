@@ -112,7 +112,9 @@ class AdaptationEngine:
             if await self._hypotheses.exists_for_component(hypothesis.affected_component):
                 continue
             await self._hypotheses.save(hypothesis)
-            await self._store.record_event("hypothesis_proposed", hypothesis.hypothesis_id, {"title": hypothesis.title})
+            await self._store.record_event(
+                "hypothesis_proposed", ref_id=hypothesis.hypothesis_id, detail={"title": hypothesis.title}
+            )
             proposed.append(hypothesis)
         return tuple(proposed)
 
@@ -169,7 +171,7 @@ class AdaptationEngine:
         return report
 
     async def _set_state(self, state: LearningState) -> None:
-        await self._store.record_event("learning_state", "", {"state": state.value})
+        await self._store.record_event("learning_state", detail={"state": state.value})
 
 
 __all__ = ["AdaptationEngine", "CycleReport"]
