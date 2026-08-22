@@ -5,7 +5,10 @@
 ────────────────────────────────────────────────────────────────────────── -->
 
 <p align="center">
-  <img src="assets/atlas-banner.png" alt="ATLAS — Autonomous Task &amp; Learning Agent System" width="100%" />
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/hero/atlas-hero-static.svg" />
+    <img src="assets/readme/hero/atlas-hero.svg" alt="ATLAS — an OTAR cognitive core surrounded by its capability constellation: Model Gateway, Safety Engine, Memory, Knowledge, Tools, and Perception (partial, opt-in). Local-first, safety-governed, zero-cost by default, fully auditable." width="100%" />
+  </picture>
 </p>
 
 <h1 align="center">ATLAS</h1>
@@ -93,34 +96,9 @@ Status legend — **✅ Stable** (wired into the runtime & covered by tests) · 
 
 ATLAS is a strictly layered system. Dependencies point **downward only** — a rule that import-linter enforces on every CI run (`"top may import lower; never the reverse"`).
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#58a6ff','lineColor':'#8b949e','clusterBkg':'#0d1117','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, monospace'}}}%%
-flowchart TB
-    subgraph L1["Interfaces"]
-        CLI["CLI · atlas"]
-        API["HTTP API · FastAPI :8730"]
-        WEB["Web UI · Next.js 16"]
-    end
-    subgraph L2["Orchestration"]
-        ORCH["Orchestrator (single entrypoint)"]
-        LOOP["OTAR Reasoning Loop"]
-    end
-    subgraph L3["Cognitive Platforms"]
-        SAFE["Safety Engine"]
-        GATE["Model Gateway"]
-        MEM["Memory"]
-        KNOW["Knowledge Fabric"]
-        CAPS["Capabilities"]
-        TOOLS["Tools"]
-    end
-    INFRA["Infrastructure — SQLite · ChromaDB · Event Bus · Audit · Config"]
-
-    L1 --> L2
-    L2 --> L3
-    L3 --> INFRA
-    ORCH --> LOOP
-    LOOP -. every action .-> SAFE
-```
+<p align="center">
+  <img src="assets/readme/architecture/atlas-system.svg" alt="ATLAS layered architecture. Top to bottom, dependencies point downward only: Interfaces (CLI, HTTP API on :8730, Next.js 16 web UI); Orchestration (orchestrator, OTAR loop, planner, router, verification); the Safety Engine reference-monitor layer that every tool action passes through; Cognitive Platforms (model gateway, memory, knowledge, tools, capabilities, perception which is partial, adaptation which is experimental); and Infrastructure (SQLite, ChromaDB, event bus, SHA-256 audit, config, clock). Import-linter enforces the layering in CI." width="100%" />
+</p>
 
 **Composition root.** A single call, `atlas.app.build()`, wires the entire system and returns one `Atlas` object. Startup is phased by a `RuntimeSupervisor` (`bootstrap → infrastructure → safety → intelligence → memory → capabilities → orchestration → readiness`); non-critical subsystems degrade gracefully, so a missing browser or knowledge backend never blocks boot.
 
@@ -151,6 +129,14 @@ atlas/
 ├── tests/                      # ~790 test functions across 124 files
 └── .github/workflows/ci.yml    # lint · types · import boundaries · tests · eval gate
 ```
+</details>
+
+<details>
+<summary><strong>Visual language</strong></summary>
+
+<p align="center">
+  <img src="assets/readme/icons/atlas-icons.svg" alt="ATLAS iconography: a consistent 2px line-icon language — cognitive core, model gateway, tool, memory, knowledge, safety shield, hash-chained audit, and kill switch — reused across every diagram." width="100%" />
+</p>
 </details>
 
 <p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
@@ -192,18 +178,9 @@ sequenceDiagram
 
 The reasoning loop is the heart of the runtime, and it **cannot run forever** — step, token, and wall-clock limits raise typed errors that the monitor turns into a graceful failure. Consequential actions are critiqued *before* dispatch; outcomes are reflected on *after*.
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#58a6ff','lineColor':'#8b949e','fontFamily':'ui-monospace, monospace'}}}%%
-flowchart LR
-    O["Observe"] --> T["Think<br/>(model call)"]
-    T --> A["Act<br/>(tool via Safety)"]
-    A --> R["Reflect"]
-    R -->|continue| O
-    R -->|final answer| V{"Verify vs<br/>success criteria"}
-    V -->|pass| DONE(["Answer + trajectory"])
-    V -->|fail & budget left| RP["Replan"]
-    RP --> O
-```
+<p align="center">
+  <img src="assets/readme/runtime/atlas-cognitive-loop.svg" alt="The bounded OTAR reasoning loop: Observe (task and tool results) → Think (model call) → Act (tool call routed through the Safety Engine) → Reflect, cycling until a final answer is verified against success criteria. Passing yields an answer plus full trajectory; failing with budget left triggers a bounded replan back to Observe. Step, token, and wall-clock limits keep the loop bounded." width="92%" />
+</p>
 
 <p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
 
@@ -211,25 +188,9 @@ flowchart LR
 
 Safety is not a wrapper around ATLAS — it is the path everything travels through. The `dispatcher` never touches a tool directly; it calls `SafetyEngine.guard()`, whose funnel is fixed:
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#58a6ff','lineColor':'#8b949e','fontFamily':'ui-monospace, monospace'}}}%%
-flowchart TD
-    REQ["Proposed tool action"] --> KS{"Kill switch<br/>active?"}
-    KS -->|yes| HALT["HALTED"]:::danger
-    KS -->|no| CLF["Classify tier 0–4"]
-    CLF --> POL["Policy chain"]
-    POL --> AUD[("Audit · SHA-256 hash chain")]
-    AUD --> D{"Decision"}
-    D -->|deny / BLOCK| DENY["Denied"]:::danger
-    D -->|require confirm| CONF["Human approval<br/>(code if DANGEROUS)"]:::warn
-    D -->|auto / notify| EXEC["Execute in sandbox"]:::ok
-    CONF -->|approved| KS2{"Kill switch<br/>re-check"}
-    KS2 -->|clear| EXEC
-    EXEC --> OBS["Observation → loop"]
-    classDef danger fill:#3d1418,stroke:#f85149,color:#ffdcd7;
-    classDef warn fill:#3d2f14,stroke:#d29922,color:#ffe9b0;
-    classDef ok fill:#132a1a,stroke:#3fb950,color:#c7f5d4;
-```
+<p align="center">
+  <img src="assets/readme/architecture/atlas-safety.svg" alt="The Safety Engine guard funnel: a proposed tool action is checked against the kill switch (halts if active), then classified into risk tier 0–4, checked against the policy chain, and appended to a SHA-256 hash-chained audit log before any decision. The decision either denies/blocks, or requires human approval (a one-time code if DANGEROUS) followed by a kill-switch re-check, or auto-approves and executes in a sandbox, returning an observation to the loop. Risk tiers run T0 AUTO to T4 BLOCK. Hard-blocked categories, never run regardless of approval: credential access, financial transactions, mass deletion over 25 items, and edits to the safety config." width="100%" />
+</p>
 
 ### Risk tiers
 
@@ -301,6 +262,10 @@ The **context builder** assembles a deterministic, priority-ordered prompt (`sys
 
 ## Knowledge & Research
 
+<p align="center">
+  <img src="assets/readme/knowledge/atlas-knowledge-loop.svg" alt="The knowledge fabric pipeline: sources (documents, web, codebase) feed two parallel retrieval lanes — BM25 lexical search and vector similarity — which merge via reciprocal-rank fusion, then feature reranking, then a prompt-injection scan, producing grounded, cited context for the model. Retrieval is time-bounded and degrades gracefully." width="100%" />
+</p>
+
 The knowledge fabric turns documents into grounded, ranked context:
 
 - **Hybrid retrieval** — BM25 lexical search fused with vector similarity via reciprocal-rank fusion.
@@ -359,6 +324,11 @@ uv run uvicorn atlas.interfaces.api.app:create_app --factory \
 cd frontend && npm install && npm run dev   # → http://localhost:3000
 ```
 
+<p align="center">
+  <img src="assets/readme/ui/atlas-ui.svg" alt="Schematic (not a screenshot) of the ATLAS local control plane: a left navigation lists Tasks, Approvals, Events, Memory, Knowledge, Cost, Providers, Automations and Runtime; the main area shows a task stream with status chips, a pending Tier-2 approval card with approve and deny actions, and a live event ticker over server-sent events and WebSocket. Status pills show the default profile local_free, zero cost, and a DEGRADED runtime because the browser is off by default." width="100%" />
+</p>
+<p align="center"><sub>Schematic of the local control plane — the panels map to real API routers; run <code>frontend/</code> for the live UI.</sub></p>
+
 > If you use [`just`](https://github.com/casey/just): `just serve` runs the API and `just check` runs the full quality gate.
 
 <p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
@@ -414,6 +384,10 @@ The FastAPI app (factory `atlas.interfaces.api.app:create_app`) mounts routers m
 ## Evaluation and Performance
 
 **Self-improvement.** Completed tasks produce full **trajectories** (actions, observations, decisions). A post-task **experience extractor** distils lessons into skills and strategies that can inform future planning *(experimental)*.
+
+<p align="center">
+  <img src="assets/readme/learning/atlas-learning-loop.svg" alt="The experimental self-improvement loop: a completed task produces a full trajectory of actions, observations and decisions; a post-task experience extractor distils skills and strategies that can inform future planning. This loop is experimental and never bypasses the Safety Engine." width="92%" />
+</p>
 
 **Regression gate.** CI replays recorded answers through an evaluation gate (`scripts/eval_gate.py`) so behavioural regressions fail the build.
 

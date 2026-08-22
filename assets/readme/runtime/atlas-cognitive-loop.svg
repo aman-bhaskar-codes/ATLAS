@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" width="960" height="520" role="img" aria-label="The bounded OTAR reasoning loop: Observe, then Think (model call), then Act (tool call routed through the Safety Engine), then Reflect. On a final answer the loop verifies against success criteria — passing yields an answer plus trajectory, failing with budget left triggers a replan back to Observe. Step, token, and time limits bound the loop.">
+  <defs>
+    <filter id="c-glow" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <marker id="c-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8b949e"/></marker>
+    <marker id="c-arrowg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3fb950"/></marker>
+    <marker id="c-arrowa" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d29922"/></marker>
+  </defs>
+  <rect width="960" height="520" fill="#0d1117"/>
+  <text x="40" y="46" fill="#e6edf3" font-family="'Segoe UI',system-ui,-apple-system,sans-serif" font-size="18" font-weight="600">The OTAR reasoning loop</text>
+  <text x="40" y="68" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12">bounded by construction — step · token · wall-clock limits raise typed errors, never an infinite loop</text>
+
+  <!-- ring guide -->
+  <circle cx="330" cy="290" r="150" fill="none" stroke="#21262d" stroke-width="1.5"/>
+
+  <!-- clockwise flow arcs Observe->Think->Act->Reflect -->
+  <g fill="none" stroke="#8b949e" stroke-width="2" opacity="0.55">
+    <path d="M373 152 A150 150 0 0 1 468 247" marker-end="url(#c-arrow)"/>
+    <path d="M468 333 A150 150 0 0 1 373 428" marker-end="url(#c-arrow)"/>
+    <path d="M287 428 A150 150 0 0 1 192 333" marker-end="url(#c-arrow)"/>
+    <path d="M192 247 A150 150 0 0 1 287 152" marker-end="url(#c-arrow)"/>
+  </g>
+
+  <!-- travelling pulse around the ring -->
+  <circle r="4.5" fill="#58a6ff" filter="url(#c-glow)">
+    <animateMotion path="M330,140 A150,150 0 1,1 329.9,140" dur="6s" repeatCount="indefinite" rotate="auto"/>
+  </circle>
+
+  <!-- nodes -->
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
+    <!-- Observe (top) -->
+    <circle cx="330" cy="140" r="46" fill="#0d1117" stroke="#58a6ff" stroke-width="2" filter="url(#c-glow)"/>
+    <text x="330" y="137" text-anchor="middle" fill="#58a6ff" font-size="13" font-weight="700">OBSERVE</text>
+    <text x="330" y="153" text-anchor="middle" fill="#8b949e" font-size="8.5">task + results</text>
+    <!-- Think (right) -->
+    <circle cx="480" cy="290" r="46" fill="#0d1117" stroke="#bc8cff" stroke-width="2" filter="url(#c-glow)"/>
+    <text x="480" y="287" text-anchor="middle" fill="#bc8cff" font-size="14" font-weight="700">THINK</text>
+    <text x="480" y="303" text-anchor="middle" fill="#8b949e" font-size="8.5">model call</text>
+    <!-- Act (bottom) -->
+    <circle cx="330" cy="440" r="46" fill="#0d1117" stroke="#f778ba" stroke-width="2" filter="url(#c-glow)"/>
+    <text x="330" y="437" text-anchor="middle" fill="#f778ba" font-size="15" font-weight="700">ACT</text>
+    <text x="330" y="453" text-anchor="middle" fill="#8b949e" font-size="8.5">tool · via Safety</text>
+    <!-- Reflect (left) -->
+    <circle cx="180" cy="290" r="46" fill="#0d1117" stroke="#3fb950" stroke-width="2" filter="url(#c-glow)"/>
+    <text x="180" y="287" text-anchor="middle" fill="#3fb950" font-size="13" font-weight="700">REFLECT</text>
+    <text x="180" y="303" text-anchor="middle" fill="#8b949e" font-size="8.5">critique</text>
+  </g>
+
+  <!-- Safety gate tag on the Act edge -->
+  <g>
+    <rect x="392" y="422" width="150" height="26" rx="6" fill="#132a1a" stroke="#3fb950" stroke-width="1"/>
+    <circle cx="410" cy="435" r="4" fill="#3fb950"><animate attributeName="opacity" values="0.4;1;0.4" dur="2.4s" repeatCount="indefinite"/></circle>
+    <text x="422" y="439" fill="#c7f5d4" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10">SafetyEngine.guard()</text>
+  </g>
+
+  <!-- branch to verify -->
+  <path d="M480 244 C 560 150, 620 150, 660 150" fill="none" stroke="#3fb950" stroke-width="2" opacity="0.7" marker-end="url(#c-arrowg)"/>
+  <text x="560" y="140" text-anchor="middle" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10">final answer</text>
+
+  <!-- Verify diamond -->
+  <g>
+    <path d="M760 150 L820 200 L760 250 L700 200 Z" fill="#0d1117" stroke="#d29922" stroke-width="2"/>
+    <text x="760" y="196" text-anchor="middle" fill="#d29922" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11" font-weight="700">VERIFY</text>
+    <text x="760" y="211" text-anchor="middle" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="8">vs criteria</text>
+  </g>
+
+  <!-- pass -> answer -->
+  <path d="M820 175 C 860 150, 860 130, 860 118" fill="none" stroke="#3fb950" stroke-width="2" marker-end="url(#c-arrowg)"/>
+  <text x="838" y="140" fill="#3fb950" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10">pass</text>
+  <g>
+    <rect x="770" y="72" width="170" height="46" rx="10" fill="#132a1a" stroke="#3fb950" stroke-width="1.5"/>
+    <text x="855" y="92" text-anchor="middle" fill="#c7f5d4" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11" font-weight="700">ANSWER</text>
+    <text x="855" y="107" text-anchor="middle" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="8.5">+ full trajectory</text>
+  </g>
+
+  <!-- fail & budget -> replan -->
+  <path d="M760 250 V 300 H 855 V 322" fill="none" stroke="#58a6ff" stroke-width="2" marker-end="url(#c-arrow)"/>
+  <text x="770" y="278" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="9.5">fail · budget left</text>
+  <g>
+    <rect x="770" y="324" width="170" height="46" rx="10" fill="#0d1117" stroke="#58a6ff" stroke-width="1.5"/>
+    <text x="855" y="344" text-anchor="middle" fill="#58a6ff" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11" font-weight="700">REPLAN</text>
+    <text x="855" y="359" text-anchor="middle" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="8.5">bounded retries</text>
+  </g>
+  <!-- replan back to observe -->
+  <path d="M770 347 C 470 470, 330 360, 330 192" fill="none" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="5 5" opacity="0.6" marker-end="url(#c-arrow)"/>
+</svg>
