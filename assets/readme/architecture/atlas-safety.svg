@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 720" width="1080" height="720" role="img" aria-label="The Safety Engine guard funnel. A proposed tool action is checked against the kill switch (if active, execution halts). Otherwise it is classified into risk tier 0 to 4, checked against the policy chain, and appended to a SHA-256 hash-chained audit log before any decision. The decision either denies or blocks, requires human approval (plus a one-time code for dangerous actions) followed by a kill-switch re-check, or auto-approves execution in a sandbox. Risk tiers range from AUTO to BLOCK. Hard-blocked categories, never run regardless of approval, are credential access, financial transactions, mass deletion over 25 items, and edits to the safety config.">
+  <defs>
+    <filter id="sf-glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <marker id="sf-a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8b949e"/></marker>
+    <marker id="sf-ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#f85149"/></marker>
+    <marker id="sf-ag" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3fb950"/></marker>
+    <marker id="sf-am" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d29922"/></marker>
+  </defs>
+  <rect width="1080" height="720" fill="#0d1117"/>
+  <text x="48" y="48" fill="#e6edf3" font-family="'Segoe UI',system-ui,-apple-system,sans-serif" font-size="20" font-weight="600">The safety funnel</text>
+  <text x="48" y="70" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12">no tool executes except through SafetyEngine.guard() — the path is fixed</text>
+
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
+    <!-- spine -->
+    <rect x="180" y="96" width="240" height="46" rx="10" fill="#161b22" stroke="#58a6ff"/><text x="300" y="124" text-anchor="middle" fill="#c9d1d9" font-size="12">Proposed tool action</text>
+    <line x1="300" y1="142" x2="300" y2="166" stroke="#8b949e" stroke-width="2" marker-end="url(#sf-a)"/>
+
+    <!-- kill switch -->
+    <path d="M300 170 L352 210 L300 250 L248 210 Z" fill="#0d1117" stroke="#f85149" stroke-width="2" filter="url(#sf-glow)"/>
+    <text x="300" y="207" text-anchor="middle" fill="#f85149" font-size="11" font-weight="700">KILL SWITCH</text>
+    <text x="300" y="221" text-anchor="middle" fill="#8b949e" font-size="9">active?</text>
+    <line x1="352" y1="210" x2="470" y2="210" stroke="#f85149" stroke-width="2" marker-end="url(#sf-ar)"/>
+    <text x="410" y="202" text-anchor="middle" fill="#f85149" font-size="9">yes</text>
+    <rect x="470" y="188" width="120" height="44" rx="8" fill="#3d1418" stroke="#f85149"/><text x="530" y="215" text-anchor="middle" fill="#ffdcd7" font-size="12" font-weight="700">HALTED</text>
+    <line x1="300" y1="250" x2="300" y2="274" stroke="#8b949e" stroke-width="2" marker-end="url(#sf-a)"/><text x="316" y="268" fill="#6e7681" font-size="9">no</text>
+
+    <!-- classify -->
+    <rect x="180" y="276" width="240" height="50" rx="10" fill="#161b22" stroke="#58a6ff"/><text x="300" y="300" text-anchor="middle" fill="#c9d1d9" font-size="12">Classify · tier 0–4</text><text x="300" y="316" text-anchor="middle" fill="#6e7681" font-size="9">risk classifier</text>
+    <line x1="300" y1="326" x2="300" y2="348" stroke="#8b949e" stroke-width="2" marker-end="url(#sf-a)"/>
+
+    <!-- policy -->
+    <rect x="180" y="350" width="240" height="46" rx="10" fill="#161b22" stroke="#58a6ff"/><text x="300" y="378" text-anchor="middle" fill="#c9d1d9" font-size="12">Policy chain</text>
+    <line x1="300" y1="396" x2="300" y2="418" stroke="#8b949e" stroke-width="2" marker-end="url(#sf-a)"/>
+
+    <!-- audit cylinder -->
+    <g filter="url(#sf-glow)">
+      <path d="M180 432 v44 a120 12 0 0 0 240 0 v-44" fill="#101a22" stroke="#39c5cf"/>
+      <ellipse cx="300" cy="432" rx="120" ry="12" fill="#0d1117" stroke="#39c5cf"/>
+    </g>
+    <text x="300" y="458" text-anchor="middle" fill="#39c5cf" font-size="12" font-weight="700">AUDIT</text>
+    <text x="300" y="474" text-anchor="middle" fill="#8b949e" font-size="9">SHA-256 hash chain · append-only</text>
+    <line x1="300" y1="488" x2="300" y2="512" stroke="#8b949e" stroke-width="2" marker-end="url(#sf-a)"/>
+
+    <!-- decision -->
+    <path d="M300 514 L360 560 L300 606 L240 560 Z" fill="#0d1117" stroke="#e6edf3" stroke-width="2"/>
+    <text x="300" y="565" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="700">DECISION</text>
+
+    <!-- deny branch (left) -->
+    <path d="M240 560 H 150 V 622" fill="none" stroke="#f85149" stroke-width="2" marker-end="url(#sf-ar)"/>
+    <text x="176" y="552" fill="#f85149" font-size="9">deny / BLOCK</text>
+    <rect x="70" y="624" width="160" height="48" rx="10" fill="#3d1418" stroke="#f85149"/><text x="150" y="653" text-anchor="middle" fill="#ffdcd7" font-size="12" font-weight="700">DENIED</text>
+
+    <!-- auto branch (down) -->
+    <line x1="300" y1="606" x2="300" y2="628" stroke="#3fb950" stroke-width="2" marker-end="url(#sf-ag)"/>
+    <text x="316" y="622" fill="#3fb950" font-size="9">auto / notify</text>
+    <rect x="252" y="630" width="200" height="52" rx="10" fill="#132a1a" stroke="#3fb950"/><text x="352" y="654" text-anchor="middle" fill="#c7f5d4" font-size="12" font-weight="700">EXECUTE</text><text x="352" y="670" text-anchor="middle" fill="#8b949e" font-size="9">in sandbox</text>
+
+    <!-- confirm branch (right) -->
+    <path d="M360 560 H 470" fill="none" stroke="#d29922" stroke-width="2" marker-end="url(#sf-am)"/>
+    <text x="388" y="552" fill="#d29922" font-size="9">require confirm</text>
+    <rect x="472" y="536" width="200" height="48" rx="10" fill="#3d2f14" stroke="#d29922"/><text x="572" y="558" text-anchor="middle" fill="#ffe9b0" font-size="11" font-weight="700">HUMAN APPROVAL</text><text x="572" y="573" text-anchor="middle" fill="#8b949e" font-size="8.5">one-time code if DANGEROUS</text>
+    <path d="M572 584 V 612" fill="none" stroke="#d29922" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <rect x="472" y="612" width="200" height="34" rx="8" fill="#0d1117" stroke="#f85149" stroke-opacity="0.7"/><text x="572" y="634" text-anchor="middle" fill="#f0a0a0" font-size="9.5">kill-switch re-check</text>
+    <path d="M472 629 H 452 V 656 H 456" fill="none" stroke="#3fb950" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#sf-ag)"/>
+
+    <!-- observation loop back -->
+    <path d="M252 656 H 40 V 119 H 176" fill="none" stroke="#8b949e" stroke-width="1.4" stroke-dasharray="5 5" opacity="0.55" marker-end="url(#sf-a)"/>
+    <text x="52" y="390" fill="#6e7681" font-size="10" transform="rotate(-90 52 390)">observation → next OTAR step</text>
+  </g>
+
+  <!-- RIGHT: tier ladder -->
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
+    <text x="700" y="112" fill="#6e7681" font-size="11" letter-spacing="2">RISK TIERS</text>
+    <rect x="700" y="122" width="336" height="40" rx="8" fill="#0f1f15" stroke="#3fb950"/><text x="716" y="147" fill="#3fb950" font-size="12" font-weight="700">T0 AUTO</text><text x="820" y="147" fill="#8b949e" font-size="10">read-only · logged silently</text>
+    <rect x="700" y="168" width="336" height="40" rx="8" fill="#0e1a2b" stroke="#58a6ff"/><text x="716" y="193" fill="#58a6ff" font-size="12" font-weight="700">T1 NOTIFY</text><text x="828" y="193" fill="#8b949e" font-size="10">reversible · auto + notify</text>
+    <rect x="700" y="214" width="336" height="40" rx="8" fill="#241d0f" stroke="#d29922"/><text x="716" y="239" fill="#d29922" font-size="12" font-weight="700">T2 CONFIRM</text><text x="838" y="239" fill="#8b949e" font-size="10">irreversible · needs approval</text>
+    <rect x="700" y="260" width="336" height="40" rx="8" fill="#2a1c10" stroke="#f0883e"/><text x="716" y="285" fill="#f0883e" font-size="12" font-weight="700">T3 DANGEROUS</text><text x="854" y="285" fill="#8b949e" font-size="10">approval + one-time code</text>
+    <rect x="700" y="306" width="336" height="40" rx="8" fill="#3d1418" stroke="#f85149"/><text x="716" y="331" fill="#f85149" font-size="12" font-weight="700">T4 BLOCK</text><text x="820" y="331" fill="#8b949e" font-size="10">never executed</text>
+
+    <!-- hard-blocked -->
+    <rect x="700" y="378" width="336" height="176" rx="12" fill="#1a0f11" stroke="#f85149" stroke-width="1.4"/>
+    <text x="720" y="406" fill="#f85149" font-size="12" font-weight="700">HARD-BLOCKED</text>
+    <text x="720" y="424" fill="#8b949e" font-size="9.5">never run · regardless of approval</text>
+    <g fill="#f0a0a0" font-size="11">
+      <text x="726" y="452">— credential access</text>
+      <text x="726" y="476">— financial transactions</text>
+      <text x="726" y="500">— mass deletion  (&gt; 25 items)</text>
+      <text x="726" y="524">— edits to the safety config</text>
+    </g>
+    <text x="700" y="588" fill="#6e7681" font-size="10">kill switch is re-checked after any human confirmation —</text>
+    <text x="700" y="604" fill="#6e7681" font-size="10">the world can change while a prompt waits.</text>
+  </g>
+</svg>

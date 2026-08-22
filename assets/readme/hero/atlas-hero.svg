@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" width="1200" height="440" role="img" aria-label="ATLAS — a cognitive core surrounded by its capability constellation: Model Gateway, Safety Engine, Memory, Knowledge, Tools, and Perception (partial). Data pulses flow between the core and each subsystem.">
+  <defs>
+    <radialGradient id="h-core" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="#a6d3ff"/>
+      <stop offset="45%" stop-color="#58a6ff"/>
+      <stop offset="100%" stop-color="#1f6feb"/>
+    </radialGradient>
+    <radialGradient id="h-vignette" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#12213a" stop-opacity="0.55"/>
+      <stop offset="55%" stop-color="#0d1117" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="h-spoke" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#58a6ff" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#58a6ff" stop-opacity="0.5"/>
+    </linearGradient>
+    <filter id="h-glowS" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="h-glowL" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- backdrop -->
+  <rect width="1200" height="440" fill="#0d1117"/>
+  <rect width="1200" height="440" fill="url(#h-vignette)"/>
+
+  <!-- faint HUD frame -->
+  <g stroke="#21262d" stroke-width="1" fill="none" opacity="0.9">
+    <path d="M28 26 h40 M28 26 v40"/><path d="M1172 26 h-40 M1172 26 v40"/>
+    <path d="M28 414 h40 M28 414 v-40"/><path d="M1172 414 h-40 M1172 414 v-40"/>
+  </g>
+  <text x="40" y="52" fill="#484f58" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11" letter-spacing="2">ATLAS // AUTONOMOUS RUNTIME</text>
+  <text x="1160" y="52" text-anchor="end" fill="#484f58" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11" letter-spacing="2">SINGLE-ORCHESTRATOR</text>
+
+  <!-- twinkling field -->
+  <g fill="#58a6ff">
+    <circle cx="150" cy="120" r="1.4" opacity="0.5"><animate attributeName="opacity" values="0.1;0.7;0.1" dur="4s" repeatCount="indefinite"/></circle>
+    <circle cx="1040" cy="150" r="1.4" opacity="0.5"><animate attributeName="opacity" values="0.6;0.15;0.6" dur="5s" repeatCount="indefinite"/></circle>
+    <circle cx="1080" cy="330" r="1.2" opacity="0.4"><animate attributeName="opacity" values="0.15;0.6;0.15" dur="4.5s" repeatCount="indefinite"/></circle>
+    <circle cx="120" cy="320" r="1.2" opacity="0.4"><animate attributeName="opacity" values="0.5;0.12;0.5" dur="3.6s" repeatCount="indefinite"/></circle>
+  </g>
+
+  <!-- slowly rotating orbital rings (no text, so rotation is safe) -->
+  <g transform="translate(600 220)">
+    <circle r="170" fill="none" stroke="#30363d" stroke-width="1" stroke-dasharray="2 9" opacity="0.8">
+      <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="46s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="128" fill="none" stroke="#21262d" stroke-width="1" stroke-dasharray="1 12" opacity="0.7">
+      <animateTransform attributeName="transform" type="rotate" from="360" to="0" dur="60s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- spokes core->node -->
+  <g stroke-width="1.4" fill="none" opacity="0.6">
+    <line x1="600" y1="220" x2="770" y2="220" stroke="url(#h-spoke)"/>
+    <line x1="600" y1="220" x2="685" y2="367" stroke="url(#h-spoke)"/>
+    <line x1="600" y1="220" x2="515" y2="367" stroke="url(#h-spoke)"/>
+    <line x1="600" y1="220" x2="430" y2="220" stroke="url(#h-spoke)"/>
+    <line x1="600" y1="220" x2="515" y2="73"  stroke="url(#h-spoke)"/>
+    <line x1="600" y1="220" x2="685" y2="73"  stroke="url(#h-spoke)"/>
+  </g>
+
+  <!-- data pulses travelling along the spokes -->
+  <g>
+    <circle r="3" fill="#7cc4ff" filter="url(#h-glowS)"><animateMotion path="M600,220 L770,220" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="2.2s" repeatCount="indefinite"/></circle>
+    <circle r="3" fill="#3fb950" filter="url(#h-glowS)"><animateMotion path="M685,73 L600,220" dur="2.6s" begin="0.3s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="2.6s" begin="0.3s" repeatCount="indefinite"/></circle>
+    <circle r="3" fill="#bc8cff" filter="url(#h-glowS)"><animateMotion path="M600,220 L430,220" dur="2.4s" begin="0.6s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="2.4s" begin="0.6s" repeatCount="indefinite"/></circle>
+    <circle r="3" fill="#39c5cf" filter="url(#h-glowS)"><animateMotion path="M515,73 L600,220" dur="2.8s" begin="0.9s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="2.8s" begin="0.9s" repeatCount="indefinite"/></circle>
+    <circle r="3" fill="#7cc4ff" filter="url(#h-glowS)"><animateMotion path="M600,220 L515,367" dur="2.5s" begin="1.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="2.5s" begin="1.2s" repeatCount="indefinite"/></circle>
+    <circle r="3" fill="#d29922" filter="url(#h-glowS)"><animateMotion path="M685,367 L600,220" dur="3s" begin="1.5s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;0" dur="3s" begin="1.5s" repeatCount="indefinite"/></circle>
+  </g>
+
+  <!-- sonar rings from the core -->
+  <g fill="none" stroke="#58a6ff">
+    <circle cx="600" cy="220" r="46" opacity="0"><animate attributeName="r" values="46;150" dur="4s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.5;0" dur="4s" repeatCount="indefinite"/></circle>
+    <circle cx="600" cy="220" r="46" opacity="0"><animate attributeName="r" values="46;150" dur="4s" begin="1.3s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.5;0" dur="4s" begin="1.3s" repeatCount="indefinite"/></circle>
+    <circle cx="600" cy="220" r="46" opacity="0"><animate attributeName="r" values="46;150" dur="4s" begin="2.6s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.5;0" dur="4s" begin="2.6s" repeatCount="indefinite"/></circle>
+  </g>
+
+  <!-- cognitive core -->
+  <g filter="url(#h-glowL)">
+    <circle cx="600" cy="220" r="46" fill="url(#h-core)"/>
+    <circle cx="600" cy="220" r="46" fill="none" stroke="#a6d3ff" stroke-width="1.5" opacity="0.9">
+      <animate attributeName="opacity" values="0.5;1;0.5" dur="3.4s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  <text x="600" y="216" text-anchor="middle" fill="#04122b" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="15" font-weight="700" letter-spacing="3">ATLAS</text>
+  <text x="600" y="232" text-anchor="middle" fill="#0b2e63" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="8" letter-spacing="2">OTAR CORE</text>
+
+  <!-- capability chips: dot colour encodes maturity (green=stable, amber=partial) -->
+  <!-- right: Model Gateway -->
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11">
+    <g>
+      <rect x="710" y="203" width="128" height="34" rx="8" fill="#161b22" stroke="#30363d"/>
+      <circle cx="726" cy="220" r="4" fill="#3fb950"/><text x="738" y="224" fill="#c9d1d9">MODEL GATEWAY</text>
+    </g>
+    <g>
+      <rect x="625" y="350" width="120" height="34" rx="8" fill="#161b22" stroke="#30363d"/>
+      <circle cx="641" cy="367" r="4" fill="#3fb950"/><text x="653" y="371" fill="#c9d1d9">TOOLS</text>
+    </g>
+    <g>
+      <rect x="447" y="350" width="136" height="34" rx="8" fill="#161b22" stroke="#30363d"/>
+      <circle cx="463" cy="367" r="4" fill="#d29922"/><text x="475" y="371" fill="#c9d1d9">PERCEPTION</text>
+      <text x="475" y="345" fill="#d29922" font-size="8" letter-spacing="1">PARTIAL · OPT-IN</text>
+    </g>
+    <g>
+      <rect x="362" y="203" width="128" height="34" rx="8" fill="#161b22" stroke="#30363d"/>
+      <circle cx="378" cy="220" r="4" fill="#3fb950"/><text x="390" y="224" fill="#c9d1d9">KNOWLEDGE</text>
+    </g>
+    <g>
+      <rect x="447" y="56" width="120" height="34" rx="8" fill="#161b22" stroke="#30363d"/>
+      <circle cx="463" cy="73" r="4" fill="#3fb950"/><text x="475" y="77" fill="#c9d1d9">MEMORY</text>
+    </g>
+    <g>
+      <rect x="625" y="56" width="128" height="34" rx="8" fill="#161b22" stroke="#3fb950" stroke-opacity="0.5"/>
+      <circle cx="641" cy="73" r="4" fill="#3fb950"/><text x="653" y="77" fill="#c9d1d9">SAFETY ENGINE</text>
+    </g>
+  </g>
+
+  <!-- tagline -->
+  <text x="600" y="418" text-anchor="middle" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" letter-spacing="3">LOCAL-FIRST   ·   SAFETY-GOVERNED   ·   ZERO-COST BY DEFAULT   ·   FULLY AUDITABLE</text>
+</svg>

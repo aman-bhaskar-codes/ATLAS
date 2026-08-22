@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 740" width="1200" height="740" role="img" aria-label="ATLAS layered architecture. Top to bottom, dependencies point downward only: Interfaces (CLI, HTTP API on port 8730, Next.js web UI); Orchestration (orchestrator, OTAR loop, planner, router, verification); the Safety Engine governance layer that every tool action passes through; Cognitive platforms (model gateway, memory, knowledge, tools, capabilities, perception which is partial, adaptation which is experimental); and Infrastructure (SQLite, ChromaDB, event bus, hash-chained audit, config, clock). Import-linter enforces the layering in CI.">
+  <defs>
+    <filter id="s-glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <marker id="s-down" viewBox="0 0 10 10" refX="5" refY="8" markerWidth="9" markerHeight="9" orient="0"><path d="M0 0 L5 8 L10 0" fill="none" stroke="#484f58" stroke-width="2"/></marker>
+  </defs>
+  <rect width="1200" height="740" fill="#0d1117"/>
+  <text x="60" y="46" fill="#e6edf3" font-family="'Segoe UI',system-ui,-apple-system,sans-serif" font-size="20" font-weight="600">Living architecture</text>
+  <text x="60" y="68" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12">dependencies point downward only — enforced on every CI run by import-linter</text>
+  <!-- legend -->
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10">
+    <circle cx="828" cy="42" r="4" fill="#3fb950"/><text x="838" y="46" fill="#8b949e">stable</text>
+    <circle cx="912" cy="42" r="4" fill="#d29922"/><text x="922" y="46" fill="#8b949e">partial / experimental</text>
+  </g>
+
+  <!-- layer bands -->
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
+    <!-- L1 Interfaces -->
+    <rect x="60" y="86" width="1080" height="84" rx="12" fill="#10151c" stroke="#30363d"/>
+    <text x="80" y="112" fill="#6e7681" font-size="11" letter-spacing="2">01 · INTERFACES</text>
+    <rect x="300" y="118" width="180" height="42" rx="8" fill="#161b22" stroke="#58a6ff" stroke-opacity="0.6"/><text x="390" y="144" text-anchor="middle" fill="#c9d1d9" font-size="12">CLI · atlas</text>
+    <rect x="510" y="118" width="240" height="42" rx="8" fill="#161b22" stroke="#58a6ff" stroke-opacity="0.6"/><text x="630" y="144" text-anchor="middle" fill="#c9d1d9" font-size="12">HTTP API · FastAPI :8730</text>
+    <rect x="780" y="118" width="180" height="42" rx="8" fill="#161b22" stroke="#58a6ff" stroke-opacity="0.6"/><text x="870" y="144" text-anchor="middle" fill="#c9d1d9" font-size="12">Web UI · Next.js 16</text>
+
+    <line x1="600" y1="170" x2="600" y2="196" stroke="#484f58" stroke-width="2" marker-end="url(#s-down)"/>
+
+    <!-- L2 Orchestration -->
+    <rect x="60" y="198" width="1080" height="84" rx="12" fill="#10151c" stroke="#30363d"/>
+    <text x="80" y="224" fill="#6e7681" font-size="11" letter-spacing="2">02 · ORCHESTRATION</text>
+    <rect x="300" y="230" width="140" height="42" rx="8" fill="#161b22" stroke="#8b949e" stroke-opacity="0.5"/><text x="370" y="256" text-anchor="middle" fill="#c9d1d9" font-size="11">Orchestrator</text>
+    <rect x="452" y="230" width="120" height="42" rx="8" fill="#161b22" stroke="#8b949e" stroke-opacity="0.5"/><text x="512" y="256" text-anchor="middle" fill="#c9d1d9" font-size="11">OTAR Loop</text>
+    <rect x="584" y="230" width="110" height="42" rx="8" fill="#161b22" stroke="#8b949e" stroke-opacity="0.5"/><text x="639" y="256" text-anchor="middle" fill="#c9d1d9" font-size="11">Planner</text>
+    <rect x="706" y="230" width="100" height="42" rx="8" fill="#161b22" stroke="#8b949e" stroke-opacity="0.5"/><text x="756" y="256" text-anchor="middle" fill="#c9d1d9" font-size="11">Router</text>
+    <rect x="818" y="230" width="130" height="42" rx="8" fill="#161b22" stroke="#8b949e" stroke-opacity="0.5"/><text x="883" y="256" text-anchor="middle" fill="#c9d1d9" font-size="11">Verification</text>
+
+    <line x1="600" y1="282" x2="600" y2="308" stroke="#484f58" stroke-width="2" marker-end="url(#s-down)"/>
+
+    <!-- Safety governance -->
+    <rect x="60" y="310" width="1080" height="82" rx="12" fill="#0f1f15" stroke="#3fb950" stroke-width="1.5">
+      <animate attributeName="stroke-opacity" values="0.6;1;0.6" dur="3.4s" repeatCount="indefinite"/>
+    </rect>
+    <text x="80" y="336" fill="#3fb950" font-size="11" letter-spacing="2">■ REFERENCE MONITOR</text>
+    <text x="600" y="345" text-anchor="middle" fill="#3fb950" font-size="15" font-weight="700" filter="url(#s-glow)">SAFETY ENGINE</text>
+    <text x="600" y="368" text-anchor="middle" fill="#c7f5d4" font-size="11">every tool action: classify → policy → audit → kill-switch → sandbox</text>
+    <text x="600" y="384" text-anchor="middle" fill="#6e7681" font-size="10">the model proposes · ATLAS decides</text>
+
+    <line x1="600" y1="392" x2="600" y2="418" stroke="#484f58" stroke-width="2" marker-end="url(#s-down)"/>
+
+    <!-- L3 Cognitive platforms (two rows) -->
+    <rect x="60" y="420" width="1080" height="150" rx="12" fill="#10151c" stroke="#30363d"/>
+    <text x="80" y="446" fill="#6e7681" font-size="11" letter-spacing="2">03 · COGNITIVE PLATFORMS</text>
+    <!-- row 1 -->
+    <g>
+      <rect x="180" y="456" width="210" height="44" rx="8" fill="#161b22" stroke="#30363d"/><circle cx="200" cy="478" r="4" fill="#3fb950"/><text x="214" y="482" fill="#c9d1d9" font-size="11">Model Gateway</text>
+      <rect x="410" y="456" width="170" height="44" rx="8" fill="#161b22" stroke="#30363d"/><circle cx="430" cy="478" r="4" fill="#3fb950"/><text x="444" y="482" fill="#c9d1d9" font-size="11">Memory</text>
+      <rect x="600" y="456" width="200" height="44" rx="8" fill="#161b22" stroke="#30363d"/><circle cx="620" cy="478" r="4" fill="#3fb950"/><text x="634" y="482" fill="#c9d1d9" font-size="11">Knowledge fabric</text>
+      <rect x="820" y="456" width="160" height="44" rx="8" fill="#161b22" stroke="#30363d"/><circle cx="840" cy="478" r="4" fill="#3fb950"/><text x="854" y="482" fill="#c9d1d9" font-size="11">Tools</text>
+    </g>
+    <!-- row 2 -->
+    <g>
+      <rect x="180" y="510" width="210" height="44" rx="8" fill="#161b22" stroke="#30363d"/><circle cx="200" cy="532" r="4" fill="#3fb950"/><text x="214" y="536" fill="#c9d1d9" font-size="11">Capabilities</text>
+      <rect x="410" y="510" width="220" height="44" rx="8" fill="#161b22" stroke="#d29922" stroke-opacity="0.7"/><circle cx="430" cy="532" r="4" fill="#d29922"/><text x="444" y="536" fill="#c9d1d9" font-size="11">Perception · partial</text>
+      <rect x="650" y="510" width="240" height="44" rx="8" fill="#161b22" stroke="#d29922" stroke-opacity="0.7"/><circle cx="670" cy="532" r="4" fill="#d29922"/><text x="684" y="536" fill="#c9d1d9" font-size="11">Adaptation · experimental</text>
+    </g>
+
+    <line x1="600" y1="570" x2="600" y2="596" stroke="#484f58" stroke-width="2" marker-end="url(#s-down)"/>
+
+    <!-- L4 Infrastructure -->
+    <rect x="60" y="598" width="1080" height="84" rx="12" fill="#10151c" stroke="#30363d"/>
+    <text x="80" y="624" fill="#6e7681" font-size="11" letter-spacing="2">04 · INFRASTRUCTURE</text>
+    <g font-size="11" fill="#c9d1d9">
+      <rect x="250" y="630" width="110" height="42" rx="8" fill="#161b22" stroke="#30363d"/><text x="305" y="656" text-anchor="middle">SQLite</text>
+      <rect x="370" y="630" width="110" height="42" rx="8" fill="#161b22" stroke="#30363d"/><text x="425" y="656" text-anchor="middle">ChromaDB</text>
+      <rect x="490" y="630" width="110" height="42" rx="8" fill="#161b22" stroke="#30363d"/><text x="545" y="656" text-anchor="middle">Event Bus</text>
+      <rect x="610" y="630" width="150" height="42" rx="8" fill="#161b22" stroke="#30363d"/><text x="685" y="656" text-anchor="middle">Audit · SHA-256</text>
+      <rect x="770" y="630" width="90" height="42" rx="8" fill="#161b22" stroke="#30363d"/><text x="815" y="656" text-anchor="middle">Config</text>
+      <rect x="870" y="630" width="90" height="42" rx="8" fill="#161b22" stroke="#30363d"/><text x="915" y="656" text-anchor="middle">Clock</text>
+    </g>
+  </g>
+  <text x="600" y="716" text-anchor="middle" fill="#6e7681" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11">composition root: a single atlas.app.build() wires every layer · non-critical subsystems degrade gracefully</text>
+</svg>

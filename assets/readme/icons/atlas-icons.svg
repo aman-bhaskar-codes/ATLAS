@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 220" width="980" height="220" role="img" aria-label="ATLAS iconography reference: the consistent line-icon language used across the diagrams — cognitive core, model gateway, tool, memory, knowledge, safety shield, hash-chained audit, and kill switch.">
+  <rect width="980" height="220" fill="#0d1117"/>
+  <text x="40" y="42" fill="#e6edf3" font-family="'Segoe UI',system-ui,-apple-system,sans-serif" font-size="16" font-weight="600">Iconography</text>
+  <text x="40" y="62" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11">one consistent 2px line language · reused across every diagram</text>
+  <g fill="none" stroke-width="2" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
+    <!-- core -->
+    <g transform="translate(70 108)"><circle r="18" stroke="#58a6ff"/><circle r="9" stroke="#58a6ff" opacity="0.6"/><circle r="2.4" fill="#58a6ff" stroke="none"/></g>
+    <text x="70" y="164" text-anchor="middle" fill="#8b949e" font-size="10" stroke="none">core</text>
+    <!-- model -->
+    <g transform="translate(190 108)" stroke="#bc8cff"><path d="M-16 -12 h32 v24 h-32 z"/><path d="M-16 -4 h-6 M-16 4 h-6 M16 -4 h6 M16 4 h6 M-6 -12 v-6 M6 -12 v-6 M-6 12 v6 M6 12 v6"/><circle r="4" fill="#bc8cff" stroke="none"/></g>
+    <text x="190" y="164" text-anchor="middle" fill="#8b949e" font-size="10" stroke="none">model</text>
+    <!-- tool -->
+    <g transform="translate(310 108)" stroke="#f778ba"><path d="M-14 -6 l-4 -4 a8 8 0 0 1 11 11 l16 16 a3 3 0 0 1 -4 4 l-16 -16 a8 8 0 0 1 -11 -11 z"/></g>
+    <text x="310" y="164" text-anchor="middle" fill="#8b949e" font-size="10" stroke="none">tool</text>
+    <!-- memory -->
+    <g transform="translate(430 108)" stroke="#39c5cf"><path d="M-16 -10 h32 M-16 0 h32 M-16 10 h32" /><path d="M-16 -10 v20 M16 -10 v20" opacity="0.5"/></g>
+    <text x="430" y="164" text-anchor="middle" fill="#8b949e" font-size="10" stroke="none">memory</text>
+    <!-- knowledge -->
+    <g transform="translate(550 108)" stroke="#a6d3ff"><path d="M-14 -16 h20 l8 8 v24 h-28 z"/><path d="M6 -16 v8 h8"/><path d="M-8 -2 h14 M-8 6 h14"/></g>
+    <text x="550" y="164" text-anchor="middle" fill="#8b949e" font-size="10" stroke="none">knowledge</text>
+    <!-- safety -->
+    <g transform="translate(670 108)" stroke="#3fb950"><path d="M0 -18 l15 6 v10 c0 10 -7 16 -15 20 c-8 -4 -15 -10 -15 -20 v-10 z"/><path d="M-6 0 l4 5 l8 -10" /></g>
+    <text x="670" y="164" text-anchor="middle" fill="#8b949e" font-size="10" stroke="none">safety</text>
+    <!-- audit chain -->
+    <g transform="translate(790 108)" stroke="#39c5cf"><rect x="-18" y="-6" width="16" height="12" rx="6"/><rect x="2" y="-6" width="16" height="12" rx="6"/><path d="M-4 0 h8"/></g>
+    <text x="790" y="164" text-anchor="middle" fill="#8b949e" font-size="10" stroke="none">audit chain</text>
+    <!-- kill switch -->
+    <g transform="translate(910 108)" stroke="#f85149"><circle r="17"/><path d="M0 -17 v14" stroke-linecap="round"/></g>
+    <text x="910" y="164" text-anchor="middle" fill="#8b949e" font-size="10" stroke="none">kill switch</text>
+  </g>
+  <line x1="40" y1="188" x2="940" y2="188" stroke="#21262d"/>
+  <text x="40" y="208" fill="#6e7681" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10">palette · #58a6ff cognition  #bc8cff intelligence  #39c5cf data  #3fb950 safe/verified  #d29922 caution  #f85149 blocked</text>
+</svg>

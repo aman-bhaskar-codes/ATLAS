@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 660" width="1100" height="660" role="img" aria-label="Schematic (not a screenshot) of the ATLAS local control plane. A left navigation lists Tasks, Approvals, Events, Memory, Knowledge, Cost, Providers, Automations and Runtime. The main area shows a task stream, a pending Tier-2 approval card with approve and deny actions, and a live event ticker fed by server-sent events and WebSocket. Status pills show the default profile local_free, zero cost, and a DEGRADED runtime because the browser is off by default.">
+  <defs>
+    <filter id="u-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="1100" height="660" fill="#0d1117"/>
+  <text x="40" y="40" fill="#e6edf3" font-family="'Segoe UI',system-ui,-apple-system,sans-serif" font-size="18" font-weight="600">Local control plane</text>
+  <text x="40" y="60" fill="#d29922" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11">schematic — not a screenshot · run the Next.js app in frontend/ for the live UI</text>
+
+  <!-- window chrome -->
+  <rect x="40" y="80" width="1020" height="536" rx="14" fill="#0b0f14" stroke="#30363d"/>
+  <rect x="40" y="80" width="1020" height="40" rx="14" fill="#161b22"/>
+  <rect x="40" y="104" width="1020" height="16" fill="#161b22"/>
+  <circle cx="66" cy="100" r="5" fill="#f85149"/><circle cx="86" cy="100" r="5" fill="#d29922"/><circle cx="106" cy="100" r="5" fill="#3fb950"/>
+  <rect x="360" y="90" width="380" height="20" rx="10" fill="#0d1117" stroke="#30363d"/>
+  <text x="550" y="104" text-anchor="middle" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10">localhost:3000 · ATLAS</text>
+
+  <!-- sidebar -->
+  <rect x="40" y="120" width="210" height="496" fill="#0d1117"/>
+  <line x1="250" y1="120" x2="250" y2="616" stroke="#30363d"/>
+  <text x="68" y="158" fill="#58a6ff" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="15" font-weight="700" letter-spacing="3">ATLAS</text>
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#8b949e">
+    <rect x="60" y="188" width="170" height="30" rx="7" fill="#132033" stroke="#1f6feb" stroke-opacity="0.5"/><text x="80" y="208" fill="#c9d1d9">Tasks</text>
+    <text x="80" y="242">Approvals</text>
+    <text x="80" y="272">Events</text>
+    <text x="80" y="302">Memory</text>
+    <text x="80" y="332">Knowledge</text>
+    <text x="80" y="362">Cost</text>
+    <text x="80" y="392">Providers</text>
+    <text x="80" y="422">Automations</text>
+    <text x="80" y="452">Runtime</text>
+  </g>
+  <line x1="60" y1="474" x2="230" y2="474" stroke="#21262d"/>
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10">
+    <circle cx="70" cy="500" r="4" fill="#3fb950"/><text x="82" y="504" fill="#8b949e">profile: local_free</text>
+    <circle cx="70" cy="522" r="4" fill="#3fb950"/><text x="82" y="526" fill="#8b949e">cost: $0.00</text>
+    <circle cx="70" cy="544" r="4" fill="#d29922"/><text x="82" y="548" fill="#8b949e">runtime: DEGRADED</text>
+    <text x="82" y="562" fill="#6e7681" font-size="8.5">browser off by default</text>
+  </g>
+
+  <!-- main: task stream -->
+  <text x="280" y="156" fill="#e6edf3" font-family="'Segoe UI',system-ui,sans-serif" font-size="15" font-weight="600">Task stream</text>
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
+    <rect x="280" y="172" width="470" height="66" rx="10" fill="#10151c" stroke="#30363d"/>
+    <text x="300" y="198" fill="#c9d1d9" font-size="12">Summarise the README, list safety tiers</text>
+    <rect x="300" y="210" width="70" height="18" rx="9" fill="#132a1a" stroke="#3fb950"/><text x="335" y="223" text-anchor="middle" fill="#3fb950" font-size="9">done</text>
+    <text x="384" y="223" fill="#6e7681" font-size="9">6 steps · verified · trajectory saved</text>
+
+    <rect x="280" y="248" width="470" height="66" rx="10" fill="#10151c" stroke="#30363d"/>
+    <text x="300" y="274" fill="#c9d1d9" font-size="12">Verify audit chain integrity</text>
+    <rect x="300" y="286" width="86" height="18" rx="9" fill="#0e1a2b" stroke="#58a6ff"/><text x="343" y="299" text-anchor="middle" fill="#58a6ff" font-size="9">running</text>
+    <circle cx="410" cy="295" r="3" fill="#58a6ff"><animate attributeName="opacity" values="0.2;1;0.2" dur="1.3s" repeatCount="indefinite"/></circle>
+    <text x="424" y="299" fill="#6e7681" font-size="9">OTAR · step 3</text>
+
+    <rect x="280" y="324" width="470" height="66" rx="10" fill="#10151c" stroke="#30363d"/>
+    <text x="300" y="350" fill="#c9d1d9" font-size="12">Research: reciprocal-rank fusion</text>
+    <rect x="300" y="362" width="96" height="18" rx="9" fill="#241d0f" stroke="#d29922"/><text x="348" y="375" text-anchor="middle" fill="#d29922" font-size="9">awaiting you</text>
+    <text x="406" y="375" fill="#6e7681" font-size="9">Tier 2 · confirm to proceed</text>
+  </g>
+
+  <!-- right: approvals + events -->
+  <rect x="770" y="172" width="270" height="150" rx="10" fill="#1a1207" stroke="#d29922"/>
+  <text x="788" y="196" fill="#d29922" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" font-weight="700">Pending approval</text>
+  <text x="788" y="216" fill="#ffe9b0" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10">Tier 2 · CONFIRM</text>
+  <text x="788" y="234" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="9.5">fetch external URL for research</text>
+  <rect x="788" y="270" width="110" height="34" rx="8" fill="#132a1a" stroke="#3fb950"/><text x="843" y="292" text-anchor="middle" fill="#3fb950" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11" font-weight="700">Approve</text>
+  <rect x="910" y="270" width="110" height="34" rx="8" fill="#241214" stroke="#f85149"/><text x="965" y="292" text-anchor="middle" fill="#f85149" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11" font-weight="700">Deny</text>
+
+  <rect x="770" y="336" width="270" height="254" rx="10" fill="#10151c" stroke="#30363d"/>
+  <text x="788" y="360" fill="#e6edf3" font-family="'Segoe UI',system-ui,sans-serif" font-size="13" font-weight="600">Live events</text>
+  <circle cx="1018" cy="356" r="4" fill="#3fb950"><animate attributeName="opacity" values="0.3;1;0.3" dur="1.6s" repeatCount="indefinite"/></circle>
+  <text x="998" y="360" text-anchor="end" fill="#6e7681" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="9">SSE · WS</text>
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="9.5" fill="#8b949e">
+    <text x="788" y="386"><tspan fill="#58a6ff">task.started</tspan>  audit chain</text>
+    <text x="788" y="408"><tspan fill="#bc8cff">model.call</tspan>  qwen3:4b · local</text>
+    <text x="788" y="430"><tspan fill="#3fb950">safety.audit</tspan>  tier 0 · auto</text>
+    <text x="788" y="452"><tspan fill="#f778ba">tool.exec</tspan>  read · sandbox</text>
+    <text x="788" y="474"><tspan fill="#3fb950">verify.pass</tspan>  criteria met</text>
+    <text x="788" y="496"><tspan fill="#d29922">approval.req</tspan>  tier 2</text>
+    <text x="788" y="518"><tspan fill="#39c5cf">memory.write</tspan>  episodic</text>
+    <text x="788" y="540"><tspan fill="#58a6ff">cost.update</tspan>  $0.00</text>
+    <text x="788" y="562"><tspan fill="#8b949e">events streamed over /ws + /events</tspan></text>
+  </g>
+
+  <text x="280" y="574" fill="#6e7681" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="10">API factory · create_app · routers under /api/v1</text>
+</svg>
