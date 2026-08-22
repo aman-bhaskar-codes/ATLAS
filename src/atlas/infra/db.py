@@ -1040,6 +1040,278 @@ _MIGRATIONS: tuple[str, ...] = (
     );
     CREATE INDEX IF NOT EXISTS idx_dq_traj ON decision_quality(trajectory_id);
     """,
+    # 018 — Prompt 4: cognitive telemetry, calibration, adaptive routing (§32-§37)
+    """
+    CREATE TABLE IF NOT EXISTS cognitive_telemetry (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trajectory_id TEXT NOT NULL,
+        planning_quality REAL,
+        tool_selection_accuracy REAL,
+        model_selection_quality REAL,
+        retrieval_usefulness REAL,
+        memory_usefulness REAL,
+        verification_quality REAL,
+        recovery_quality REAL,
+        research_efficiency REAL,
+        strategy_transfer REAL,
+        confidence_calibration REAL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ct_traj ON cognitive_telemetry(trajectory_id);
+
+    CREATE TABLE IF NOT EXISTS calibration_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trajectory_id TEXT NOT NULL DEFAULT '',
+        predicted_confidence REAL NOT NULL,
+        actual_success INTEGER NOT NULL,
+        ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS routing_stats (
+        arm_kind TEXT NOT NULL,
+        arm TEXT NOT NULL,
+        task_class TEXT NOT NULL,
+        runs INTEGER NOT NULL DEFAULT 0,
+        successes INTEGER NOT NULL DEFAULT 0,
+        quality_sum REAL NOT NULL DEFAULT 0,
+        latency_sum REAL NOT NULL DEFAULT 0,
+        cost_sum REAL NOT NULL DEFAULT 0,
+        exploration_runs INTEGER NOT NULL DEFAULT 0,
+        updated_ts TEXT NOT NULL,
+        PRIMARY KEY (arm_kind, arm, task_class)
+    );
+    """,
+    # 019 — Prompt 4: generalization, adversarial, recovery, long-horizon,
+    # evaluation dataset, synthetic variants (§38-§44)
+    """
+    CREATE TABLE IF NOT EXISTS generalization_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        experiment_id TEXT NOT NULL,
+        in_domain REAL NOT NULL,
+        unseen REAL NOT NULL,
+        transfer REAL,
+        robustness REAL,
+        gate_passed INTEGER NOT NULL DEFAULT 0,
+        reasons_json TEXT NOT NULL DEFAULT '[]',
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_gen_exp ON generalization_reports(experiment_id);
+
+    CREATE TABLE IF NOT EXISTS adversarial_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        strategy_id TEXT NOT NULL,
+        perturbation TEXT NOT NULL,
+        n_tasks INTEGER NOT NULL,
+        survived INTEGER NOT NULL,
+        survival_rate REAL NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_adv_strategy ON adversarial_results(strategy_id, perturbation);
+
+    CREATE TABLE IF NOT EXISTS recovery_evaluations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trajectory_id TEXT NOT NULL,
+        initial_failure INTEGER NOT NULL,
+        recovered INTEGER NOT NULL,
+        recovery_steps INTEGER NOT NULL DEFAULT 0,
+        additional_cost_usd REAL NOT NULL DEFAULT 0,
+        quality_after_recovery REAL,
+        score REAL NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rec_traj ON recovery_evaluations(trajectory_id);
+
+    CREATE TABLE IF NOT EXISTS long_horizon_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trajectory_id TEXT NOT NULL,
+        steps INTEGER NOT NULL,
+        goal_completion REAL NOT NULL,
+        error_accumulation REAL NOT NULL,
+        plan_drift REAL NOT NULL,
+        verification_quality REAL,
+        recovery REAL,
+        score REAL NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_lh_traj ON long_horizon_results(trajectory_id);
+
+    CREATE TABLE IF NOT EXISTS eval_samples (
+        sample_id TEXT PRIMARY KEY,
+        task TEXT NOT NULL,
+        domain TEXT NOT NULL DEFAULT '',
+        difficulty TEXT NOT NULL DEFAULT 'medium',
+        success_criteria TEXT NOT NULL DEFAULT '',
+        allowed_capabilities_json TEXT NOT NULL DEFAULT '[]',
+        risk TEXT NOT NULL DEFAULT 'low',
+        evaluation_method TEXT NOT NULL DEFAULT 'automated',
+        source TEXT NOT NULL DEFAULT 'golden',
+        approved INTEGER NOT NULL DEFAULT 0,
+        created_ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS synthetic_variants (
+        variant_id TEXT PRIMARY KEY,
+        source_sample_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        task TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'DRAFT',
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sv_source ON synthetic_variants(source_sample_id, status);
+    """,
+    # 020 — Prompt 4: learning budget, adaptation curve, learning cycles,
+    # regression protection (§45-§53)
+    """
+    CREATE TABLE IF NOT EXISTS learning_budget_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cycle_id TEXT NOT NULL,
+        cpu_seconds REAL NOT NULL DEFAULT 0,
+        model_calls INTEGER NOT NULL DEFAULT 0,
+        tokens INTEGER NOT NULL DEFAULT 0,
+        time_minutes REAL NOT NULL DEFAULT 0,
+        disk_mb REAL NOT NULL DEFAULT 0,
+        network_mb REAL NOT NULL DEFAULT 0,
+        memory_mb REAL NOT NULL DEFAULT 0,
+        aborted INTEGER NOT NULL DEFAULT 0,
+        abort_reason TEXT,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_lbu_cycle ON learning_budget_usage(cycle_id);
+
+    CREATE TABLE IF NOT EXISTS adaptation_curve (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cycle_id TEXT NOT NULL,
+        success_rate REAL,
+        error_rate REAL,
+        latency_ms REAL,
+        cost_usd REAL,
+        step_count REAL,
+        recovery_success_rate REAL,
+        verification_rate REAL,
+        tokens_per_task REAL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ac_cycle ON adaptation_curve(cycle_id);
+
+    CREATE TABLE IF NOT EXISTS learning_cycles (
+        cycle_id TEXT PRIMARY KEY,
+        trigger_kind TEXT NOT NULL,
+        trajectories_analyzed INTEGER NOT NULL DEFAULT 0,
+        clusters_found INTEGER NOT NULL DEFAULT 0,
+        hypotheses_proposed INTEGER NOT NULL DEFAULT 0,
+        experiments_run INTEGER NOT NULL DEFAULT 0,
+        promotions INTEGER NOT NULL DEFAULT 0,
+        state TEXT NOT NULL,
+        notes_json TEXT NOT NULL DEFAULT '[]',
+        created_ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS regression_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        experiment_id TEXT NOT NULL,
+        suite TEXT NOT NULL,
+        domain TEXT NOT NULL DEFAULT '',
+        passed INTEGER NOT NULL,
+        score REAL,
+        detail TEXT NOT NULL DEFAULT '',
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rr_exp ON regression_results(experiment_id, suite);
+    """,
+    # 021 — Prompt 4: domain feedback loops, verification, capability stats,
+    # autonomy modes (§54-§74)
+    """
+    CREATE TABLE IF NOT EXISTS tool_performance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tool_name TEXT NOT NULL,
+        task_class TEXT NOT NULL DEFAULT '',
+        success INTEGER NOT NULL,
+        latency_ms REAL NOT NULL DEFAULT 0,
+        failure_reason TEXT,
+        recovered INTEGER NOT NULL DEFAULT 0,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_tp_tool ON tool_performance(tool_name, task_class);
+
+    CREATE TABLE IF NOT EXISTS source_trust (
+        source TEXT PRIMARY KEY,
+        usefulness REAL NOT NULL DEFAULT 0.5,
+        claim_correctness REAL NOT NULL DEFAULT 0.5,
+        citation_acceptance REAL NOT NULL DEFAULT 0.5,
+        freshness_score REAL NOT NULL DEFAULT 0.5,
+        contradiction_rate REAL NOT NULL DEFAULT 0,
+        trust REAL NOT NULL DEFAULT 0.5,
+        n_observations INTEGER NOT NULL DEFAULT 0,
+        updated_ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS memory_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        memory_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        helped INTEGER NOT NULL DEFAULT 0,
+        distracted INTEGER NOT NULL DEFAULT 0,
+        stale INTEGER NOT NULL DEFAULT 0,
+        rating REAL NOT NULL DEFAULT 0,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_mf_memory ON memory_feedback(memory_id);
+
+    CREATE TABLE IF NOT EXISTS human_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        ref_kind TEXT NOT NULL,
+        ref_id TEXT NOT NULL DEFAULT '',
+        content TEXT NOT NULL DEFAULT '',
+        reliability REAL NOT NULL DEFAULT 0.5,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_hf_ref ON human_feedback(ref_kind, ref_id);
+
+    CREATE TABLE IF NOT EXISTS user_corrections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_class TEXT NOT NULL,
+        preferred_source_strategy TEXT NOT NULL,
+        context TEXT NOT NULL DEFAULT '',
+        count INTEGER NOT NULL DEFAULT 1,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_uc_class ON user_corrections(task_class);
+
+    CREATE TABLE IF NOT EXISTS research_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT NOT NULL,
+        sources_searched INTEGER NOT NULL,
+        unique_information REAL NOT NULL,
+        answer_quality REAL NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rf_task ON research_feedback(task_id);
+
+    CREATE TABLE IF NOT EXISTS verification_preferences (
+        task_class TEXT PRIMARY KEY,
+        level TEXT NOT NULL,
+        evidence_count INTEGER NOT NULL DEFAULT 0,
+        policy_locked INTEGER NOT NULL DEFAULT 0,
+        updated_ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS capability_stats (
+        capability TEXT PRIMARY KEY,
+        success_rate REAL NOT NULL DEFAULT 0,
+        avg_latency_ms REAL NOT NULL DEFAULT 0,
+        n_samples INTEGER NOT NULL DEFAULT 0,
+        updated_ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS autonomy_modes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mode TEXT NOT NULL,
+        changed_by TEXT NOT NULL DEFAULT 'system',
+        reason TEXT NOT NULL DEFAULT '',
+        created_ts TEXT NOT NULL
+    );
+    """,
 )
 
 

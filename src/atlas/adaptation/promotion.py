@@ -34,10 +34,15 @@ _log = get_logger("atlas.adaptation.promotion")
 
 
 class PromotionMode(StrEnum):
-    """§70: how far the system may go without a human."""
+    """§70: how far the system may go without a human. Default is
+    SUGGEST_ONLY. The adaptation system may never modify SafetyEngine."""
 
+    OBSERVE_ONLY = "OBSERVE_ONLY"  # collect telemetry, no decisions
     SUGGEST_ONLY = "SUGGEST_ONLY"  # default — decide, never apply autonomously
+    EXPERIMENT_ONLY = "EXPERIMENT_ONLY"  # run experiments, never promote
+    HUMAN_APPROVAL = "HUMAN_APPROVAL"  # propose, human applies
     AUTO_WITH_REVIEW = "AUTO_WITH_REVIEW"  # apply, but each apply is human-reviewed
+    AUTO_PROMOTE_LOW_RISK = "AUTO_PROMOTE_LOW_RISK"  # auto-apply low-risk only
 
 
 class PromotionPolicy(BaseModel):
