@@ -30,7 +30,7 @@ CORRECTION_POLICY_THRESHOLD = 5
 
 
 class ToolPerformanceStore:
-    """§57: tracks tool × task-class success, latency, failure, recovery."""
+    """§57: tracks tool x task-class success, latency, failure, recovery."""
 
     def __init__(self, *, db: Database) -> None:
         self._db = db
@@ -111,8 +111,9 @@ class SourceTrustLearner:
         acceptance = move(existing.citation_acceptance if existing else 0.5, citation_accepted)
         freshness = move(existing.freshness_score if existing else 0.5, fresh)
         n = (existing.n_observations if existing else 0) + 1
+        prior_contradiction = existing.contradiction_rate if existing else 0.0
         contradiction_rate = (
-            (existing.contradiction_rate * (n - 1) + (1.0 if contradicted else 0.0)) / n if n else 0.0
+            (prior_contradiction * (n - 1) + (1.0 if contradicted else 0.0)) / n if n else 0.0
         )
         # Trust: quality signals raise it slowly; contradictions pull it down.
         quality = (usefulness + correctness + acceptance + freshness) / 4
@@ -199,7 +200,7 @@ class MemoryFeedbackStore:
         await self._db.conn.commit()
 
     async def usefulness(self, memory_id: str) -> tuple[float, int]:
-        """(help-rate − distract-rate, observations) for one memory."""
+        """(help-rate - distract-rate, observations) for one memory."""
         cur = await self._db.conn.execute(
             "SELECT AVG(helped) AS h, AVG(distracted) AS d, COUNT(*) AS n FROM memory_feedback WHERE memory_id=?",
             (memory_id,),
@@ -265,7 +266,9 @@ class UserCorrectionStore:
 
     async def record(self, correction: UserCorrection) -> None:
         await self._db.conn.execute(
-            "INSERT INTO user_corrections (task_class, preferred_source_strategy, context, count, created_ts) VALUES (?,?,?,?,?)",
+            "INSERT INTO user_corrections "
+            "(task_class, preferred_source_strategy, context, count, created_ts) "
+            "VALUES (?,?,?,?,?)",
             (
                 correction.task_class,
                 correction.preferred_source_strategy,
@@ -284,7 +287,8 @@ class UserCorrectionStore:
 
     async def preference_strength(self, task_class: str, strategy: str) -> int:
         cur = await self._db.conn.execute(
-            "SELECT COALESCE(SUM(count), 0) AS total FROM user_corrections WHERE task_class=? AND preferred_source_strategy=?",
+            "SELECT COALESCE(SUM(count), 0) AS total FROM user_corrections "
+            "WHERE task_class=? AND preferred_source_strategy=?",
             (task_class, strategy),
         )
         row = await cur.fetchone()
