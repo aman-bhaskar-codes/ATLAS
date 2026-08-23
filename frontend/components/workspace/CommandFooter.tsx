@@ -16,17 +16,22 @@ export function CommandFooter({ onStart, isPending }: { onStart: () => void, isP
           <span className="font-mono uppercase">{state.selectedModel}</span>
         </div>
 
-        {/* Safety Indicator */}
-        <div className="flex items-center gap-1.5 text-xs text-slate-400" title="Safety classification">
-          <ShieldAlert size={14} className={
-            state.safetyLevel === 'cleared' ? 'text-jade-500' : 
-            state.safetyLevel === 'flagged' ? 'text-ember-500' : 'text-slate-500'
-          } />
-          <span className="capitalize">{state.safetyLevel}</span>
+        {/* Safety: a fixed statement, not a reading. This chip was bound to
+            `state.safetyLevel`, which nothing ever dispatched — so its 'cleared'
+            (green) and 'flagged' (red) branches were unreachable and it always
+            displayed "Pending" while looking like a live classification. The
+            classification genuinely happens server-side after submit, so that is
+            what it now says. */}
+        <div
+          className="flex items-center gap-1.5 text-xs text-slate-500"
+          title="ATLAS classifies this request against your safety policy after you start the task"
+        >
+          <ShieldAlert size={14} className="text-slate-500" />
+          <span>Classified on start</span>
         </div>
 
-        {/* Est. Tokens (Placeholder) */}
-        <div className="flex items-center gap-1.5 text-xs text-slate-500" title="Estimated Context Size">
+        {/* Rough context size: chars/4 is a heuristic, hence the ~ and the title. */}
+        <div className="flex items-center gap-1.5 text-xs text-slate-500" title="Rough context estimate (characters ÷ 4)">
           <Cpu size={14} />
           <span>~{(state.text.length / 4).toFixed(0)} tks</span>
         </div>

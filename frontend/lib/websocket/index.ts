@@ -1,150 +1,37 @@
 /**
- * Convenience hooks for ATLAS event streams.
- * 
- * useTaskEvents: Subscribe to events for a specific task
- * useGlobalEvents: Subscribe to all system events
+ * ATLAS WebSocket layer.
+ *
+ * SCOPE (verified 2026-08-23): the live product streams task events over **SSE**
+ * (`features/runtime-console/*`), not WebSockets. The only remaining consumer of
+ * this module is `features/memory/useMemoryLive.ts` (the `/memory` live panel),
+ * plus the `AtlasEvent` type used by the legacy event cards.
+ *
+ * The previously-exported `useTaskEvents` / `useGlobalEvents` / `useEventBuffer`
+ * / `useMemoryEvents` hooks were removed: nothing imported them (their only
+ * callers were prototype files that have been deleted), and they all defaulted
+ * to `ws://localhost:8000` — a port ATLAS has never served. Keeping dead,
+ * mis-configured hooks around invites exactly the kind of "looks wired, isn't"
+ * surface this codebase forbids. Re-add them against a real port when a real
+ * consumer exists.
  */
-
-import { useMemo, useState, useEffect } from 'react';
-import { useWebSocket, type WebSocketOptions, type UseWebSocketReturn } from './useWebSocket';
 
 export interface AtlasEvent {
   correlation_id: string;
   task_id?: string;
   kind: string;
   state?: string;
+  /**
+   * Raw event payload as emitted by the backend bus. Deliberately untyped: the
+   * legacy event cards render whatever the orchestrator attached, and the
+   * per-kind payload contracts are not modelled on the frontend yet (tracked as
+   * frontend debt — the modern SSE path in `lib/api/contracts.ts` IS typed).
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped bus payload; see note above
   metadata?: Record<string, any>;
   _timestamp?: string;
   _topic?: string;
   historical?: boolean;
 }
 
-/**
- * Subscribe to events for a specific task with historical replay.
- * 
- * @example
- * ```tsx
- * function TaskMonitor({ taskId }: { taskId: string }) {
- *   const { data: event, status } = useTaskEvents(taskId);
- *   
- *   return (
- *     <div>
- *       <div>Status: {status}</div>
- *       {event && <EventCard event={event} />}
- *     </div>
- *   );
- * }
- * ```
- */
-export function useTaskEvents(
-  taskId: string | null,
-  options: WebSocketOptions = {}
-): UseWebSocketReturn<AtlasEvent> {
-  const url = useMemo(() => {
-    if (!taskId) return null;
-    
-    const baseUrl = process.env.NEXT_PUBLIC_ATLAS_WS_URL || 'ws://localhost:8000';
-    return `${baseUrl}/ws/tasks/${encodeURIComponent(taskId)}/stream`;
-  }, [taskId]);
-  
-  return useWebSocket<AtlasEvent>(url, {
-    autoReconnect: true,
-    ...options,
-  });
-}
-
-/**
- * Subscribe to all system events (global firehose).
- * 
- * @example
- * ```tsx
- * function Dashboard() {
- *   const { data: event, status } = useGlobalEvents();
- *   
- *   return (
- *     <div>
- *       <ConnectionStatus status={status} />
- *       {event && <div>Latest: {event.kind}</div>}
- *     </div>
- *   );
- * }
- * ```
- */
-export function useGlobalEvents(
-  options: WebSocketOptions = {}
-): UseWebSocketReturn<AtlasEvent> {
-  const url = useMemo(() => {
-    const baseUrl = process.env.NEXT_PUBLIC_ATLAS_WS_URL || 'ws://localhost:8000';
-    return `${baseUrl}/ws/events`;
-  }, []);
-  
-  return useWebSocket<AtlasEvent>(url, {
-    autoReconnect: true,
-    ...options,
-  });
-}
-
-/**
- * Hook to accumulate events into a buffer (useful for displaying event history).
- * 
- * @example
- * ```tsx
- * function EventLog({ taskId }: { taskId: string }) {
- *   const events = useEventBuffer(taskId, { maxSize: 100 });
- *   
- *   return (
- *     <ul>
- *       {events.map((event, i) => (
- *         <li key={i}>{event.kind}</li>
- *       ))}
- *     </ul>
- *   );
- * }
- * ```
- */
-export function useEventBuffer(
-  taskId: string | null,
-  options: { maxSize?: number } = {}
-): AtlasEvent[] {
-  const { maxSize = 1000 } = options;
-  const { data: event } = useTaskEvents(taskId);
-  const [buffer, setBuffer] = useState<AtlasEvent[]>([]);
-  
-  useEffect(() => {
-    if (!event) return;
-    
-    setBuffer((prev) => {
-      const next = [...prev, event];
-      if (next.length > maxSize) {
-        next.shift(); // Remove oldest
-      }
-      return next;
-    });
-  }, [event, maxSize]);
-  
-  return buffer;
-}
-
-// Re-export for convenience
 export { useWebSocket } from './useWebSocket';
 export type { ConnectionStatus, WebSocketOptions, UseWebSocketReturn } from './useWebSocket';
-
-// ---------------------------------------------------------------------------
-// Memory live stream hook
-// ---------------------------------------------------------------------------
-
-/**
- * Subscribe to the memory-only live stream (/ws/memory/live).
- *
- * Returns the most-recent raw message. For a buffered view with
- * snapshot support, use `useMemoryLive` from features/memory/useMemoryLive.ts.
- */
-export function useMemoryEvents(
-  options: WebSocketOptions = {}
-): UseWebSocketReturn<Record<string, unknown>> {
-  const url = useMemo(() => {
-    const baseUrl = process.env.NEXT_PUBLIC_ATLAS_WS_URL || 'ws://localhost:8000';
-    return `${baseUrl}/ws/memory/live`;
-  }, []);
-  return useWebSocket<Record<string, unknown>>(url, { autoReconnect: true, ...options });
-}

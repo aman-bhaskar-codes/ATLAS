@@ -16,7 +16,7 @@ import type { MemoryEvent, MemorySnapshot } from './contracts';
 const WS_BASE =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_ATLAS_WS_URL)
     ? process.env.NEXT_PUBLIC_ATLAS_WS_URL
-    : 'ws://localhost:8000';
+    : 'ws://localhost:8730';
 
 const MEMORY_WS_URL = `${WS_BASE}/ws/memory/live`;
 
@@ -58,6 +58,11 @@ export function useMemoryLive(maxBuffer = 200): MemoryLiveState {
 
     // Server-sent snapshot on fresh connect
     if (msg['type'] === 'snapshot') {
+      // Accumulating an inbound stream into local state is what this hook is
+      // FOR: each message arrives from an external WebSocket, so the write
+      // cannot be derived at render time. The lint rule targets derived-state
+      // cascades, which this is not.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- accumulating an external event stream
       setSnapshot(msg as unknown as MemorySnapshot);
       return;
     }

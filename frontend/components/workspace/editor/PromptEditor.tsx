@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from "react";
-import { useWorkspace } from "../WorkspaceState";
+import { useWorkspace, type AttachmentType } from "../WorkspaceState";
 
 export function PromptEditor({ onStart }: { onStart: () => void }) {
   const { state, dispatch } = useWorkspace();
@@ -42,12 +42,12 @@ export function PromptEditor({ onStart }: { onStart: () => void }) {
       const files = Array.from(e.dataTransfer.files);
       const newAttachments = files.map(file => {
         const id = `local_${Math.random().toString(36).substring(7)}`;
-        const type = file.type.startsWith("image/") ? "image" : file.type === "application/pdf" ? "pdf" : "file";
+        const type: AttachmentType = file.type.startsWith("image/") ? "image" : file.type === "application/pdf" ? "pdf" : "file";
         const previewUrl = type === "image" ? URL.createObjectURL(file) : undefined;
         return {
           id,
           file,
-          type: type as any,
+          type,
           status: "ready" as const,
           previewUrl
         };
@@ -81,12 +81,12 @@ export function PromptEditor({ onStart }: { onStart: () => void }) {
       const files = Array.from(e.clipboardData.files);
       const newAttachments = files.map(file => {
         const id = `local_${Math.random().toString(36).substring(7)}`;
-        const type = file.type.startsWith("image/") ? "image" : file.type === "application/pdf" ? "pdf" : "file";
+        const type: AttachmentType = file.type.startsWith("image/") ? "image" : file.type === "application/pdf" ? "pdf" : "file";
         const previewUrl = type === "image" ? URL.createObjectURL(file) : undefined;
         return {
           id,
           file,
-          type: type as any,
+          type,
           status: "ready" as const,
           previewUrl
         };

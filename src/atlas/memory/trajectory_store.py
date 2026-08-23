@@ -148,11 +148,10 @@ class TrajectoryStore:
 
         # Emit event for WebSocket broadcast
         if self._bus:
-            import asyncio
-
             from atlas.infra.bus import MemoryBusEvent
+            from atlas.infra.tasks import spawn
 
-            asyncio.create_task(
+            spawn(
                 self._bus.publish(
                     "memory",
                     MemoryBusEvent(
@@ -168,7 +167,8 @@ class TrajectoryStore:
                             "replan_count": trajectory.replan_count,
                         },
                     ),
-                )
+                ),
+                name=f"publish-trajectory-saved-{trajectory.id}",
             )
 
         return trajectory.id

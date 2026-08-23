@@ -85,6 +85,19 @@ export const MemoryStatsSchema = z.object({
 export type MemoryStats = z.infer<typeof MemoryStatsSchema>;
 
 // ---------------------------------------------------------------------------
+// Preferences
+// ---------------------------------------------------------------------------
+
+/**
+ * The user-model layer, returned as a flat mapping. Values are `unknown` because
+ * the backend stores whatever the learner wrote; the previous `as
+ * Record<string, string>` was a cast rather than a check, so a numeric or nested
+ * value passed straight through untyped. The UI stringifies for display anyway.
+ */
+export const PreferencesSchema = z.record(z.string(), z.unknown());
+export type Preferences = z.infer<typeof PreferencesSchema>;
+
+// ---------------------------------------------------------------------------
 // Live WebSocket MemoryEvent (mirrors orchestration/events.py::MemoryEvent)
 // ---------------------------------------------------------------------------
 

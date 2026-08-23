@@ -8,6 +8,7 @@ from typing import Any
 
 from atlas.app import Atlas
 from atlas.interfaces.api.control_plane import AtlasTrustPlane
+from atlas.interfaces.api.errors import NotFoundError
 from atlas.interfaces.api.idempotency import IdempotencyStore
 from atlas.interfaces.api.projections import project_audit, project_task
 from atlas.interfaces.api.schemas_trust import (
@@ -51,14 +52,14 @@ class DefaultAtlasTrustPlane(AtlasTrustPlane):
         cur = await self._atlas.db.conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
         row = await cur.fetchone()
         if not row:
-            raise KeyError(f"Task not found: {task_id}")
+            raise NotFoundError(f"Task not found: {task_id}")
         return project_task(dict(row))
 
     async def pending_approvals(self) -> Sequence[ApprovalView]:
         return []  # Phase 4
 
     async def get_approval(self, approval_id: str) -> ApprovalView:
-        raise KeyError(f"Approval not found: {approval_id}")
+        raise NotFoundError(f"Approval not found: {approval_id}")
 
     async def decide_approval(self, command: ApprovalDecisionCommand) -> ApprovalView:
         raise NotImplementedError()
@@ -67,7 +68,7 @@ class DefaultAtlasTrustPlane(AtlasTrustPlane):
         return []
 
     async def get_memory_fact(self, fact_id: str) -> MemoryFactView:
-        raise KeyError(f"Fact not found: {fact_id}")
+        raise NotFoundError(f"Fact not found: {fact_id}")
 
     async def memory_provenance(self, fact_id: str) -> Sequence[ProvenanceView]:
         return []
@@ -137,4 +138,4 @@ class DefaultAtlasTrustPlane(AtlasTrustPlane):
         return AuditPage(items=tuple(items), next_cursor=next_cursor)
 
     async def audit_event(self, event_id: str) -> AuditEventView:
-        raise KeyError(f"Event not found: {event_id}")
+        raise NotFoundError(f"Event not found: {event_id}")

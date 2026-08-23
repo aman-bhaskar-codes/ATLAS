@@ -21,9 +21,14 @@ def get_atlas(request: Request) -> Atlas:
 def get_control_plane(request: Request) -> AtlasControlPlane:
     from atlas.interfaces.api.facade import DefaultAtlasControlPlane
 
+    # `version` comes from app.state, which the lifespan sets from
+    # importlib.metadata.version("atlas"). The getattr fallback is "unknown"
+    # rather than a plausible-looking number: an app built outside the managed
+    # lifespan has no version to report, and saying so beats inventing one.
     return DefaultAtlasControlPlane(
         atlas=request.app.state.atlas,
         event_store=request.app.state.event_store,
+        version=getattr(request.app.state, "version", "unknown"),
     )
 
 

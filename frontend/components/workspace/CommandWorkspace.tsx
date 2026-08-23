@@ -25,15 +25,20 @@ export function CommandWorkspace() {
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  const { mutate: submitCommand, isPending } = useMutation({
+  const {
+    mutate: submitCommand,
+    isPending,
+    error: submitError,
+    reset: resetSubmit,
+  } = useMutation({
     mutationFn: async () => {
-      // Phase 4: Eventually this will upload attachments first, 
+      // Phase 4: Eventually this will upload attachments first,
       // but for Phase 2 we just map the mock IDs directly.
       const attachments = state.attachments.map(att => ({
         id: att.id,
         type: att.type
       }));
-      
+
       return atlasApi.createTask({
         request: state.text,
         idempotency_key: crypto.randomUUID(),
@@ -45,22 +50,26 @@ export function CommandWorkspace() {
       setIsListening(false);
       setIsCameraActive(false);
       setIsScreenShared(false);
-      
+
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       router.push(`/tasks/${encodeURIComponent(task.id)}`);
     },
+    // No onError: the error is rendered by PlannerPreview, which is the panel the
+    // user is looking at when they press Start. Mutations do not auto-retry, so
+    // that render is the only place the failure can ever appear.
   });
 
   const handleStart = () => {
     if (!state.text.trim() && !isCameraActive && !isScreenShared && state.attachments.length === 0) {
       return;
     }
-    dispatch({ type: "SET_PREFLIGHT_STATUS", payload: "analyzing" });
-    
-    // Simulate analyzing delay
-    setTimeout(() => {
-      dispatch({ type: "SET_PREFLIGHT_STATUS", payload: "ready" });
-    }, 1500);
+    // Straight to the confirmation gate. What was here: a 1500ms setTimeout that
+    // moved through an "analyzing" state rendering "Analyzing request & classifying
+    // safety…" with a spinner — while nothing was analysed and nothing was
+    // classified. There is no pre-flight endpoint to await, so the honest version
+    // does not pretend to be waiting on one.
+    resetSubmit();
+    dispatch({ type: "SET_PREFLIGHT_STATUS", payload: "ready" });
   };
 
   const confirmAndExecute = () => {
@@ -68,6 +77,7 @@ export function CommandWorkspace() {
   };
 
   const cancelPreflight = () => {
+    resetSubmit();
     dispatch({ type: "SET_PREFLIGHT_STATUS", payload: "idle" });
   };
 
@@ -126,10 +136,11 @@ export function CommandWorkspace() {
 
         <div className="flex flex-col border border-ink-700 bg-ink-950 rounded-lg overflow-hidden focus-within:border-gold-500/50 focus-within:ring-1 focus-within:ring-gold-500/20 transition-all shadow-xl relative">
           
-          <PlannerPreview 
+          <PlannerPreview
             onConfirm={confirmAndExecute}
             onCancel={cancelPreflight}
             isPending={isPending}
+            error={submitError}
           />
 
           <ContextIndicatorBar />

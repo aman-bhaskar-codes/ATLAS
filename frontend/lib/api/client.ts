@@ -8,19 +8,200 @@ import {
 const API_BASE =
   process.env.NEXT_PUBLIC_ATLAS_API_URL ?? "http://localhost:8730/api/v1";
 
-async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = 8000): Promise<Response> {
+const TIMEOUT_MS = 8000;
+
+/* ─────────────────────────────── error types ────────────────────────────────
+ *
+ * WHY these exist: every failure used to be `new Error("ATLAS API 429: …")`.
+ * The status was in the message string, so no caller could branch on it — which
+ * is why the retry predicate retried 404s and why every query site could only
+ * render one undifferentiated "error" state. Untyped failures also made the
+ * three genuinely different problems below indistinguishable:
+ *
+ *   AtlasApiError      the backend answered, and said no        → show the reason
+ *   AtlasTimeoutError  the backend never answered               → worth retrying
+ *   AtlasContractError the backend answered with the wrong shape → retrying cannot help
+ */
+
+/** The backend answered with a non-2xx status. */
+export class AtlasApiError extends Error {
+  readonly status: number;
+  /** The `error` field of the ATLAS envelope, when the response carried one. */
+  readonly code: string | null;
+  readonly detail: string;
+  /** Correlates with the server log line. From the envelope or the X-Request-ID header. */
+  readonly requestId: string | null;
+  readonly path: string;
+
+  constructor(args: {
+    status: number;
+    code: string | null;
+    detail: string;
+    requestId: string | null;
+    path: string;
+  }) {
+    super(`ATLAS API ${args.status} on ${args.path}: ${args.detail}`);
+    this.name = "AtlasApiError";
+    this.status = args.status;
+    this.code = args.code;
+    this.detail = args.detail;
+    this.requestId = args.requestId;
+    this.path = args.path;
+  }
+}
+
+/** The request was aborted after TIMEOUT_MS with no response. */
+export class AtlasTimeoutError extends Error {
+  readonly timeoutMs: number;
+  readonly path: string;
+
+  constructor(path: string, timeoutMs: number) {
+    super(`ATLAS backend timeout: ${path} took longer than ${timeoutMs}ms`);
+    this.name = "AtlasTimeoutError";
+    this.timeoutMs = timeoutMs;
+    this.path = path;
+  }
+}
+
+/** A 2xx response whose body did not match the schema this client expects. */
+export class AtlasContractError extends Error {
+  readonly path: string;
+  /** Human-readable summary of the zod issues, or the JSON parse failure. */
+  readonly issues: string;
+
+  constructor(path: string, issues: string) {
+    super(`ATLAS contract mismatch on ${path}: ${issues}`);
+    this.name = "AtlasContractError";
+    this.path = path;
+    this.issues = issues;
+  }
+}
+
+/** True for the three error types this module throws (and nothing else). */
+export function isAtlasError(
+  error: unknown,
+): error is AtlasApiError | AtlasTimeoutError | AtlasContractError {
+  return (
+    error instanceof AtlasApiError ||
+    error instanceof AtlasTimeoutError ||
+    error instanceof AtlasContractError
+  );
+}
+
+/* ───────────────────────────────── plumbing ──────────────────────────────── */
+
+/**
+ * Pull `{code, detail}` out of an error body without ever throwing.
+ *
+ * Three shapes are in play and all of them are real:
+ *   `{error, detail, request_id}`  the ATLAS envelope (domain errors, 500, 429)
+ *   `{detail: string}`             FastAPI's HTTPException — e.g. the 401 from
+ *                                  require_principal, which does NOT use the envelope
+ *   `{detail: [{msg, loc}, …]}`    FastAPI request validation (422)
+ * Anything else (HTML from a proxy, an empty body) falls back to the raw text.
+ */
+function parseErrorBody(text: string): { code: string | null; detail: string } {
+  const fallback = { code: null, detail: text.slice(0, 500) || "no response body" };
+  if (!text) return fallback;
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return fallback;
+  }
+  if (typeof body !== "object" || body === null) return fallback;
+
+  const record = body as Record<string, unknown>;
+  const code = typeof record.error === "string" ? record.error : null;
+  const rawDetail = record.detail;
+
+  let detail: string;
+  if (typeof rawDetail === "string") {
+    detail = rawDetail;
+  } else if (Array.isArray(rawDetail)) {
+    // FastAPI validation errors: join the messages rather than showing "[object Object]".
+    detail = rawDetail
+      .map((item) =>
+        typeof item === "object" && item !== null && typeof (item as { msg?: unknown }).msg === "string"
+          ? String((item as { msg: string }).msg)
+          : JSON.stringify(item),
+      )
+      .join("; ");
+  } else {
+    detail = code ?? fallback.detail;
+  }
+  return { code, detail: detail.slice(0, 500) };
+}
+
+/** Validate a payload, converting a ZodError into AtlasContractError. */
+export function parseContract<T extends z.ZodTypeAny>(
+  path: string,
+  schema: T,
+  value: unknown,
+): z.infer<T> {
+  const result = schema.safeParse(value);
+  if (result.success) return result.data;
+  const issues = result.error.issues
+    .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+    .join("; ");
+  throw new AtlasContractError(path, issues.slice(0, 500));
+}
+
+async function fetchWithTimeout(
+  path: string,
+  init?: RequestInit,
+  timeoutMs = TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
-    return response;
+    return await fetch(`${API_BASE}${path}`, {
+      // Every endpoint here is live runtime state on a polling interval. Without
+      // this the browser's heuristic cache is free to serve a response the
+      // backend sent no Cache-Control for, and the UI shows a stale status pill.
+      cache: "no-store",
+      ...init,
+      headers: { "Content-Type": "application/json", ...init?.headers },
+      signal: controller.signal,
+    });
   } catch (error: unknown) {
+    // An abort surfaces as a DOMException named "AbortError"; a genuine network
+    // failure surfaces as a TypeError and is rethrown as-is, because "the server
+    // is not there" is not the same fact as "the server was too slow".
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("ATLAS Backend Timeout: Request took longer than 8 seconds.");
+      throw new AtlasTimeoutError(path, timeoutMs);
     }
     throw error;
   } finally {
     clearTimeout(id);
+  }
+}
+
+/** Throw the typed error for a non-2xx response. Reads the body at most once. */
+async function throwForStatus(path: string, response: Response): Promise<never> {
+  let text = "";
+  try {
+    text = await response.text();
+  } catch {
+    // A body that cannot be read must not mask the status, which is the useful part.
+  }
+  const { code, detail } = parseErrorBody(text);
+  throw new AtlasApiError({
+    status: response.status,
+    code,
+    detail,
+    // The envelope carries request_id; FastAPI's own errors do not, so fall back to
+    // the header the API sets on every response (CORS-exposed for exactly this).
+    requestId: response.headers.get("X-Request-ID"),
+    path,
+  });
+}
+
+async function readJSON(path: string, response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    throw new AtlasContractError(path, "response body was not valid JSON");
   }
 }
 
@@ -29,36 +210,38 @@ async function request<T extends z.ZodTypeAny>(
   schema: T,
   init?: RequestInit,
 ): Promise<z.infer<T>> {
-  const response = await fetchWithTimeout(`${API_BASE}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`ATLAS API ${response.status}: ${detail.slice(0, 500)}`);
-  }
-  return schema.parse(await response.json());
+  const response = await fetchWithTimeout(path, init);
+  if (!response.ok) await throwForStatus(path, response);
+  return parseContract(path, schema, await readJSON(path, response));
 }
 
 async function requestJSON(path: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetchWithTimeout(`${API_BASE}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`ATLAS API ${response.status}: ${detail.slice(0, 500)}`);
-  }
-  return response.json();
+  const response = await fetchWithTimeout(path, init);
+  if (!response.ok) await throwForStatus(path, response);
+  return readJSON(path, response);
 }
+
+/**
+ * The schema-validated request, exported for feature modules that keep their own
+ * contracts (`features/memory/*`).
+ *
+ * WHY exported instead of each feature hand-rolling a fetch: a private copy throws
+ * a bare `Error` for a 404 and a raw `ZodError` for a shape mismatch. The retry
+ * predicate then treats the 404 as retryable, and `describeError` renders the
+ * ZodError's own message — a blob naming internal backend fields — into the UI.
+ */
+export { request as requestContract };
 
 export const atlasApi = {
   runtimeStatus: () => request("/runtime/status", RuntimeStatusSchema),
   runtimeHealth: () => request("/runtime/health", RuntimeHealthSchema),
 
   tasks: async () => {
-    const data = await requestJSON("/tasks?limit=20") as { items: unknown[] };
-    return z.array(TaskSchema).parse(data.items);
+    const path = "/tasks?limit=20";
+    const data = await requestJSON(path) as { items: unknown[] };
+    // parseContract, not .parse(): a bare ZodError here would escape as an
+    // untyped error and the retry predicate would treat it as retryable.
+    return parseContract(path, z.array(TaskSchema), data?.items);
   },
   task: (id: string) => request(`/tasks/${encodeURIComponent(id)}`, TaskSchema),
 
@@ -244,8 +427,10 @@ export const opsApi = {
 };
 
 export const trajectoryApi = {
+  // NOT `/api/v1/trajectory/...`: API_BASE already ends in /api/v1, so the old
+  // path requested /api/v1/api/v1/trajectory/experiences — a guaranteed 404.
   experiences: (limit = 50) =>
-    requestJSON(`/api/v1/trajectory/experiences?limit=${limit}`) as Promise<AtlasExperience[]>,
+    requestJSON(`/trajectory/experiences?limit=${limit}`) as Promise<AtlasExperience[]>,
 };
 
 // --- Zero-Cost-First: Provider/Cost/Profile API ---

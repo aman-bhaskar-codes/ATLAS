@@ -3,11 +3,12 @@ import { Providers } from "./providers";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { CommandPalette } from "@/components/command/CommandPalette";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ATLAS | Command Center",
-  description: "Elite AI Engineering Ecosystem Control Plane",
+  description: "Local-first, safety-governed autonomous task runtime.",
 };
 
 export default function RootLayout({
@@ -27,6 +28,7 @@ export default function RootLayout({
             </main>
           </div>
           <MobileNav />
+          <CommandPalette />
         </Providers>
       </body>
     </html>

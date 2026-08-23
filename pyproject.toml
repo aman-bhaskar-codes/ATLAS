@@ -78,7 +78,13 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "ASYNC", "RUF"]
-ignore = ["RUF006"]  # asyncio.create_task reference storage is idiomatic in long-lived services
+# RUF006 is deliberately NOT ignored: a discarded create_task reference is
+# garbage-collectable mid-flight, which silently dropped background work here.
+# All fire-and-forget work goes through atlas.infra.tasks.spawn(), which holds a
+# strong reference and logs the exception instead of losing it. It lives in
+# `infra` (the bottom layer) because `memory` and `orchestration` need it too and
+# cannot import `atlas.interfaces`.
+ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "src/atlas/interfaces/api/*" = ["B008"]        # FastAPI Depends() in defaults is idiomatic

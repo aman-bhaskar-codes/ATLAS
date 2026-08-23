@@ -17,7 +17,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function ExperiencesPage() {
-  const { data: experiences, isLoading, isError, error } = useQuery({
+  const { data: experiences, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["experiences"],
     queryFn: () => trajectoryApi.experiences(50),
   });
@@ -37,7 +37,7 @@ export default function ExperiencesPage() {
         {isLoading ? (
           <div className="text-[var(--paper-500)] text-sm py-4 px-4">Loading experiences…</div>
         ) : isError ? (
-          <ErrorState title="Failed to load experiences" error={error} />
+          <ErrorState title="Failed to load experiences" error={error} onRetry={() => void refetch()} />
         ) : experiences && experiences.length > 0 ? (
           <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {experiences.map(exp => (

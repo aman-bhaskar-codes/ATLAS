@@ -20,6 +20,14 @@ The SSE queue mechanism:
   streams any unseen events to the client.
 - This avoids serializing the full event on the bus and lets the store be
   the single source of truth.
+
+SCOPE: SSE only. This module previously also declared two WebSocket endpoints
+(`/events` and `/tasks/{id}/events/ws`) that read `app.state.global_ws_queues` /
+`app.state.ws_queues` — keys nothing ever set and nothing ever fed, so both
+accepted the socket and then raised AttributeError. They were duplicates of the
+working pair in `routes_events.py` (`/ws/events`, `/ws/tasks/{id}/stream`), which
+is backed by ConnectionManager/EventBroadcaster and wired in the lifespan. They
+had no tests and no clients, and have been removed rather than reimplemented.
 """
 
 from __future__ import annotations
@@ -28,12 +36,11 @@ import asyncio
 import json
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from atlas.interfaces.api.dependencies import get_control_plane
 from atlas.interfaces.api.facade import AtlasControlPlane
-from atlas.interfaces.api.schemas import TaskEventResponse
 
 router = APIRouter(tags=["events"])
 
@@ -127,6 +134,12 @@ async def stream_task_events(
     Supports resume via the Last-Event-ID header (sequence number).
     The client should reconnect with Last-Event-ID after a disconnect.
     """
+    # Validate BEFORE returning the StreamingResponse. An exception raised inside
+    # the body generator happens after the response head is already on the wire —
+    # past every middleware and past CORS — so the browser sees a truncated
+    # stream instead of a 404. Failing here yields a real, CORS-annotated status.
+    await control_plane.get_task(task_id)
+
     # Support cursor-based resync: Last-Event-ID is the last known sequence
     last_event_id = request.headers.get("Last-Event-ID")
     start_after: int | None = None
@@ -144,107 +157,3 @@ async def stream_task_events(
             "X-Accel-Buffering": "no",  # disable nginx buffering for SSE
         },
     )
-
-
-@router.websocket("/events")
-async def ws_global_events(
-    websocket: WebSocket,
-) -> None:
-    """Global WebSocket firehose for all orchestrator events."""
-    await websocket.accept()
-
-    global_ws_queues: list[asyncio.Queue[TaskEventResponse]] = websocket.app.state.global_ws_queues
-    queue: asyncio.Queue[TaskEventResponse] = asyncio.Queue()
-    global_ws_queues.append(queue)
-
-    try:
-        await websocket.send_json({"event": "connected", "type": "global_firehose"})
-        while True:
-            # We must also listen for client disconnects
-            receive_task = asyncio.create_task(websocket.receive_text())
-            queue_task = asyncio.create_task(queue.get())
-
-            done, pending = await asyncio.wait([receive_task, queue_task], return_when=asyncio.FIRST_COMPLETED)
-
-            if receive_task in done:
-                # Client sent something or disconnected
-                try:
-                    await receive_task
-                except WebSocketDisconnect:
-                    break
-
-            if queue_task in done:
-                event = await queue_task
-                await websocket.send_json({"event": "task_event", "task_id": event.task_id, "data": event.model_dump()})
-
-            for task in pending:
-                task.cancel()
-    except WebSocketDisconnect:
-        pass
-    finally:
-        if queue in global_ws_queues:
-            global_ws_queues.remove(queue)
-
-
-@router.websocket("/tasks/{task_id}/events/ws")
-async def ws_task_events(
-    websocket: WebSocket,
-    task_id: str,
-    control_plane: AtlasControlPlane = Depends(get_control_plane),
-) -> None:
-    """WebSocket stream for a specific task."""
-    await websocket.accept()
-
-    ws_queues: dict[str, list[asyncio.Queue[TaskEventResponse]]] = websocket.app.state.ws_queues
-    queue: asyncio.Queue[TaskEventResponse] = asyncio.Queue()
-
-    if task_id not in ws_queues:
-        ws_queues[task_id] = []
-    ws_queues[task_id].append(queue)
-
-    try:
-        await websocket.send_json({"event": "connected", "task_id": task_id})
-
-        # Initial snapshot
-        initial_events = await control_plane.task_events(task_id, after_sequence=None)
-        for event in initial_events:
-            await websocket.send_json({"event": "task_event", "id": event.sequence, "data": event.model_dump()})
-
-        task = await control_plane.get_task(task_id)
-        if task.state in _TERMINAL_STATES:
-            await websocket.send_json({"event": "stream_closed", "state": task.state})
-            return
-
-        while True:
-            receive_task = asyncio.create_task(websocket.receive_text())
-            queue_task = asyncio.create_task(queue.get())
-
-            done, pending = await asyncio.wait([receive_task, queue_task], return_when=asyncio.FIRST_COMPLETED)
-
-            if receive_task in done:
-                try:
-                    await receive_task
-                except WebSocketDisconnect:
-                    break
-
-            if queue_task in done:
-                event = await queue_task
-                await websocket.send_json({"event": "task_event", "id": event.sequence, "data": event.model_dump()})
-
-                # Check terminal state
-                t = await control_plane.get_task(task_id)
-                if t.state in _TERMINAL_STATES:
-                    await websocket.send_json({"event": "stream_closed", "state": t.state})
-                    break
-
-            for task_pending in pending:
-                task_pending.cancel()
-
-    except WebSocketDisconnect:
-        pass
-    finally:
-        task_qs = ws_queues.get(task_id, [])
-        if queue in task_qs:
-            task_qs.remove(queue)
-        if not task_qs:
-            ws_queues.pop(task_id, None)

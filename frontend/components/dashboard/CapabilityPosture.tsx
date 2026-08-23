@@ -6,14 +6,22 @@ import Link from "next/link";
 import { Brain, BookOpen, Mail, Globe2 } from "lucide-react";
 
 export function CapabilityPosture() {
-  const { data: capabilities } = useQuery({
+  const { data: capabilities, isError } = useQuery({
     queryKey: ["capabilities"],
     queryFn: atlasApi.capabilities,
     refetchInterval: 15000,
   });
 
-  const activeProviders = capabilities?.filter((c) => c.state === "ready") || [];
-  const intelligenceStatus = activeProviders.length > 0 ? "healthy" : "warn";
+  const activeProviders = capabilities?.filter((c) => c.state === "ready") ?? [];
+  // Three states, not two. With only healthy/warn, a failed /capabilities request
+  // counted zero ready capabilities and the card asserted "0 providers healthy" —
+  // a measurement presented as fact when nothing was measured.
+  const intelligenceStatus =
+    isError || capabilities === undefined
+      ? "unknown"
+      : activeProviders.length > 0
+        ? "healthy"
+        : "warn";
 
   return (
     <section className="panel">
@@ -25,10 +33,14 @@ export function CapabilityPosture() {
         <div className="cap">
           <div className="cap-head">
             <Brain />
-            <span className={`status ${intelligenceStatus === 'warn' ? 'warn' : ''}`}></span>
+            <span className={`status ${intelligenceStatus === 'healthy' ? '' : intelligenceStatus === 'warn' ? 'warn' : 'off'}`}></span>
           </div>
           <b>Intelligence</b>
-          <small>{activeProviders.length} providers healthy</small>
+          <small>
+            {intelligenceStatus === 'unknown'
+              ? 'status unavailable'
+              : `${activeProviders.length} capabilities ready`}
+          </small>
           <span className="mono">local-first</span>
         </div>
         <div className="cap">

@@ -1,5 +1,15 @@
+/**
+ * React Query hooks for the Trust Center views.
+ *
+ * Validation goes through `parseContract`, NOT `Schema.parse`. A bare `.parse`
+ * throws zod's own `ZodError`, which is untyped as far as the retry predicate is
+ * concerned (so a permanent shape mismatch gets retried) and whose `message` is a
+ * JSON blob naming internal backend fields if any error row renders it.
+ * `parseContract` converts it into `AtlasContractError` carrying the endpoint path.
+ */
 import { useQuery } from '@tanstack/react-query';
-import { trustApi } from '../../lib/api/client';
+import { z } from 'zod';
+import { parseContract, trustApi } from '../../lib/api/client';
 import { TaskPageSchema, TaskViewSchema, ApprovalViewSchema, MemoryFactViewSchema, AuditPageSchema } from './contracts';
 
 export function useTasks(cursor?: string, limit: number = 50) {
@@ -7,7 +17,7 @@ export function useTasks(cursor?: string, limit: number = 50) {
     queryKey: ['trust', 'tasks', cursor, limit],
     queryFn: async () => {
       const data = await trustApi.listTasks(cursor, limit);
-      return TaskPageSchema.parse(data);
+      return parseContract('/tasks', TaskPageSchema, data);
     },
     refetchInterval: 5000,
   });
@@ -18,7 +28,7 @@ export function useTask(taskId: string) {
     queryKey: ['trust', 'tasks', taskId],
     queryFn: async () => {
       const data = await trustApi.getTask(taskId);
-      return TaskViewSchema.parse(data);
+      return parseContract(`/tasks/${taskId}`, TaskViewSchema, data);
     },
     refetchInterval: (query) => {
       const data = query.state.data;
@@ -34,8 +44,8 @@ export function usePendingApprovals() {
   return useQuery({
     queryKey: ['trust', 'approvals', 'pending'],
     queryFn: async () => {
-      const data = (await trustApi.pendingApprovals()) as unknown[];
-      return data.map((item: unknown) => ApprovalViewSchema.parse(item));
+      const data = await trustApi.pendingApprovals();
+      return parseContract('/approvals/pending', z.array(ApprovalViewSchema), data);
     },
     refetchInterval: 3000,
   });
@@ -46,7 +56,7 @@ export function useApproval(approvalId: string) {
     queryKey: ['trust', 'approvals', approvalId],
     queryFn: async () => {
       const data = await trustApi.getApproval(approvalId);
-      return ApprovalViewSchema.parse(data);
+      return parseContract(`/approvals/${approvalId}`, ApprovalViewSchema, data);
     },
   });
 }
@@ -56,8 +66,8 @@ export function useMemorySearch(query: string, limit: number = 30) {
     queryKey: ['trust', 'memory', 'search', query, limit],
     queryFn: async () => {
       if (!query) return [];
-      const data = (await trustApi.searchMemory(query, limit)) as unknown[];
-      return data.map((item: unknown) => MemoryFactViewSchema.parse(item));
+      const data = await trustApi.searchMemory(query, limit);
+      return parseContract('/memory/search', z.array(MemoryFactViewSchema), data);
     },
     enabled: !!query,
   });
@@ -68,7 +78,7 @@ export function useMemoryFact(factId: string) {
     queryKey: ['trust', 'memory', 'facts', factId],
     queryFn: async () => {
       const data = await trustApi.getMemoryFact(factId);
-      return MemoryFactViewSchema.parse(data);
+      return parseContract(`/memory/facts/${factId}`, MemoryFactViewSchema, data);
     },
   });
 }
@@ -78,7 +88,7 @@ export function useAuditLog(cursor?: string, limit: number = 50, filters?: { tas
     queryKey: ['trust', 'audit', cursor, limit, filters],
     queryFn: async () => {
       const data = await trustApi.getAuditLog(cursor, limit, filters);
-      return AuditPageSchema.parse(data);
+      return parseContract('/audit', AuditPageSchema, data);
     },
   });
 }

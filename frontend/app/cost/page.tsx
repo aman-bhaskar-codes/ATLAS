@@ -17,7 +17,11 @@ export default function CostPage() {
   const profile = useQuery({ queryKey: ['profile'], queryFn: providersApi.profile, refetchInterval: 30000 });
   const models = useQuery({ queryKey: ['ops-models'], queryFn: () => opsApi.models(true) });
 
-  const err = profile.error;
+  // Both queries, not just the profile: every stat card and the whole pricing
+  // table are derived from `models.data`, so a failed /ops/models rendered
+  // "Total Models 0", "Free Models 0" and "No models configured." — four
+  // fabricated facts about the fleet from a request that never came back.
+  const err = profile.error ?? models.error;
 
   // Calculate cost stats from models
   const costBreakdown = React.useMemo(() => {
@@ -38,7 +42,14 @@ export default function CostPage() {
       <div className="crumb mb-6">ATLAS / <strong>Cost Controls</strong></div>
 
       {err ? (
-        <ErrorState title="Failed to load cost data" error={err} />
+        <ErrorState
+          title="Failed to load cost data"
+          error={err}
+          onRetry={() => {
+            void profile.refetch();
+            void models.refetch();
+          }}
+        />
       ) : (
         <>
           {/* Cost Policy Banner */}

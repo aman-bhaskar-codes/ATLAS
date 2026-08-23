@@ -30,13 +30,16 @@ export default function SettingsPage() {
       title: 'Safety',
       rows: [
         ['Kill switch', s?.kill_switch_active ? 'ACTIVE (all execution halted)' : 'inactive'],
-        ['Pending approvals', String(s?.pending_approval_count ?? 0)],
+        // '—' rather than `?? 0`: before the first response lands there is no basis
+        // for claiming zero pending approvals or zero active tasks, and those two
+        // numbers are exactly the ones an operator would act on.
+        ['Pending approvals', s === undefined ? '—' : String(s.pending_approval_count)],
       ],
     },
     {
       title: 'Runtime',
       rows: [
-        ['Active tasks', String(s?.active_task_count ?? 0)],
+        ['Active tasks', s === undefined ? '—' : String(s.active_task_count)],
         ['Overall health', health.data?.overall ?? '—'],
       ],
     },
@@ -47,7 +50,14 @@ export default function SettingsPage() {
       <div className="crumb mb-6">ATLAS / <strong>Settings</strong></div>
 
       {err ? (
-        <ErrorState title="Failed to load settings" error={err} />
+        <ErrorState
+          title="Failed to load settings"
+          error={err}
+          onRetry={() => {
+            void status.refetch();
+            void health.refetch();
+          }}
+        />
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>

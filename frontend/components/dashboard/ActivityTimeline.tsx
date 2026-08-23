@@ -10,7 +10,7 @@ import { ErrorState } from "@/components/primitives/ErrorState";
 import { EmptyState } from "@/components/primitives/EmptyState";
 
 export function ActivityTimeline() {
-  const { data: tasks, isLoading, isError, error } = useQuery({
+  const { data: tasks, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["tasks"],
     queryFn: () => atlasApi.tasks(),
     refetchInterval: 5000,
@@ -31,16 +31,16 @@ export function ActivityTimeline() {
             </div>
           </div>
         ) : isError ? (
-          <ErrorState title="Timeline offline" error={error} />
+          <ErrorState title="Timeline offline" error={error} onRetry={() => void refetch()} />
         ) : !tasks || tasks.length === 0 ? (
           <EmptyState title="No recent activity" description="ATLAS is quiet and ready." />
         ) : (
-          tasks.slice(0, 5).map((task, idx) => {
-            // Fake tier assignment for UI display
-            const tiers = ["AUTO", "CONFIRM", "BLOCK", "AUTO", "AUTO"];
-            const tier = tiers[idx % tiers.length];
-            const badgeVariant = tier === "AUTO" ? "success" : tier === "CONFIRM" ? "warning" : "error";
-            
+          tasks.slice(0, 5).map((task) => {
+            // REMOVED: a `tiers = ["AUTO","CONFIRM","BLOCK","AUTO","AUTO"]` array
+            // indexed by row position, rendered as a badge. `TaskSchema` carries no
+            // tier — only `TaskEventSchema` does — so every one of those labels was
+            // invented, and the third row always claimed "BLOCK". Fabricating a
+            // safety classification is the one thing this UI must never do.
             return (
               <div className="event" key={task.id} style={{ alignItems: 'flex-start' }}>
                 <div className="event-icon" style={{ marginTop: '0.25rem' }}>
@@ -56,14 +56,14 @@ export function ActivityTimeline() {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                     <Link href={`/tasks/${task.id}`} className="event-title hover:text-gold-400 transition-colors" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       {task.state === "completed" ? "Task completed" : task.state === "failed" ? "Task failed" : "Task active"}
-                      <span className="badge" style={{ 
-                        fontSize: '0.65rem', 
-                        padding: '0.1rem 0.3rem', 
-                        borderColor: badgeVariant === 'success' ? 'var(--jade-500)' : badgeVariant === 'warning' ? 'var(--gold-500)' : 'var(--danger-500)',
-                        color: badgeVariant === 'success' ? 'var(--jade-400)' : badgeVariant === 'warning' ? 'var(--gold-400)' : 'var(--danger-400)',
-                        background: 'transparent'
+                      <span className="badge" style={{
+                        fontSize: '0.65rem',
+                        padding: '0.1rem 0.3rem',
+                        borderColor: 'var(--line)',
+                        color: 'var(--paper-500)',
+                        background: 'transparent',
                       }}>
-                        {tier}
+                        {task.source}
                       </span>
                     </Link>
                     <div className="event-time mono">
