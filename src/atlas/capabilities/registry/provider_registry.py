@@ -41,3 +41,16 @@ class ProviderRegistry:
 
     def all_providers(self) -> list[Provider]:
         return [p for ps in self._by_capability.values() for p in ps]
+
+    def for_capability(self, capability: Capability) -> list[Provider]:
+        """Every registered provider for `capability`, healthy or not.
+
+        Unlike `candidates()` this neither filters nor raises: status reporting
+        needs the honest inventory, including the case of zero providers, and
+        must not raise NoProviderAvailable just to describe the world.
+        """
+        return list(self._by_capability.get(capability, []))
+
+    def healthy_for_capability(self, capability: Capability) -> list[Provider]:
+        """Subset of `for_capability` whose circuit breaker currently allows traffic."""
+        return [p for p in self.for_capability(capability) if self._health.is_available(p.name)]

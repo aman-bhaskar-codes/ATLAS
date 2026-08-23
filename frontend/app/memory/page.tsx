@@ -11,6 +11,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Database, BookOpen, Brain, User, Activity, Zap, Clock } from 'lucide-react';
 
+import { ErrorRow } from '@/components/primitives/ErrorState';
 import { useMemoryLive, useLiveCounts } from '../../features/memory/useMemoryLive';
 import {
   useMemoryStats, useEpisodes, useFacts,
@@ -114,13 +115,22 @@ function StatCard({
 // ---------------------------------------------------------------------------
 
 function EpisodesPanel() {
-  const { data: episodes = [], isLoading } = useEpisodes({ limit: 100 });
+  const { data: episodes = [], isLoading, isError, error, refetch } = useEpisodes({ limit: 100 });
 
   if (isLoading) return <PanelSkeleton />;
+  // WHY this branch: without it a failed request fell through to "No episodes
+  // recorded yet." — a claim about the store that the code has no basis for,
+  // since the store was never successfully read.
+  if (isError && episodes.length === 0) {
+    return <ErrorRow error={error} onRetry={() => void refetch()} />;
+  }
   if (episodes.length === 0) return <EmptyLayer label="No episodes recorded yet." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      {/* A failed poll with rows already on screen: keep them, but say so, because
+          `refetchInterval` means the list silently stops advancing otherwise. */}
+      {isError && <ErrorRow error={error} onRetry={() => void refetch()} />}
       {episodes.map((ep: Episode, i: number) => (
         <div key={ep.id ?? i} style={{
           border: '1px solid var(--line)', borderRadius: '4px',
@@ -165,7 +175,7 @@ function EpisodesPanel() {
 function FactsPanel() {
   const [minConf, setMinConf] = useState(0.5);
   const [kindFilter, setKindFilter] = useState('');
-  const { data: facts = [], isLoading } = useFacts({ min_confidence: minConf, kind: kindFilter || undefined, limit: 100 });
+  const { data: facts = [], isLoading, isError, error, refetch } = useFacts({ min_confidence: minConf, kind: kindFilter || undefined, limit: 100 });
 
   const kinds = useMemo(() => {
     const set = new Set(facts.map((f: Fact) => f.kind));
@@ -194,10 +204,15 @@ function FactsPanel() {
         </select>
       </div>
 
-      {isLoading ? <PanelSkeleton /> : facts.length === 0 ? (
+      {isLoading ? <PanelSkeleton /> : isError && facts.length === 0 ? (
+        // Deliberately not the empty state: "No facts match the current filters"
+        // would blame the user's slider for a request that never completed.
+        <ErrorRow error={error} onRetry={() => void refetch()} />
+      ) : facts.length === 0 ? (
         <EmptyLayer label="No facts match the current filters." />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {isError && <ErrorRow error={error} onRetry={() => void refetch()} />}
           {facts.map((f: Fact) => (
             <div key={f.id} style={{
               border: '1px solid var(--line)', borderRadius: '4px',
@@ -241,8 +256,10 @@ function FactsPanel() {
 
 function KnowledgePanel() {
   const [query, setQuery] = useState('');
-  const { data: docs = [], isLoading: docsLoading } = useKnowledgeDocs(50);
-  const { data: searchResults = [], isLoading: searchLoading } = useKnowledgeSearch(query);
+  const docsQuery = useKnowledgeDocs(50);
+  const searchQuery = useKnowledgeSearch(query);
+  const { data: docs = [], isLoading: docsLoading } = docsQuery;
+  const { data: searchResults = [], isLoading: searchLoading } = searchQuery;
   const isSearching = query.trim().length > 0;
 
   return (
@@ -268,7 +285,11 @@ function KnowledgePanel() {
       </div>
 
       {isSearching ? (
-        searchLoading ? <PanelSkeleton /> : searchResults.length === 0 ? (
+        searchLoading ? <PanelSkeleton /> : searchQuery.isError ? (
+          // "No matching chunks found." is a claim about the index. A failed search
+          // is a claim about the request, and the two must not look identical.
+          <ErrorRow error={searchQuery.error} onRetry={() => void searchQuery.refetch()} />
+        ) : searchResults.length === 0 ? (
           <EmptyLayer label="No matching chunks found." />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -293,10 +314,17 @@ function KnowledgePanel() {
           </div>
         )
       ) : (
-        docsLoading ? <PanelSkeleton /> : docs.length === 0 ? (
+        docsLoading ? <PanelSkeleton /> : docsQuery.isError && docs.length === 0 ? (
+          // Not the ingest hint: telling someone to run `atlas knowledge ingest`
+          // when the listing simply failed sends them to fix the wrong thing.
+          <ErrorRow error={docsQuery.error} onRetry={() => void docsQuery.refetch()} />
+        ) : docs.length === 0 ? (
           <EmptyLayer label="No documents ingested yet. Use: atlas knowledge ingest <path>" />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {docsQuery.isError && (
+              <ErrorRow error={docsQuery.error} onRetry={() => void docsQuery.refetch()} />
+            )}
             {docs.map((doc: KnowledgeDoc) => (
               <div key={doc.id} style={{
                 border: '1px solid var(--line)', borderRadius: '4px',
@@ -332,16 +360,22 @@ function KnowledgePanel() {
 }
 
 function PreferencesPanel() {
-  const { data: prefs, isLoading } = usePreferences();
+  const { data: prefs, isLoading, isError, error, refetch } = usePreferences();
   const entries = prefs ? Object.entries(prefs) : [];
 
   if (isLoading) return <PanelSkeleton />;
+  // "No preferences learned yet. Interact with ATLAS…" would invite the user to do
+  // work that changes nothing, when the real problem is the unread request.
+  if (isError && entries.length === 0) {
+    return <ErrorRow error={error} onRetry={() => void refetch()} />;
+  }
   if (entries.length === 0) return (
     <EmptyLayer label="No preferences learned yet. Interact with ATLAS to build your profile." />
   );
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.5rem' }}>
+      {isError && <ErrorRow error={error} onRetry={() => void refetch()} />}
       {entries.map(([key, value]) => (
         <div key={key} style={{
           border: '1px solid var(--line)', borderRadius: '4px',
@@ -434,6 +468,10 @@ export default function MemoryPage() {
   const [activeLayer, setActiveLayer] = useState<Layer>('episodes');
   const { events, snapshot, status, updateCount, clearEvents } = useMemoryLive(200);
   const liveCounts = useLiveCounts(events);
+  // No isError branch here on purpose: each card already falls back to the WS
+  // snapshot and then to '—', which is the honest rendering of "unknown". The
+  // failure itself is reported by the panel below and by the connection state
+  // beside the breadcrumb, so a third copy would be noise, not information.
   const { data: stats } = useMemoryStats();
 
   const isLive = status === 'connected';

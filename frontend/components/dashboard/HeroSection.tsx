@@ -2,80 +2,106 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { atlasApi } from "@/lib/api/client";
+import {
+  useRuntimeStatus,
+  deriveAtlasState,
+  toneColor,
+} from "@/features/runtime-console/useRuntimeStatus";
+import { Ban } from "lucide-react";
+
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
 
 export function HeroSection() {
-  const { data: health, isLoading: healthLoading, isError: healthError } = useQuery({
+  const { data: status, isError: statusError } = useRuntimeStatus();
+  const { data: health, isError: healthError } = useQuery({
     queryKey: ["runtimeHealth"],
     queryFn: atlasApi.runtimeHealth,
     refetchInterval: 15000,
   });
 
-  const { data: approvals } = useQuery({
-    queryKey: ["approvals"],
-    queryFn: atlasApi.approvals,
-    refetchInterval: 15000,
-  });
+  const st = deriveAtlasState(status, statusError);
+  const posture = healthError ? "unavailable" : health?.overall ?? "…";
+  const postureColorVar =
+    posture === "healthy"
+      ? "var(--jade-400)"
+      : posture === "unavailable"
+        ? "var(--ember-400)"
+        : posture === "degraded"
+          ? "var(--gold-400)"
+          : "var(--paper-500)";
 
-  const isHealthy = healthError ? false : health?.overall === "healthy";
-  const numApprovals = approvals?.length || 0;
-  
-  let statusText = "connecting...";
-  if (healthError) statusText = "disconnected";
-  else if (health) statusText = health.overall;
-
-  let runtimeText = "booting";
-  if (healthError) runtimeText = "offline";
-  else if (health) runtimeText = "idle"; // TODO: wire active task if running
-
-  const dateStr = new Intl.DateTimeFormat('en-GB', { 
-    weekday: 'long', 
-    day: 'numeric', 
-    month: 'long', 
-    year: 'numeric' 
+  const dateStr = new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
   }).format(new Date());
-
-  // Mock spend progress
-  const spend = 0.18;
-  const budget = 1.00;
-  const spendPercent = Math.min(100, (spend / budget) * 100);
 
   return (
     <section className="hero">
       <div>
         <div className="eyebrow">{dateStr} · local-first</div>
-        <h1 className="display">Good morning, Aman.</h1>
-        <p>ATLAS is online, quiet, and ready. Ask for something. It will show its plan before it acts.</p>
+        <h1 className="display">{greeting()}, Aman.</h1>
+        <p>ATLAS is local, quiet, and safety-governed. Ask for something — it will show its plan before it acts.</p>
+
+        {status?.kill_switch_active && (
+          <div
+            role="alert"
+            style={{
+              marginTop: "1rem",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              padding: "0.5rem 0.85rem",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--danger-400)",
+              color: "var(--danger-400)",
+              fontSize: "0.8rem",
+            }}
+          >
+            <Ban width={16} height={16} />
+            Kill switch is active — new actions are blocked. Release it via the CLI/file control.
+          </div>
+        )}
       </div>
+
       <aside className="health">
         <div className="health-head">
-          <span>System posture</span>
-          <span className={isHealthy ? "jade" : "ember"}>
-            <span className="health-dot" style={{ display: 'inline-block', marginRight: '8px', backgroundColor: isHealthy ? 'var(--jade-400)' : 'var(--ember-400)' }}></span>
-            {statusText}
+          <span>ATLAS status</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", color: toneColor(st.tone) }}>
+            <span
+              className="health-dot"
+              style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: toneColor(st.tone) }}
+            />
+            {st.label}
           </span>
         </div>
+
         <div className="health-row">
-          <span>Runtime</span>
-          <b>{runtimeText}</b>
+          <span>System posture</span>
+          <b style={{ color: postureColorVar }}>{posture}</b>
         </div>
+
         <div className="health-row">
-          <span>Primary model</span>
-          <b>{healthError ? "—" : "GLM-5.2 (Remote)"}</b>
+          <span>Active tasks</span>
+          <b>{status ? status.active_task_count : "—"}</b>
         </div>
+
         <div className="health-row">
-          <span>Approvals</span>
-          <b className={numApprovals > 0 ? "ember" : ""}>
-            {numApprovals} waiting
+          <span>Approvals waiting</span>
+          <b className={status && status.pending_approval_count > 0 ? "ember" : ""}>
+            {status ? status.pending_approval_count : "—"}
           </b>
         </div>
-        <div className="health-row" style={{ flexDirection: 'column', gap: '8px', borderBottom: 'none' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-            <span>Spend today</span>
-            <b>${spend.toFixed(2)} / ${budget.toFixed(2)}</b>
-          </div>
-          <div style={{ width: '100%', height: '4px', background: 'var(--ink-950)', borderRadius: '2px', overflow: 'hidden' }}>
-            <div style={{ width: `${spendPercent}%`, height: '100%', background: spendPercent > 80 ? 'var(--ember-400)' : 'var(--gold-400)' }}></div>
-          </div>
+
+        <div className="health-row" style={{ borderBottom: "none" }}>
+          <span>Environment</span>
+          <b>{status ? `${status.environment} · v${status.version}` : "—"}</b>
         </div>
       </aside>
     </section>

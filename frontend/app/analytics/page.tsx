@@ -31,7 +31,14 @@ export default function AnalyticsPage() {
       <div className="crumb mb-6">ATLAS / <strong>Analytics</strong></div>
 
       {err ? (
-        <ErrorState title="Failed to load analytics" error={err} />
+        <ErrorState
+          title="Failed to load analytics"
+          error={err}
+          onRetry={() => {
+            void analytics.refetch();
+            void evaluations.refetch();
+          }}
+        />
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>

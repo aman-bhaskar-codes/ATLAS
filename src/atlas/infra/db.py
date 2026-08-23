@@ -1312,6 +1312,237 @@ _MIGRATIONS: tuple[str, ...] = (
         created_ts TEXT NOT NULL
     );
     """,
+    # 022 — Prompt 5: engineering intelligence / incident response layer
+    # (§3 incidents, §7 correlation, §12 baselines, §15 dedup, §16 diagnosis,
+    #  §27 repair, §33 gate, §40 frontend errors, §43 worker health, §52
+    #  security incidents, §86/§116 timeline, §88 known patterns).
+    #
+    # WHY the seven correlation ids are real columns and not one JSON blob: §7
+    # asks for a join across them, and SQLite cannot join into JSON. This table
+    # is the join that did not exist.
+    """
+    CREATE TABLE IF NOT EXISTS incidents (
+        incident_id TEXT PRIMARY KEY,
+        fingerprint TEXT NOT NULL,
+        title TEXT NOT NULL,
+        summary TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'LOW',
+        status TEXT NOT NULL DEFAULT 'DETECTED',
+        component TEXT NOT NULL DEFAULT '',
+        failure_class TEXT,
+        detector TEXT NOT NULL DEFAULT '',
+        request_id TEXT,
+        correlation_id TEXT,
+        task_id TEXT,
+        trajectory_id TEXT,
+        step_id TEXT,
+        tool_call_id TEXT,
+        workflow_run_id TEXT,
+        parent_incident_id TEXT,
+        related_json TEXT NOT NULL DEFAULT '[]',
+        occurrence_count INTEGER NOT NULL DEFAULT 1,
+        first_seen_ts TEXT NOT NULL,
+        last_seen_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL,
+        resolved_ts TEXT,
+        evidence_json TEXT NOT NULL DEFAULT '[]',
+        measurements_json TEXT NOT NULL DEFAULT '[]',
+        diagnosis_id TEXT,
+        repair_id TEXT,
+        repair_attempts INTEGER NOT NULL DEFAULT 0,
+        escalated INTEGER NOT NULL DEFAULT 0,
+        escalation_reason TEXT NOT NULL DEFAULT '',
+        notes_json TEXT NOT NULL DEFAULT '[]'
+    );
+    -- §13/§15: "20 errors from the same event are not 20 incidents" is enforced
+    -- by the database, not by application discipline. One OPEN incident per
+    -- fingerprint; a recurrence after resolution is a NEW incident on purpose,
+    -- because that is a regression and §103 needs to see it as one.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_incidents_open_fp
+        ON incidents(fingerprint) WHERE resolved_ts IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status, severity);
+    CREATE INDEX IF NOT EXISTS idx_incidents_seen ON incidents(last_seen_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_incidents_source ON incidents(source);
+    CREATE INDEX IF NOT EXISTS idx_incidents_component ON incidents(component);
+    CREATE INDEX IF NOT EXISTS idx_incidents_task ON incidents(task_id);
+    CREATE INDEX IF NOT EXISTS idx_incidents_traj ON incidents(trajectory_id);
+    CREATE INDEX IF NOT EXISTS idx_incidents_corr ON incidents(correlation_id);
+    CREATE INDEX IF NOT EXISTS idx_incidents_request ON incidents(request_id);
+    CREATE INDEX IF NOT EXISTS idx_incidents_parent ON incidents(parent_incident_id);
+
+    CREATE TABLE IF NOT EXISTS security_incidents (
+        security_incident_id TEXT PRIMARY KEY,
+        incident_id TEXT,
+        kind TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'HIGH',
+        status TEXT NOT NULL DEFAULT 'DETECTED',
+        source_component TEXT NOT NULL DEFAULT '',
+        detector TEXT NOT NULL DEFAULT '',
+        request_id TEXT,
+        correlation_id TEXT,
+        task_id TEXT,
+        trajectory_id TEXT,
+        step_id TEXT,
+        tool_call_id TEXT,
+        workflow_run_id TEXT,
+        containment TEXT NOT NULL DEFAULT 'NONE',
+        contained_ts TEXT,
+        evidence_preserved INTEGER NOT NULL DEFAULT 0,
+        evidence_json TEXT NOT NULL DEFAULT '[]',
+        indicator_summary TEXT NOT NULL DEFAULT '',
+        human_notified INTEGER NOT NULL DEFAULT 0,
+        first_seen_ts TEXT NOT NULL,
+        last_seen_ts TEXT NOT NULL,
+        resolved_ts TEXT,
+        notes_json TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE INDEX IF NOT EXISTS idx_secinc_status ON security_incidents(status, severity);
+    CREATE INDEX IF NOT EXISTS idx_secinc_kind ON security_incidents(kind);
+    CREATE INDEX IF NOT EXISTS idx_secinc_incident ON security_incidents(incident_id);
+    CREATE INDEX IF NOT EXISTS idx_secinc_seen ON security_incidents(last_seen_ts DESC);
+
+    CREATE TABLE IF NOT EXISTS incident_diagnoses (
+        diagnosis_id TEXT PRIMARY KEY,
+        incident_id TEXT NOT NULL,
+        method TEXT NOT NULL DEFAULT '',
+        passes_json TEXT NOT NULL DEFAULT '[]',
+        candidates_json TEXT NOT NULL DEFAULT '[]',
+        inconclusive_reason TEXT NOT NULL DEFAULT '',
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_dx_incident ON incident_diagnoses(incident_id, created_ts DESC);
+
+    CREATE TABLE IF NOT EXISTS repair_hypotheses (
+        repair_id TEXT PRIMARY KEY,
+        incident_id TEXT NOT NULL,
+        diagnosis_id TEXT,
+        title TEXT NOT NULL,
+        problem_statement TEXT NOT NULL DEFAULT '',
+        proposed_change TEXT NOT NULL DEFAULT '',
+        repair_type TEXT NOT NULL,
+        affected_component TEXT NOT NULL DEFAULT '',
+        target_paths_json TEXT NOT NULL DEFAULT '[]',
+        expected_effect TEXT NOT NULL DEFAULT '',
+        risk TEXT NOT NULL DEFAULT 'MEDIUM',
+        evidence_json TEXT NOT NULL DEFAULT '[]',
+        verification_plan TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'PROPOSED',
+        gate_decision_id TEXT,
+        branch TEXT,
+        repair_chain_id TEXT NOT NULL,
+        depth INTEGER NOT NULL DEFAULT 0,
+        parent_incident_id TEXT,
+        attempt INTEGER NOT NULL DEFAULT 1,
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_repair_incident ON repair_hypotheses(incident_id, created_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_repair_status ON repair_hypotheses(status);
+    CREATE INDEX IF NOT EXISTS idx_repair_chain ON repair_hypotheses(repair_chain_id);
+
+    -- §86: recorded whether or not it allowed anything. A DENY is as auditable
+    -- as an ALLOW, mirroring the safety engine's AUDIT-before-branch order.
+    CREATE TABLE IF NOT EXISTS repair_gate_decisions (
+        decision_id TEXT PRIMARY KEY,
+        repair_id TEXT NOT NULL,
+        verdict TEXT NOT NULL,
+        reasons_json TEXT NOT NULL DEFAULT '[]',
+        blocked_paths_json TEXT NOT NULL DEFAULT '[]',
+        sensitive_areas_json TEXT NOT NULL DEFAULT '[]',
+        autonomy_level INTEGER NOT NULL DEFAULT 1,
+        severity TEXT NOT NULL DEFAULT 'LOW',
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_gate_repair ON repair_gate_decisions(repair_id, created_ts DESC);
+
+    -- §86/§116: append-only. There is deliberately no UPDATE or DELETE path in
+    -- the store for this table — "nothing is silently changed" means the
+    -- timeline itself cannot be rewritten.
+    CREATE TABLE IF NOT EXISTS incident_timeline (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        incident_id TEXT NOT NULL,
+        ts TEXT NOT NULL,
+        actor TEXT NOT NULL DEFAULT 'system',
+        kind TEXT NOT NULL,
+        detail TEXT NOT NULL DEFAULT '',
+        from_status TEXT,
+        to_status TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_timeline_incident ON incident_timeline(incident_id, id);
+
+    -- §12: baselines are durable rows, not in-process state. A rolling baseline
+    -- that resets on restart is not a baseline.
+    CREATE TABLE IF NOT EXISTS engineering_baselines (
+        scope TEXT NOT NULL,
+        key TEXT NOT NULL,
+        metric TEXT NOT NULL,
+        n INTEGER NOT NULL DEFAULT 0,
+        mean REAL NOT NULL DEFAULT 0,
+        median REAL,
+        stdev REAL,
+        p50 REAL,
+        p90 REAL,
+        p99 REAL,
+        mad REAL,
+        window_start_ts TEXT NOT NULL DEFAULT '',
+        window_end_ts TEXT NOT NULL DEFAULT '',
+        provenance TEXT NOT NULL DEFAULT 'MEASURED',
+        updated_ts TEXT NOT NULL,
+        PRIMARY KEY (scope, key, metric)
+    );
+
+    -- §43: heartbeat, last success, last failure, restart count, queue lag —
+    -- none of which the runtime worker registry tracked.
+    CREATE TABLE IF NOT EXISTS worker_health (
+        worker TEXT PRIMARY KEY,
+        last_heartbeat_ts TEXT,
+        last_success_ts TEXT,
+        last_failure_ts TEXT,
+        last_failure_detail TEXT NOT NULL DEFAULT '',
+        restart_count INTEGER NOT NULL DEFAULT 0,
+        queue_lag INTEGER NOT NULL DEFAULT 0,
+        state TEXT NOT NULL DEFAULT 'UNKNOWN',
+        updated_ts TEXT NOT NULL
+    );
+
+    -- §40: frontend errors ingested from the browser. Carries a status/code/
+    -- request id and a TRUNCATED detail — never page state, never a payload.
+    CREATE TABLE IF NOT EXISTS frontend_errors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fingerprint TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        route TEXT NOT NULL DEFAULT '',
+        status INTEGER,
+        code TEXT NOT NULL DEFAULT '',
+        detail TEXT NOT NULL DEFAULT '',
+        request_id TEXT,
+        app_version TEXT NOT NULL DEFAULT '',
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_fe_errors_fp ON frontend_errors(fingerprint, created_ts DESC);
+
+    -- §88: a pattern library. `verified` starts 0 — §89: knowledge derived from
+    -- a past root cause is a hint, and still has to be re-verified.
+    CREATE TABLE IF NOT EXISTS known_failure_patterns (
+        pattern_id TEXT PRIMARY KEY,
+        fingerprint TEXT NOT NULL DEFAULT '',
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT '',
+        component TEXT NOT NULL DEFAULT '',
+        typical_cause TEXT NOT NULL DEFAULT '',
+        known_repair TEXT NOT NULL DEFAULT '',
+        repair_type TEXT NOT NULL DEFAULT '',
+        occurrences INTEGER NOT NULL DEFAULT 1,
+        successful_repairs INTEGER NOT NULL DEFAULT 0,
+        failed_repairs INTEGER NOT NULL DEFAULT 0,
+        verified INTEGER NOT NULL DEFAULT 0,
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_kfp_fingerprint ON known_failure_patterns(fingerprint);
+    """,
 )
 
 
@@ -1345,18 +1576,33 @@ class Database:
         _log.info("db.ready", event_type="db", path=str(self._path), version=len(_MIGRATIONS))
 
     async def _apply_migrations(self) -> None:
+        """Apply pending migrations, recording progress after each one.
+
+        The version used to be written ONCE after the whole loop. Because
+        `executescript` implicitly commits, a failure partway through left the
+        earlier migrations' DDL durably applied while `schema_version` still said
+        0 — so the next boot replayed them from the start, and the many
+        `ALTER TABLE ... ADD COLUMN` steps in this list are not idempotent. The
+        database then failed to open on every subsequent boot with no way back
+        short of deleting it. Writing the version per step makes a failed
+        migration resumable: fix the script, restart, continue from where it
+        stopped.
+        """
         assert self._conn is not None
         cur = await self._conn.execute("SELECT version FROM schema_version LIMIT 1")
         row = await cur.fetchone()
         current = int(row["version"]) if row else 0
+        if row is None:
+            # Seed at the CURRENT version, not the target: the row must exist so
+            # the per-step UPDATE below has something to write, but claiming the
+            # target before running anything is the bug described above.
+            await self._conn.execute("INSERT INTO schema_version(version) VALUES (?)", (current,))
+            await self._conn.commit()
         for i, script in enumerate(_MIGRATIONS[current:], start=current + 1):
             await self._conn.executescript(script)
+            await self._conn.execute("UPDATE schema_version SET version=?", (i,))
+            await self._conn.commit()
             _log.info("db.migrate", event_type="db", to_version=i)
-        target = len(_MIGRATIONS)
-        if row is None:
-            await self._conn.execute("INSERT INTO schema_version(version) VALUES (?)", (target,))
-        else:
-            await self._conn.execute("UPDATE schema_version SET version=?", (target,))
 
     @property
     def conn(self) -> aiosqlite.Connection:
@@ -1370,4 +1616,21 @@ class Database:
             self._conn = None
 
     async def health(self) -> bool:
-        return self._conn is not None
+        """Verify the database actually answers a query.
+
+        This used to be `return self._conn is not None`, which reports healthy for
+        every failure that does not drop the connection object: a locked file, a
+        corrupt page, a disk that has gone read-only, a WAL that cannot be
+        checkpointed. `SELECT 1` is the cheapest statement that proves the
+        connection is usable, which is what every caller was already assuming.
+        """
+        if self._conn is None:
+            return False
+        try:
+            cur = await self._conn.execute("SELECT 1")
+            row = await cur.fetchone()
+            return row is not None
+        except Exception:
+            # A health check must never raise — its whole job is to answer the
+            # question "is this usable?" and an exception IS the answer "no".
+            return False

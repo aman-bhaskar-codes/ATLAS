@@ -13,14 +13,14 @@ Design rules (per Gap Audit):
 
 from __future__ import annotations
 
-import asyncio
 import json
-from typing import TYPE_CHECKING, Protocol
-
-from fastapi import Request
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from atlas.app import Atlas
+from atlas.infra.logging import get_logger
+from atlas.infra.tasks import spawn
 from atlas.infra.types import InboundEvent
+from atlas.interfaces.api.errors import NotFoundError
 from atlas.interfaces.api.schemas import (
     ApprovalDecisionRequest,
     ApprovalResponse,
@@ -38,8 +38,53 @@ from atlas.interfaces.api.schemas import (
 if TYPE_CHECKING:
     from atlas.interfaces.api.event_store import TaskEventStore
 
+_log = get_logger("atlas.api.facade")
 
 _TERMINAL_STATES = frozenset({"completed", "failed", "cancelled"})
+
+# Keyed by the enum *value* so this layer does not import atlas.bootstrap.
+# ComponentStatus: healthy | degraded | unavailable | failed.
+_COMPONENT_STATUS_TO_CHECK: dict[str, Literal["pass", "warn", "fail"]] = {
+    "healthy": "pass",
+    "degraded": "warn",
+    "unavailable": "fail",
+    "failed": "fail",
+}
+
+# SystemState: booting | initializing | degraded | ready | busy | recovering |
+# shutting_down | failed. Anything mid-transition reports degraded rather than
+# healthy — a booting system is not yet serving.
+_SYSTEM_STATE_TO_OVERALL: dict[str, Literal["healthy", "degraded", "unavailable"]] = {
+    "ready": "healthy",
+    "busy": "healthy",
+    "booting": "degraded",
+    "initializing": "degraded",
+    "degraded": "degraded",
+    "recovering": "degraded",
+    "shutting_down": "unavailable",
+    "failed": "unavailable",
+}
+
+# Capability value -> the Atlas attribute holding the platform that executes it.
+# Only KNOWLEDGE routes through the provider registry (bootstrap/capabilities.py
+# registers providers for it alone); the rest are served by a platform object
+# built at composition time, so platform presence is the only runtime evidence
+# available for them. Keyed by the enum *value* to keep this layer independent of
+# atlas.capabilities imports. `browser_platform` is genuinely None when
+# config.browser.enabled is False, which is what makes this check meaningful
+# rather than a tautology.
+_CAPABILITY_PLATFORM_ATTR: dict[str, str] = {
+    "knowledge": "knowledge_platform",
+    "email": "email_platform",
+    "calendar": "calendar_platform",
+    "contacts": "contacts_platform",
+    "weather": "weather_platform",
+    "location": "location_platform",
+    "currency": "currency_platform",
+    "browser": "browser_platform",
+    "computer_use": "computer_use",
+    "public_api": "public_api",
+}
 
 
 class AtlasControlPlane(Protocol):
@@ -58,9 +103,13 @@ class AtlasControlPlane(Protocol):
 class DefaultAtlasControlPlane:
     """Concrete implementation wrapping Atlas and TaskEventStore."""
 
-    def __init__(self, atlas: Atlas, event_store: TaskEventStore) -> None:
+    def __init__(self, atlas: Atlas, event_store: TaskEventStore, version: str) -> None:
         self.atlas = atlas
         self.event_store = event_store
+        # Passed in rather than hardcoded: the running package version is the
+        # only honest answer, and it lives on app.state (set by the lifespan from
+        # importlib.metadata). A literal here silently goes stale.
+        self.version = version
 
     async def runtime_status(self) -> RuntimeStatusResponse:
         kill_switch = self.atlas.killswitch.is_active()
@@ -78,27 +127,65 @@ class DefaultAtlasControlPlane:
 
         return RuntimeStatusResponse(
             state="ready" if not kill_switch else "degraded",
-            version="1.0.0",
+            version=self.version,
             environment=self.atlas.settings.env,
             kill_switch_active=kill_switch,
             active_task_count=active_tasks,
-            pending_approval_count=0,  # Phase Two: approval storage deferred
+            # Honest zero, not a placeholder: approval storage is deferred
+            # (see pending_approvals below), so there is nothing to count. The
+            # risk that a runtime confirm-request goes uncounted is recorded in
+            # docs/final/TECHNICAL_DEBT_FINAL.md rather than papered over here.
+            pending_approval_count=0,
             last_audit_at=last_audit,
         )
 
     async def runtime_health(self) -> RuntimeHealthResponse:
+        """Real per-component health from the RuntimeSupervisor.
+
+        The supervisor already runs genuine checks (database, safety,
+        intelligence, orchestration, memory, capability) on a 60s loop and backs
+        /live, /ready and /health. This endpoint previously reported a single
+        "database" check derived from `db.health()`, which only tested that a
+        connection object existed — so the Command Center's health strip stayed
+        green through any failure that did not drop the connection.
+
+        `overall` comes from the supervisor's own SystemState rather than being
+        re-derived from the check list: the supervisor knows which components are
+        critical (CRITICAL_COMPONENTS), and this layer does not.
+        """
+        supervisor = getattr(self.atlas, "runtime_supervisor", None)
+        if supervisor is not None:
+            report = supervisor.get_health_report()  # synchronous
+            checked_at = self.atlas.clock.now()
+            checks = [
+                HealthCheckItem(
+                    name=name,
+                    status=_COMPONENT_STATUS_TO_CHECK.get(health.status.value, "fail"),
+                    detail=health.detail or health.status.value,
+                    checked_at=checked_at,
+                )
+                for name, health in sorted(report.components.items())
+            ]
+            if checks:
+                return RuntimeHealthResponse(
+                    overall=_SYSTEM_STATE_TO_OVERALL.get(report.overall_status.value, "degraded"),
+                    checks=checks,
+                )
+
+        # No supervisor, or it has not recorded any component yet (a bare Atlas
+        # built outside the managed startup path): report the one thing we can
+        # actually verify rather than assuming health.
         db_ok = await self.atlas.db.health()
-        checks = [
-            HealthCheckItem(
-                name="database",
-                status="pass" if db_ok else "fail",
-                detail="Connected" if db_ok else "Disconnected",
-                checked_at=self.atlas.clock.now(),
-            )
-        ]
         return RuntimeHealthResponse(
-            overall="healthy" if db_ok else "degraded",
-            checks=checks,
+            overall="healthy" if db_ok else "unavailable",
+            checks=[
+                HealthCheckItem(
+                    name="database",
+                    status="pass" if db_ok else "fail",
+                    detail="Connected" if db_ok else "Disconnected",
+                    checked_at=self.atlas.clock.now(),
+                )
+            ],
         )
 
     async def get_tasks(self) -> list[TaskResponse]:
@@ -115,7 +202,7 @@ class DefaultAtlasControlPlane:
         )
         r = await cur.fetchone()
         if not r:
-            raise KeyError(f"Task not found: {task_id}")
+            raise NotFoundError(f"Task not found: {task_id}")
         return _row_to_task(r)
 
     async def create_task(self, command: CreateTaskRequest) -> TaskResponse:
@@ -160,18 +247,28 @@ class DefaultAtlasControlPlane:
             content=command.request,
             task_id=task_id,
         )
+
         async def _run_safely() -> None:
             try:
                 await self.atlas.orchestrator.run(inbound)
-            except Exception as e:
-                import logging
-                import traceback
-                logging.getLogger("atlas.api").error(f"BACKGROUND TASK FAILED: {e}\n{traceback.format_exc()}")
+            except Exception as exc:
+                # Settle the row. Without this the task stays 'created' forever:
+                # runtime_status counts non-terminal rows, so active_task_count
+                # never drops and the UI status pill is stuck on BUSY for the rest
+                # of the process lifetime — a crashed task that looks like a
+                # running one.
+                _log.exception(
+                    "task.background_run_failed",
+                    event_type="task",
+                    task_id=task_id,
+                    exc_type=type(exc).__name__,
+                )
+                try:
+                    await self._mark_task_failed(task_id, exc)
+                except Exception:
+                    _log.exception("task.mark_failed_failed", event_type="task", task_id=task_id)
 
-        asyncio.create_task(
-            _run_safely(),
-            name=f"atlas-task-{task_id}",
-        )
+        spawn(_run_safely(), name=f"atlas-task-{task_id}")
 
         return TaskResponse(
             id=task_id,
@@ -187,12 +284,34 @@ class DefaultAtlasControlPlane:
             updated_at=now,
         )
 
+    async def _mark_task_failed(self, task_id: str, exc: BaseException) -> None:
+        """Move a crashed task to a terminal state, preserving its payload.
+
+        The payload is merged rather than replaced: `_row_to_task` reads `request`
+        and `correlation_id` out of it, and losing those would blank the task in
+        the UI. Only the exception TYPE is stored — the message can quote provider
+        URLs or credentials.
+        """
+        cur = await self.atlas.db.conn.execute("SELECT state, payload FROM tasks WHERE id = ?", (task_id,))
+        row = await cur.fetchone()
+        if row is None or row["state"] in _TERMINAL_STATES:
+            return  # already settled by the orchestrator; do not overwrite its verdict
+
+        payload = json.loads(row["payload"]) if row["payload"] else {}
+        payload["ok"] = False
+        payload["error"] = f"task failed: {type(exc).__name__}"
+        await self.atlas.db.conn.execute(
+            "UPDATE tasks SET state = 'failed', payload = ?, updated_ts = ? WHERE id = ?",
+            (json.dumps(payload), self.atlas.clock.now().isoformat(), task_id),
+        )
+        await self.atlas.db.conn.commit()
+
     async def cancel_task(self, task_id: str, command: CancelTaskRequest) -> CancelTaskResponse:
         """Signal cancellation. Returns server decision — may not stop immediately."""
         cur = await self.atlas.db.conn.execute("SELECT state FROM tasks WHERE id = ?", (task_id,))
         row = await cur.fetchone()
         if not row:
-            raise KeyError(f"Task not found: {task_id}")
+            raise NotFoundError(f"Task not found: {task_id}")
 
         current_state: str = row["state"]
         if current_state in _TERMINAL_STATES:
@@ -226,19 +345,59 @@ class DefaultAtlasControlPlane:
         raise NotImplementedError("decide_approval requires approval storage (Phase Three)")
 
     async def get_capabilities(self) -> list[CapabilityResponse]:
-        caps = []
+        """Report what the runtime actually has, per capability.
+
+        Every field here used to be a literal: `state="ready"`, `providers=1`,
+        `healthy_providers=1`, `requires_auth=False` for all seven capabilities,
+        regardless of runtime state. Now:
+
+        * `requires_auth` is read from the spec, where it is a real, varying field
+          (False for knowledge/weather/location/currency, True for
+          email/contacts/calendar).
+        * `providers` / `healthy_providers` are the real size of the dispatcher's
+          provider chain (`ProviderRegistry`) and the subset whose circuit breaker
+          is closed. Only KNOWLEDGE is provider-backed today; the other six are
+          served by a platform object, so a truthful 0 is expected there and does
+          NOT mean broken — see the state derivation below.
+        * `state` is derived, never assumed.
+        """
+        providers_registry = self.atlas.cap_providers
+        caps: list[CapabilityResponse] = []
         for spec in self.atlas.cap_registry.all():
+            registered = providers_registry.for_capability(spec.capability)
+            healthy = providers_registry.healthy_for_capability(spec.capability)
             caps.append(
                 CapabilityResponse(
                     name=spec.capability.value,
-                    state="ready",
+                    state=self._capability_state(spec.capability.value, len(registered), len(healthy)),
                     operations=list(spec.operations),
-                    providers=1,
-                    healthy_providers=1,
-                    requires_auth=False,
+                    providers=len(registered),
+                    healthy_providers=len(healthy),
+                    requires_auth=spec.requires_auth,
                 )
             )
         return caps
+
+    def _capability_state(
+        self, capability: str, provider_count: int, healthy_count: int
+    ) -> Literal["ready", "degraded", "unavailable", "planned"]:
+        """Derive capability state from live runtime state only.
+
+        Two independent execution paths exist, so there are two evidence sources:
+        a provider chain walked by CapabilityDispatcher, or a platform object
+        built at composition time. Each branch is a checkable fact; a capability
+        with neither reports 'planned' rather than guessing.
+        """
+        if provider_count:
+            # Dispatchable via the provider chain. candidates() raises
+            # NoProviderAvailable when every breaker is open, so zero healthy
+            # providers is a genuine degradation, not a cosmetic one.
+            return "ready" if healthy_count else "degraded"
+
+        attr = _CAPABILITY_PLATFORM_ATTR.get(capability)
+        if attr is None:
+            return "planned"
+        return "ready" if getattr(self.atlas, attr, None) is not None else "unavailable"
 
 
 def _row_to_task(r: object) -> TaskResponse:
@@ -256,12 +415,4 @@ def _row_to_task(r: object) -> TaskResponse:
         steps_taken=p.get("steps_taken", 0),
         created_at=r["created_ts"],  # type: ignore[index]
         updated_at=r["updated_ts"],  # type: ignore[index]
-    )
-
-
-def get_control_plane_from_request(request: Request) -> DefaultAtlasControlPlane:
-    """FastAPI dependency helper — builds control plane from app.state."""
-    return DefaultAtlasControlPlane(
-        atlas=request.app.state.atlas,
-        event_store=request.app.state.event_store,
     )

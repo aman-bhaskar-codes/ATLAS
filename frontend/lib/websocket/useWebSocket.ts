@@ -61,7 +61,7 @@ export interface UseWebSocketReturn<T> {
  * const { data, status } = useWebSocket<EventType>('ws://localhost:8000/ws/events');
  * ```
  */
-export function useWebSocket<T = any>(
+export function useWebSocket<T = unknown>(
   url: string | null,
   options: WebSocketOptions = {}
 ): UseWebSocketReturn<T> {
@@ -83,10 +83,15 @@ export function useWebSocket<T = any>(
   const reconnectDelayRef = useRef(initialReconnectDelay);
   const shouldReconnectRef = useRef(true);
   
-  const log = useCallback((...args: any[]) => {
+  const log = useCallback((...args: unknown[]) => {
     if (debug) console.log('[useWebSocket]', ...args);
   }, [debug]);
-  
+
+  // Holds the latest `connect` so the reconnect timer can re-enter it without
+  // referencing the binding before it is initialized (a temporal-dead-zone read
+  // that only happened to work because the timer fires after render).
+  const connectRef = useRef<() => void>(() => {});
+
   const connect = useCallback(() => {
     if (!url || wsRef.current?.readyState === WebSocket.OPEN) {
       return;
@@ -148,7 +153,7 @@ export function useWebSocket<T = any>(
               reconnectDelayRef.current * reconnectMultiplier,
               maxReconnectDelay
             );
-            connect();
+            connectRef.current();
           }, delay);
         }
       };
@@ -192,11 +197,17 @@ export function useWebSocket<T = any>(
   
   useEffect(() => {
     shouldReconnectRef.current = true;
-    
+    connectRef.current = connect;
+
     if (url) {
+      // `connect()` synchronously sets status->'connecting'. That is the correct
+      // shape for subscribing to an EXTERNAL resource on mount (the canonical
+      // job of an effect), not a derived-state cascade: the socket must be
+      // opened as a side effect and the UI must reflect that it is opening.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- external WebSocket lifecycle, not derived state
       connect();
     }
-    
+
     return () => {
       shouldReconnectRef.current = false;
       if (reconnectTimeoutRef.current) {

@@ -7,7 +7,7 @@ export interface Attachment {
   file: File;
   type: AttachmentType;
   previewUrl?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   status: "uploading" | "ready" | "error";
   progress?: number;
 }
@@ -16,8 +16,12 @@ export interface WorkspaceState {
   text: string;
   attachments: Attachment[];
   selectedModel: string;
-  preflightStatus: "idle" | "analyzing" | "ready";
-  safetyLevel: "pending" | "cleared" | "flagged";
+  /**
+   * "analyzing" was removed with the fake 1500ms pre-flight delay it existed to
+   * display (see PlannerPreview). Narrowing the union rather than leaving the
+   * member unused is what stops it being dispatched again.
+   */
+  preflightStatus: "idle" | "ready";
   isDragging: boolean;
 }
 
@@ -28,7 +32,6 @@ export type WorkspaceAction =
   | { type: "REMOVE_ATTACHMENT"; payload: string }
   | { type: "SET_MODEL"; payload: string }
   | { type: "SET_PREFLIGHT_STATUS"; payload: WorkspaceState["preflightStatus"] }
-  | { type: "SET_SAFETY_LEVEL"; payload: WorkspaceState["safetyLevel"] }
   | { type: "SET_DRAGGING"; payload: boolean }
   | { type: "RESET" };
 
@@ -37,7 +40,6 @@ export const initialState: WorkspaceState = {
   attachments: [],
   selectedModel: "auto",
   preflightStatus: "idle",
-  safetyLevel: "pending",
   isDragging: false,
 };
 
@@ -63,8 +65,6 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
       return { ...state, selectedModel: action.payload };
     case "SET_PREFLIGHT_STATUS":
       return { ...state, preflightStatus: action.payload };
-    case "SET_SAFETY_LEVEL":
-      return { ...state, safetyLevel: action.payload };
     case "SET_DRAGGING":
       return { ...state, isDragging: action.payload };
     case "RESET":

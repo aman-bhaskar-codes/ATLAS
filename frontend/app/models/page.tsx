@@ -17,7 +17,14 @@ export default function ModelsPage() {
       <div className="crumb mb-6">ATLAS / <strong>Models &amp; Providers</strong></div>
 
       {err ? (
-        <ErrorState title="Failed to load models" error={err} />
+        <ErrorState
+          title="Failed to load models"
+          error={err}
+          onRetry={() => {
+            void models.refetch();
+            void providers.refetch();
+          }}
+        />
       ) : (
         <>
           <section className="panel" style={{ marginBottom: '2rem' }}>

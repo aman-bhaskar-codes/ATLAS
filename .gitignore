@@ -8,12 +8,20 @@ __pycache__/
 .pytest_cache/
 .import_linter_cache/
 
+# Coverage artifacts (`just cov` writes all three)
+.coverage
+coverage.xml
+htmlcov/
+
 # uv lockfile (uv.lock IS committed; the venv is not)
 # (do not ignore uv.lock)
 
 # ATLAS runtime state
 .atlas/
 STOP.flag
+
+# E2E ephemeral backend data dir (Playwright webServer wipes/recreates it)
+.e2e-data/
 *.db
 *.db-wal
 *.db-shm

@@ -4,7 +4,7 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { learningApi } from '@/lib/api/client';
 import { EmptyState } from '@/components/primitives/EmptyState';
-import { ErrorState } from '@/components/primitives/ErrorState';
+import { ErrorRow, ErrorState } from '@/components/primitives/ErrorState';
 
 function statusColor(status: string): { borderColor: string; color: string } {
   if (status === 'active') return { borderColor: 'var(--jade-500)', color: 'var(--jade-400)' };
@@ -14,7 +14,7 @@ function statusColor(status: string): { borderColor: string; color: string } {
 
 export default function SkillsPage() {
   const queryClient = useQueryClient();
-  const { data: skills, isLoading, isError, error } = useQuery({
+  const { data: skills, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["skills"],
     queryFn: () => learningApi.skills(),
   });
@@ -36,10 +36,19 @@ export default function SkillsPage() {
           </span>
         </div>
 
+        {/* Disabling a skill is a governed decision, so a refusal has to be visible.
+            Without this the button re-enabled itself and the skill stayed active with
+            no explanation. */}
+        {disable.isError && (
+          <div style={{ padding: '0 1rem' }}>
+            <ErrorRow error={disable.error} />
+          </div>
+        )}
+
         {isLoading ? (
           <div className="text-[var(--paper-500)] text-sm py-4 px-4">Loading skills…</div>
         ) : isError ? (
-          <ErrorState title="Failed to load skills" error={error} />
+          <ErrorState title="Failed to load skills" error={error} onRetry={() => void refetch()} />
         ) : skills && skills.length > 0 ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem', padding: '1rem' }}>
             {skills.map(skill => (

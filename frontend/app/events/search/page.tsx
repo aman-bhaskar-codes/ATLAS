@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { EventFeed } from '../../../components/events';
+import type { AtlasEvent } from '../../../lib/websocket';
 
 interface SearchParams {
   task_id?: string;
@@ -20,15 +21,18 @@ interface SearchParams {
 }
 
 interface SearchResult {
-  events: any[];
+  events: AtlasEvent[];
   total: number;
   limit: number;
   offset: number;
 }
 
 async function searchEvents(params: SearchParams): Promise<SearchResult> {
-  const baseUrl = process.env.NEXT_PUBLIC_ATLAS_API_URL || 'http://localhost:8000';
-  const url = new URL(`${baseUrl}/api/v1/events/search`);
+  // NEXT_PUBLIC_ATLAS_API_URL already includes the /api/v1 prefix, so the path
+  // must NOT repeat it (doing so produced /api/v1/api/v1/... -> 404). The
+  // fallback matches the port ATLAS actually serves (8730).
+  const baseUrl = process.env.NEXT_PUBLIC_ATLAS_API_URL || 'http://localhost:8730/api/v1';
+  const url = new URL(`${baseUrl}/events/search`);
   
   Object.entries(params).forEach(([key, value]) => {
     if (value !== null && value !== undefined && value !== '') {

@@ -28,7 +28,7 @@ export function ReasoningEventCard({ event }: { event: AtlasEvent }) {
         <div className="mb-3">
           <div className="text-xs text-cyan-700 font-medium mb-1">Thought</div>
           <div className="bg-white rounded p-3 text-sm text-gray-800 italic">
-            "{thought}"
+            &quot;{thought}&quot;
           </div>
         </div>
       )}
@@ -196,7 +196,7 @@ export function MemoryEventCard({ event }: { event: AtlasEvent }) {
       
       {results && Array.isArray(results) && results.length > 0 && (
         <div className="space-y-2">
-          {results.slice(0, 3).map((result: any, i: number) => (
+          {results.slice(0, 3).map((result: unknown, i: number) => (
             <div key={i} className="bg-white border rounded p-2 text-sm">
               {typeof result === 'string' ? result : JSON.stringify(result)}
             </div>

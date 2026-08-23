@@ -12,7 +12,7 @@ export default function LiveRunPage() {
   const router = useRouter();
   
   // Fetch recent tasks to see if one is currently active
-  const { data: tasks, isLoading, isError, error } = useQuery({
+  const { data: tasks, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["tasks", "recent"],
     queryFn: () => atlasApi.tasks(),
     refetchInterval: 3000,
@@ -37,7 +37,7 @@ export default function LiveRunPage() {
   if (isError) {
     return (
       <div className="mt-8">
-        <ErrorState title="Failed to check live tasks" error={error} />
+        <ErrorState title="Failed to check live tasks" error={error} onRetry={() => void refetch()} />
       </div>
     );
   }

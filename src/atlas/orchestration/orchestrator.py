@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from atlas.infra.clock import Clock
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
+from atlas.infra.tasks import spawn
 from atlas.infra.types import InboundEvent
 from atlas.orchestration.context_builder import ContextBuilder
 from atlas.orchestration.events import EventPublisher
@@ -282,7 +283,7 @@ class Orchestrator:
         from atlas.memory.trajectory import Trajectory
 
         _plan_risk: Any = getattr(plan, "risk", "low")
-        
+
         # Batch 10.3: Calculate actual cost from LLM tracker
         cost_usd = 0.0
         if self._llm_tracker:
@@ -291,7 +292,7 @@ class Orchestrator:
                 cost_usd = float(cost_data.get("total_cost", 0.0))
             except Exception as exc:
                 _log.warning("trajectory.cost_calculation_failed", event_type="orchestration", error=repr(exc))
-        
+
         # Build Trajectory object from task execution data
         trajectory = Trajectory(
             id=self._ids.execution_id(),
@@ -337,7 +338,10 @@ class Orchestrator:
 
             # Phase 2: Trigger async experience extraction (doesn't block)
             if self._experience_extractor:
-                asyncio.create_task(self._extract_experiences_async(trajectory))
+                spawn(
+                    self._extract_experiences_async(trajectory),
+                    name=f"extract-experiences-{trajectory_id}",
+                )
 
         except Exception as exc:
             # Don't fail the task if trajectory save fails

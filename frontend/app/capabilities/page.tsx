@@ -4,10 +4,10 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { atlasApi, providersApi } from '@/lib/api/client';
 import { EmptyState } from '@/components/primitives/EmptyState';
-import { ErrorState } from '@/components/primitives/ErrorState';
+import { ErrorRow, ErrorState } from '@/components/primitives/ErrorState';
 
 export default function CapabilitiesPage() {
-  const { data: capabilities, isLoading, isError, error } = useQuery({
+  const { data: capabilities, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["capabilities"],
     queryFn: atlasApi.capabilities,
   });
@@ -19,8 +19,21 @@ export default function CapabilitiesPage() {
         ATLAS / <strong>Capabilities</strong>
       </div>
 
-      {/* Capability × Cost Class Matrix */}
-      {matrix.data && Object.keys(matrix.data.matrix).length > 0 && (
+      {/* Capability × Cost Class Matrix.
+          The `isError` branch is not decoration: `matrix.data &&` alone rendered
+          NOTHING when the request failed, so a broken endpoint was indistinguishable
+          from "no models configured" — a silently missing section rather than an
+          honest one. */}
+      {matrix.isError ? (
+        <section className="panel" style={{ marginBottom: '1.5rem' }}>
+          <div className="section-head">
+            <h2>Capability Coverage Matrix</h2>
+          </div>
+          <div style={{ padding: '0 1rem 0.75rem' }}>
+            <ErrorRow error={matrix.error} onRetry={() => void matrix.refetch()} />
+          </div>
+        </section>
+      ) : matrix.data && Object.keys(matrix.data.matrix).length > 0 && (
         <section className="panel" style={{ marginBottom: '1.5rem' }}>
           <div className="section-head">
             <h2>Capability Coverage Matrix</h2>
@@ -126,7 +139,7 @@ export default function CapabilitiesPage() {
         {isLoading ? (
           <div className="text-[var(--paper-500)] text-sm py-4 px-4">Loading capabilities...</div>
         ) : isError ? (
-          <ErrorState title="Failed to load capabilities" error={error} />
+          <ErrorState title="Failed to load capabilities" error={error} onRetry={() => void refetch()} />
         ) : capabilities && capabilities.length > 0 ? (
           <div className="grid-cols-panel" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem', padding: '1rem' }}>
             {capabilities.map(cap => (

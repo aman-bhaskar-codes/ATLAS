@@ -3,7 +3,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { providersApi, opsApi } from '@/lib/api/client';
-import { ErrorState } from '@/components/primitives/ErrorState';
+import { ErrorRow, ErrorState } from '@/components/primitives/ErrorState';
 
 const costClassColors: Record<string, { bg: string; text: string; border: string }> = {
   local:      { bg: 'rgba(52, 211, 153, 0.08)', text: 'var(--jade-400)',  border: 'var(--jade-600)' },
@@ -43,6 +43,9 @@ export default function ProvidersPage() {
   const quota = useQuery({ queryKey: ['providers-quota'], queryFn: providersApi.quota, refetchInterval: 10000 });
   const models = useQuery({ queryKey: ['ops-models'], queryFn: () => opsApi.models(true) });
 
+  // Only the two queries this page cannot render anything without. The quota and
+  // model-registry failures are reported inside their own sections below, so one
+  // secondary endpoint going down does not blank the provider health grid.
   const err = profile.error ?? health.error;
 
   return (
@@ -50,7 +53,14 @@ export default function ProvidersPage() {
       <div className="crumb mb-6">ATLAS / <strong>Providers &amp; Quotas</strong></div>
 
       {err ? (
-        <ErrorState title="Failed to load providers" error={err} />
+        <ErrorState
+          title="Failed to load providers"
+          error={err}
+          onRetry={() => {
+            void profile.refetch();
+            void health.refetch();
+          }}
+        />
       ) : (
         <>
           {/* Profile Banner */}
@@ -134,8 +144,19 @@ export default function ProvidersPage() {
             )}
           </section>
 
-          {/* Quota Snapshot */}
-          {quota.data?.enabled && (
+          {/* Quota Snapshot.
+              `quota.data?.enabled &&` alone made a failed request look identical to
+              a governor that is switched off — the section just was not there. */}
+          {quota.isError ? (
+            <section className="panel" style={{ marginBottom: '1.5rem' }}>
+              <div className="section-head">
+                <h2>Free-Tier Quotas</h2>
+              </div>
+              <div style={{ padding: '0 1rem 0.75rem' }}>
+                <ErrorRow error={quota.error} onRetry={() => void quota.refetch()} />
+              </div>
+            </section>
+          ) : quota.data?.enabled && (
             <section className="panel" style={{ marginBottom: '1.5rem' }}>
               <div className="section-head">
                 <h2>Free-Tier Quotas</h2>
@@ -177,11 +198,17 @@ export default function ProvidersPage() {
             <div className="section-head">
               <h2>Model Registry</h2>
               <span style={{ fontSize: '0.8rem', color: 'var(--paper-500)' }}>
-                {models.data?.length ?? 0} models configured
+                {/* Not `?? 0`: "0 models configured" is a statement about the config
+                    file, and a failed request is no basis for making it. */}
+                {models.isError ? 'count unavailable' : `${models.data?.length ?? 0} models configured`}
               </span>
             </div>
             {models.isLoading ? (
               <div style={{ padding: '1rem', color: 'var(--paper-500)', fontSize: '0.85rem' }}>Loading models…</div>
+            ) : models.isError ? (
+              <div style={{ padding: '0 1rem 0.75rem' }}>
+                <ErrorRow error={models.error} onRetry={() => void models.refetch()} />
+              </div>
             ) : models.data && models.data.length > 0 ? (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                 <thead>

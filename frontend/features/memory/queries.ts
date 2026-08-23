@@ -1,28 +1,22 @@
 /**
  * React Query hooks for memory REST endpoints.
  * All hooks use polling so the dashboard refreshes when memory changes.
+ *
+ * Requests go through `requestContract` from the shared client, NOT a local
+ * `fetch`. The local copy this replaced threw `new Error("ATLAS 404: …")` and let
+ * `ZodError` escape raw, which meant the retry predicate retried 404s and the
+ * error row rendered zod's own message — internal backend field names — on screen.
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { requestContract } from '@/lib/api/client';
 import {
   EpisodeSchema, FactSchema, KnowledgeDocSchema,
-  KnowledgeChunkSchema, MemoryStatsSchema,
+  KnowledgeChunkSchema, MemoryStatsSchema, PreferencesSchema,
   type Episode, type Fact, type KnowledgeDoc,
-  type KnowledgeChunk, type MemoryStats,
+  type KnowledgeChunk, type MemoryStats, type Preferences,
 } from './contracts';
 import { z } from 'zod';
-
-const API_BASE =
-  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_ATLAS_API_URL)
-    ? process.env.NEXT_PUBLIC_ATLAS_API_URL
-    : 'http://localhost:8000/api/v1';
-
-async function get<T>(path: string, schema: z.ZodType<T>): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`ATLAS ${res.status}: ${await res.text().then(t => t.slice(0, 200))}`);
-  const json: unknown = await res.json();
-  return schema.parse(json);
-}
 
 // ---------------------------------------------------------------------------
 // Stats — dashboard header cards
@@ -31,7 +25,7 @@ async function get<T>(path: string, schema: z.ZodType<T>): Promise<T> {
 export function useMemoryStats() {
   return useQuery<MemoryStats>({
     queryKey: ['memory', 'stats'],
-    queryFn: () => get('/memory/stats', MemoryStatsSchema),
+    queryFn: () => requestContract('/memory/stats', MemoryStatsSchema),
     refetchInterval: 5000,
     staleTime: 2000,
   });
@@ -56,7 +50,7 @@ export function useEpisodes(params: {
 
   return useQuery<Episode[]>({
     queryKey: ['memory', 'episodes', params],
-    queryFn: () => get(`/memory/episodes${query}`, z.array(EpisodeSchema)),
+    queryFn: () => requestContract(`/memory/episodes${query}`, z.array(EpisodeSchema)),
     refetchInterval: 8000,
     staleTime: 3000,
   });
@@ -79,7 +73,7 @@ export function useFacts(params: {
 
   return useQuery<Fact[]>({
     queryKey: ['memory', 'facts', params],
-    queryFn: () => get(`/memory/facts${query}`, z.array(FactSchema)),
+    queryFn: () => requestContract(`/memory/facts${query}`, z.array(FactSchema)),
     refetchInterval: 10000,
     staleTime: 5000,
   });
@@ -92,7 +86,10 @@ export function useFacts(params: {
 export function useKnowledgeDocs(limit = 50, offset = 0) {
   return useQuery<KnowledgeDoc[]>({
     queryKey: ['memory', 'knowledge', 'docs', limit, offset],
-    queryFn: () => get(`/memory/knowledge?limit=${limit}&offset=${offset}`, z.array(KnowledgeDocSchema)),
+    queryFn: () => requestContract(
+      `/memory/knowledge?limit=${limit}&offset=${offset}`,
+      z.array(KnowledgeDocSchema),
+    ),
     refetchInterval: 15000,
     staleTime: 8000,
   });
@@ -101,7 +98,7 @@ export function useKnowledgeDocs(limit = 50, offset = 0) {
 export function useKnowledgeSearch(query: string, limit = 10) {
   return useQuery<KnowledgeChunk[]>({
     queryKey: ['memory', 'knowledge', 'search', query, limit],
-    queryFn: () => get(
+    queryFn: () => requestContract(
       `/memory/knowledge/search?q=${encodeURIComponent(query)}&limit=${limit}`,
       z.array(KnowledgeChunkSchema),
     ),
@@ -115,14 +112,9 @@ export function useKnowledgeSearch(query: string, limit = 10) {
 // ---------------------------------------------------------------------------
 
 export function usePreferences() {
-  return useQuery<Record<string, string>>({
+  return useQuery<Preferences>({
     queryKey: ['memory', 'preferences'],
-    queryFn: async (): Promise<Record<string, string>> => {
-      const res = await fetch(`${API_BASE}/memory/preferences`, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`ATLAS ${res.status}`);
-      const json = await res.json() as Record<string, string>;
-      return json;
-    },
+    queryFn: () => requestContract('/memory/preferences', PreferencesSchema),
     refetchInterval: 15000,
     staleTime: 8000,
   });

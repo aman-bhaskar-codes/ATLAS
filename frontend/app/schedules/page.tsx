@@ -4,11 +4,11 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { opsApi } from '@/lib/api/client';
 import { EmptyState } from '@/components/primitives/EmptyState';
-import { ErrorState } from '@/components/primitives/ErrorState';
+import { ErrorRow, ErrorState } from '@/components/primitives/ErrorState';
 
 export default function SchedulesPage() {
   const queryClient = useQueryClient();
-  const { data: schedules, isLoading, isError, error } = useQuery({
+  const { data: schedules, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["ops-schedules"],
     queryFn: opsApi.schedules,
   });
@@ -30,10 +30,20 @@ export default function SchedulesPage() {
           </span>
         </div>
 
+        {/* A rejected toggle used to be invisible: the button reset, the row kept its
+            old state, and a 403 from the safety engine was indistinguishable from a
+            click that did nothing. Mutations do not auto-retry, so this is the only
+            place the failure can appear. */}
+        {toggle.isError && (
+          <div style={{ padding: '0 1rem' }}>
+            <ErrorRow error={toggle.error} />
+          </div>
+        )}
+
         {isLoading ? (
           <div className="text-[var(--paper-500)] text-sm py-4 px-4">Loading schedules…</div>
         ) : isError ? (
-          <ErrorState title="Failed to load schedules" error={error} />
+          <ErrorState title="Failed to load schedules" error={error} onRetry={() => void refetch()} />
         ) : schedules && schedules.length > 0 ? (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>

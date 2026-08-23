@@ -13,7 +13,7 @@ function healthColor(h: number): string {
 }
 
 export default function ToolsPage() {
-  const { data: tools, isLoading, isError, error } = useQuery({
+  const { data: tools, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["ops-tools"],
     queryFn: opsApi.tools,
   });
@@ -33,7 +33,7 @@ export default function ToolsPage() {
         {isLoading ? (
           <div className="text-[var(--paper-500)] text-sm py-4 px-4">Loading tools…</div>
         ) : isError ? (
-          <ErrorState title="Failed to load tools" error={error} />
+          <ErrorState title="Failed to load tools" error={error} onRetry={() => void refetch()} />
         ) : tools && tools.length > 0 ? (
           <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {tools.map(tool => (

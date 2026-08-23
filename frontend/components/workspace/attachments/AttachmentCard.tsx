@@ -52,14 +52,14 @@ export function AttachmentCard({ attachment }: { attachment: Attachment }) {
               <Loader2 size={10} className="animate-spin" /> Uploading...
             </span>
           )}
-          {attachment.metadata?.ocr_detected && (
+          {Boolean(attachment.metadata?.ocr_detected) && (
             <span className="text-[10px] bg-jade-900/50 text-jade-400 px-1 rounded-sm border border-jade-500/20">
               OCR
             </span>
           )}
-          {attachment.metadata?.lines && (
+          {attachment.metadata?.lines != null && (
             <span className="text-[10px] text-slate-400">
-              {attachment.metadata.lines} lines
+              {String(attachment.metadata.lines)} lines
             </span>
           )}
         </div>

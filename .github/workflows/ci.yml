@@ -3,6 +3,7 @@ on: [push, pull_request]
 
 jobs:
   check:
+    name: backend gates
     runs-on: ubuntu-latest   # Linux: macos extras skipped by env markers
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +22,86 @@ jobs:
       - name: Import boundaries
         run: uv run lint-imports --config importlinter.ini
       - name: Tests + global coverage floor
-        run: uv run pytest --cov=atlas --cov-report=term-missing --cov-report=xml
+        run: >-
+          uv run pytest --cov=atlas --cov-report=term-missing
+          --cov-report=xml --cov-report=html
       - name: Safety coverage floor
         run: uv run coverage report --include="*/atlas/safety/*" --fail-under=70
       - name: Orchestration coverage floor
         run: uv run coverage report --include="*/atlas/orchestration/*" --fail-under=83
       - name: Evaluation regression gate
         run: uv run python scripts/eval_gate.py --answers eval/recorded/answers.json --db /tmp/eval-gate.db
+      # Upload on failure too: a red run is exactly when the report is wanted.
+      - name: Upload backend coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: |
+            coverage.xml
+            htmlcov/
+          retention-days: 14
+          if-no-files-found: warn
+
+  frontend:
+    name: frontend gates + browser E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The E2E suite boots a REAL ATLAS backend (Playwright `webServer` runs
+      # `uv run uvicorn`), so this job needs the Python toolchain as well as Node.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.13"
+      - name: Sync backend deps (needed to boot the API under test)
+        run: uv sync
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      # Pure-logic unit tests (no jsdom): the client's status→error-type mapping and
+      # the retry predicate. Before `build` because a broken contract here is a
+      # one-line failure, while the same bug found via E2E is a 30s timeout.
+      - name: Unit tests
+        working-directory: frontend
+        run: npm run test:unit
+
+      # Type-checks (tsc --noEmit) and compiles every route. Runs before E2E so a
+      # type/compile break is reported as itself, not as a confusing test timeout.
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_ATLAS_API_URL: http://localhost:8730/api/v1
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # CI=true => reuseExistingServer:false, so both servers boot clean here.
+      - name: End-to-end tests (real backend + production frontend build)
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 14
+          if-no-files-found: warn

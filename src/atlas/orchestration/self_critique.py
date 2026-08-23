@@ -10,13 +10,13 @@ caught itself.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from atlas.infra.ids import CorrelationId
 from atlas.infra.logging import get_logger
+from atlas.infra.tasks import spawn
 from atlas.infra.types import ModelCapability, ModelRequest
 from atlas.intelligence.gateway import ModelGateway
 from atlas.orchestration.parser import ResponseParser
@@ -118,15 +118,16 @@ class SelfCritique:
         if self._memory and not observation.ok and learnings:
             from atlas.memory.types import FactKind
 
-            for learning in learnings[:3]:  # cap at 3 per reflection
-                asyncio.create_task(
+            for i, learning in enumerate(learnings[:3]):  # cap at 3 per reflection
+                spawn(
                     self._memory.add_fact(
                         text=learning,
                         kind=FactKind.SKILL,
                         confidence=0.75,  # slightly below auto-commit threshold
                         salience=0.6,
                         sources=(),
-                    )
+                    ),
+                    name=f"critique-fact-{action.tool}-{action.operation}-{i}",
                 )
 
         return ReflectionResult(

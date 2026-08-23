@@ -14,13 +14,13 @@ PHASE 3: Real-time streaming architecture
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from atlas.infra.clock import Clock
 from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
+from atlas.infra.tasks import spawn
 from atlas.memory.types import Episode, EpisodeKind
 
 if TYPE_CHECKING:
@@ -86,7 +86,10 @@ class EpisodicMemory:
 
             # Async: Queue for embedding (doesn't block)
             if self._embedding_worker and episode_id > 0:
-                asyncio.create_task(self._embedding_worker.embed_episode(episode_id, episode.content))
+                spawn(
+                    self._embedding_worker.embed_episode(episode_id, episode.content),
+                    name=f"embed-episode-{episode_id}",
+                )
 
             _log.debug(
                 "episodic.recorded",
@@ -191,7 +194,7 @@ class EpisodicMemory:
         if self._bus and episode_id > 0:
             from atlas.infra.bus import MemoryBusEvent
 
-            asyncio.create_task(
+            spawn(
                 self._bus.publish(
                     "memory",
                     MemoryBusEvent(
@@ -203,7 +206,8 @@ class EpisodicMemory:
                         items=[f"Episode {episode_id}: {ep.kind.value}"],
                         metadata={"salience": ep.salience},
                     ),
-                )
+                ),
+                name=f"publish-episode-stored-{episode_id}",
             )
 
         return episode_id
