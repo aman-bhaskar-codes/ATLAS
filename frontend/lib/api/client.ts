@@ -100,8 +100,8 @@ export function isAtlasError(
  *   `{detail: [{msg, loc}, …]}`    FastAPI request validation (422)
  * Anything else (HTML from a proxy, an empty body) falls back to the raw text.
  */
-function parseErrorBody(text: string): { code: string | null; detail: string } {
-  const fallback = { code: null, detail: text.slice(0, 500) || "no response body" };
+function parseErrorBody(text: string): { code: string | null; detail: string; requestId: string | null } {
+  const fallback = { code: null, detail: text.slice(0, 500) || "no response body", requestId: null };
   if (!text) return fallback;
   let body: unknown;
   try {
@@ -130,7 +130,8 @@ function parseErrorBody(text: string): { code: string | null; detail: string } {
   } else {
     detail = code ?? fallback.detail;
   }
-  return { code, detail: detail.slice(0, 500) };
+  const requestId = typeof record.request_id === "string" ? record.request_id : null;
+  return { code, detail: detail.slice(0, 500), requestId };
 }
 
 /** Validate a payload, converting a ZodError into AtlasContractError. */
@@ -185,14 +186,14 @@ async function throwForStatus(path: string, response: Response): Promise<never> 
   } catch {
     // A body that cannot be read must not mask the status, which is the useful part.
   }
-  const { code, detail } = parseErrorBody(text);
+  const { code, detail, requestId } = parseErrorBody(text);
   throw new AtlasApiError({
     status: response.status,
     code,
     detail,
     // The envelope carries request_id; FastAPI's own errors do not, so fall back to
     // the header the API sets on every response (CORS-exposed for exactly this).
-    requestId: response.headers.get("X-Request-ID"),
+    requestId: response.headers.get("X-Request-ID") ?? requestId,
     path,
   });
 }

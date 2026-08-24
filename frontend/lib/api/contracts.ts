@@ -39,6 +39,13 @@ export const ACTIVE_STATES = new Set<TaskState>(
   TASK_STATES.filter((s) => !TERMINAL_STATES.has(s))
 );
 
+// SafeError matches backend schemas_trust.py SafeError
+export const SafeErrorSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  retryable: z.boolean().default(false),
+});
+
 export const TaskSchema = z.object({
   schema_version: z.number().int().optional().default(1),
   id: z.string(),
@@ -48,10 +55,16 @@ export const TaskSchema = z.object({
   state: z.enum(TASK_STATES),
   ok: z.boolean().nullable(),
   answer: z.string().nullable(),
-  error: z.string().nullable(),
+  error: z.union([z.string(), SafeErrorSchema]).nullable(),
   steps_taken: z.number().int().nonnegative(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
+  // Fields from TaskView that backend sends but were missing here
+  duration_ms: z.number().int().nullable().optional().default(null),
+  approval_count: z.number().int().nonnegative().optional().default(0),
+  artifact_count: z.number().int().nonnegative().optional().default(0),
+  memory_write_count: z.number().int().nonnegative().optional().default(0),
+  retryability: z.enum(["safe", "unsafe", "unknown"]).optional().default("unknown"),
 });
 
 export const TaskEventSchema = z.object({

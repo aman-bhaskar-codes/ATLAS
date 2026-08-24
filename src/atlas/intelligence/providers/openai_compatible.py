@@ -112,11 +112,11 @@ class OpenAICompatibleProvider:
 
         data = r.json()
         text = data["choices"][0]["message"].get("content")
-        if text is None:
+        if not text:
             import logging
 
             logging.getLogger("atlas.intel.provider").warning(
-                f"{self.name} returned content=None. Raw response: {data}"
+                f"{self.name} returned empty text. Raw response: {data}"
             )
             text = ""
         u = data.get("usage", {})

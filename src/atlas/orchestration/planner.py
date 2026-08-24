@@ -63,11 +63,20 @@ class Planner:
                 ),
                 needs_deep_reasoning=caps.needs_reasoning,
                 stakes_tier=Tier.CONFIRM if caps.needs_confirmation else Tier.AUTO,
-                max_tokens=2048,
+                # WHY 6144: qwen3:4b writes verbose chain-of-thought BEFORE the JSON.
+                # 2048 runs out mid-thinking, so no JSON is ever output.
+                max_tokens=6144,
             )
         )
         try:
             data = json.loads(extract_json_object(resp.text))
             return plan_from_llm_json(data)
         except (json.JSONDecodeError, ValueError, KeyError) as exc:
-            raise PlanningError(f"could not parse plan: {exc}. Raw text: {resp.text}") from exc
+            _log.warning(
+                "planning.parse_failed",
+                event_type="orch",
+                correlation_id=str(correlation_id),
+                error=repr(exc),
+                raw_text_len=len(resp.text),
+            )
+            raise PlanningError(f"could not parse plan: {exc}. Raw text: {resp.text[:500]}") from exc

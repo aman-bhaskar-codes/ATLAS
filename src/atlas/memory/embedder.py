@@ -38,10 +38,15 @@ class EmbeddingError(Exception):
 
 
 class OllamaEmbedder:
-    def __init__(self, settings: Settings, timeout_s: float = 30.0) -> None:
+    def __init__(self, settings: Settings, timeout_s: float = 180.0) -> None:
         self._host = settings.ollama_host.rstrip("/")
         self._model = settings.embed_model
-        self._client = httpx.AsyncClient(timeout=timeout_s)
+        # WHY explicit Timeout: bge-m3 needs ~50s to load on first request.
+        # httpx.AsyncClient(timeout=N) sets ALL timeout phases to N seconds.
+        # Using Timeout object makes it explicit and easier to tune per phase.
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=timeout_s, write=10.0, pool=10.0)
+        )
 
     async def embed(self, text: str) -> list[float]:
         try:
@@ -56,7 +61,7 @@ class OllamaEmbedder:
             raise
         except Exception as exc:
             raise EmbeddingError(
-                f"Ollama embedding failed (host={self._host}, model={self._model}): {exc}"
+                f"Ollama embedding failed (host={self._host}, model={self._model}): {type(exc).__name__}({exc})"
             ) from exc
 
     async def close(self) -> None:
