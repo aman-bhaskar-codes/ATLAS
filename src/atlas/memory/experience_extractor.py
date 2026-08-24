@@ -134,7 +134,7 @@ class ExperienceExtractor:
                         }
                     ),
                     needs_deep_reasoning=True,  # This is analytical work, use o1/thinking
-                    max_tokens=1500,
+                    max_tokens=4096,  # qwen3 needs room for thinking + JSON
                 )
             )
 

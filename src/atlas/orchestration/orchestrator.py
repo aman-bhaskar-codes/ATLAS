@@ -212,14 +212,23 @@ class Orchestrator:
                 intent=intent,
             )
 
-            # Phase 2: Save trajectory for durable learning
+            # Phase 2: Save trajectory for durable learning (best-effort,
+            # never fails the task — these are learning operations)
             if self._trajectory_store and result.actions:
-                await self._save_trajectory(
-                    task=task,
-                    plan=plan,
-                    result=result,
-                    goal=goal,
-                )
+                try:
+                    await self._save_trajectory(
+                        task=task,
+                        plan=plan,
+                        result=result,
+                        goal=goal,
+                    )
+                except Exception as exc:
+                    _log.warning(
+                        "trajectory.save_failed",
+                        event_type="orchestration",
+                        task_id=task.id,
+                        error=repr(exc),
+                    )
 
             await self._events.emit(
                 task_id=task.id,
@@ -289,7 +298,7 @@ class Orchestrator:
         if self._llm_tracker:
             try:
                 cost_data = await self._llm_tracker.cost_by_task(task.id)
-                cost_usd = float(cost_data.get("total_cost", 0.0))
+                cost_usd = float(cost_data.get("total_cost") or 0.0)
             except Exception as exc:
                 _log.warning("trajectory.cost_calculation_failed", event_type="orchestration", error=repr(exc))
 

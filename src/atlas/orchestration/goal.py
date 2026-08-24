@@ -155,7 +155,7 @@ class GoalVerifier:
                     required_capabilities=frozenset(
                         {ModelCapability.REASONING, ModelCapability.JSON_GENERATION}
                     ),
-                    max_tokens=512,
+                    max_tokens=2048,
                     temperature=0.0,
                     # Phase 4: judging evidence is DEEP-tier work.
                     needs_deep_reasoning=True,

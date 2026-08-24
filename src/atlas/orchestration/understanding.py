@@ -117,7 +117,10 @@ class IntentExtractor:
                     required_capabilities=frozenset(
                         {ModelCapability.CLASSIFICATION, ModelCapability.JSON_GENERATION}
                     ),
-                    max_tokens=1024,
+                    # WHY 4096: qwen3:4b is a thinking model that writes verbose
+                    # chain-of-thought THEN the JSON. With 1024 tokens it would
+                    # run out mid-thought and return no JSON at all.
+                    max_tokens=4096,
                     temperature=0.0,
                     needs_deep_reasoning=False,
                 )

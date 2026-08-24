@@ -128,7 +128,7 @@ class Replanner:
                     }
                 ),
                 needs_deep_reasoning=True,  # replanning needs more thought
-                max_tokens=2048,
+                max_tokens=6144,  # qwen3:4b needs room for thinking + JSON
             )
         )
 

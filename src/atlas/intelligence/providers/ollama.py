@@ -35,11 +35,29 @@ class OllamaProvider:
             "model": model,
             "messages": [{"role": m.role.value, "content": m.content} for m in messages],
             "stream": stream,
+            # WHY think=False: qwen3 is a thinking model that spends all token budget
+            # on internal reasoning, returning empty content. Disable thinking mode
+            # unless explicitly asked for deep reasoning.
+            "think": False,
             "options": {
                 "num_predict": max_tokens,
                 "temperature": temperature,
             },
         }
+
+        # WHY format=json: qwen3:4b without this writes thousands of tokens of
+        # verbose chain-of-thought BEFORE the JSON, consuming the entire token
+        # budget. Ollama's native JSON mode forces the model to output ONLY valid
+        # JSON, which is exactly what the understanding/planner/critique pipelines
+        # need. We detect JSON-expecting prompts by checking the system message.
+        if not tools:
+            system_text = ""
+            for m in messages:
+                if m.role.value == "system":
+                    system_text += m.content
+            if "JSON" in system_text or "json" in system_text:
+                payload["format"] = "json"
+
         if tools:
             payload["tools"] = [
                 {
@@ -76,6 +94,14 @@ class OllamaProvider:
 
         data = r.json()
         text = data.get("message", {}).get("content", "")
+        if not text:
+            import logging
+            thinking = data.get("message", {}).get("thinking", "")
+            logging.getLogger("atlas.intel.ollama").warning(
+                "ollama returned empty content. done_reason=%s thinking_len=%d",
+                data.get("done_reason"),
+                len(thinking or ""),
+            )
         it, ot = int(data.get("prompt_eval_count", 0)), int(data.get("eval_count", 0))
         tool_calls = self._parse_tool_calls(data)
         # ollama is free

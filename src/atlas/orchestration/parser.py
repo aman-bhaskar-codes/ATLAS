@@ -50,7 +50,39 @@ class ResponseParser:
 
     @staticmethod
     def _json(text: str) -> str:
-        s, e = text.find("{"), text.rfind("}")
-        if s == -1 or e == -1:
-            raise ValueError("no JSON")
-        return text[s : e + 1]
+        """Extract the last valid JSON object from model output.
+
+        WHY search backwards: qwen3:4b writes verbose chain-of-thought that
+        contains pseudo-JSON with // comments, partial JSON snippets, etc.
+        The real answer JSON is always at the END. Searching from the end
+        backwards for a balanced { → } pair that actually parses avoids
+        picking up junk from the thinking preamble.
+        """
+        import re
+
+        # Strip <think>...</think> blocks (qwen3 thinking mode remnants)
+        cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+
+        # Try from the LAST closing brace backwards
+        e = len(cleaned) - 1
+        while e >= 0:
+            e = cleaned.rfind("}", 0, e + 1)
+            if e == -1:
+                break
+            # Find matching opening brace by counting depth
+            depth = 0
+            for i in range(e, -1, -1):
+                if cleaned[i] == "}":
+                    depth += 1
+                elif cleaned[i] == "{":
+                    depth -= 1
+                if depth == 0:
+                    candidate = cleaned[i : e + 1]
+                    try:
+                        json.loads(candidate)
+                        return candidate
+                    except json.JSONDecodeError:
+                        break  # this pair didn't parse, try an earlier '}'
+            e -= 1
+
+        raise ValueError("no valid JSON object found")

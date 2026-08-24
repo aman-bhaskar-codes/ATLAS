@@ -492,7 +492,7 @@ class ReasoningLoop:
                     ),
                     needs_deep_reasoning=(plan.confidence < 0.6),
                     stakes_tier=Tier.CONFIRM if plan.risk.value != "low" else Tier.AUTO,
-                    max_tokens=2048,
+                    max_tokens=6144,
                 )
             ),
             seconds=self._model_timeout_s,

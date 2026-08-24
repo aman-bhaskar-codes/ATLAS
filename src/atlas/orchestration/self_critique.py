@@ -153,7 +153,7 @@ class SelfCritique:
                             ModelCapability.JSON_GENERATION,
                         }
                     ),
-                    max_tokens=512,
+                    max_tokens=2048,
                     temperature=0.0,  # thinking off: fast + cheap
                 )
             )
@@ -190,7 +190,7 @@ class SelfCritique:
                             ModelCapability.JSON_GENERATION,
                         }
                     ),
-                    max_tokens=1024,
+                    max_tokens=2048,
                     temperature=0.1,
                 )
             )
