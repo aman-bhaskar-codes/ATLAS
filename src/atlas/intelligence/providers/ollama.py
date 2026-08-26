@@ -96,6 +96,7 @@ class OllamaProvider:
         text = data.get("message", {}).get("content", "")
         if not text:
             import logging
+
             thinking = data.get("message", {}).get("thinking", "")
             logging.getLogger("atlas.intel.ollama").warning(
                 "ollama returned empty content. done_reason=%s thinking_len=%d",

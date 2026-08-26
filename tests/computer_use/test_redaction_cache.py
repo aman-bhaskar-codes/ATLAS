@@ -44,17 +44,13 @@ def test_redaction_masks_sensitive_values() -> None:
 
 
 def test_redaction_strips_visual_on_sensitive_surface() -> None:
-    snap = make_snapshot().model_copy(
-        update={"sensitive": True, "visual": VisualEvidence(data=b"pixels")}
-    )
+    snap = make_snapshot().model_copy(update={"sensitive": True, "visual": VisualEvidence(data=b"pixels")})
     safe = redact_snapshot(snap)
     assert safe.visual is None
 
 
 def test_redaction_policy_can_allow_visual() -> None:
-    snap = make_snapshot().model_copy(
-        update={"sensitive": True, "visual": VisualEvidence(data=b"pixels")}
-    )
+    snap = make_snapshot().model_copy(update={"sensitive": True, "visual": VisualEvidence(data=b"pixels")})
     safe = redact_snapshot(snap, policy=RedactionPolicy(allow_visual_for_sensitive=True))
     assert safe.visual is not None
 

@@ -55,7 +55,6 @@ class NavigationEngine:
         await provider.reload(provider_session_id, tab_id)
         return await self._builder.build_state(handle)  # type: ignore
 
-
     async def shutdown(self) -> None:
         """Shuts down the URL reputation checker."""
         if self._reputation is not None:

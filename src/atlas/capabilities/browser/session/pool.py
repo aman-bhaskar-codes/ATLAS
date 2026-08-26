@@ -68,3 +68,18 @@ class BrowserPool:
                 del self._sessions[session_id]
                 del self._providers[session_id]
                 _log.info(f"Released browser session {session_id}")
+
+    async def shutdown(self) -> None:
+        """Close all active sessions and release all providers."""
+        async with self._lock:
+            for session_id in list(self._sessions.keys()):
+                provider = self._providers.get(session_id)
+                provider_session_id = self._sessions[session_id].state.session_id
+                if provider is not None:
+                    try:
+                        await provider.close(provider_session_id)
+                    except Exception as exc:
+                        _log.warning(f"Error closing browser session {session_id} during shutdown: {exc}")
+                del self._sessions[session_id]
+                del self._providers[session_id]
+            _log.info("BrowserPool shutdown complete")

@@ -22,6 +22,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import aiosqlite
 import pytest
 
 from atlas.infra import db as db_module
@@ -68,7 +69,7 @@ async def test_a_mid_sequence_failure_records_the_steps_that_succeeded(tmp_path:
     db_path = tmp_path / "atlas.db"
     database = Database(db_path)
 
-    with patch.object(db_module, "_MIGRATIONS", (_M1, _BROKEN, _M3)), pytest.raises(Exception):
+    with patch.object(db_module, "_MIGRATIONS", (_M1, _BROKEN, _M3)), pytest.raises(aiosqlite.Error):
         await database.start()
 
     # The connection survives a failed start (start() raises after connecting), so
@@ -85,7 +86,7 @@ async def test_a_failed_migration_is_resumable_after_a_fix(tmp_path: Path) -> No
     db_path = tmp_path / "atlas.db"
 
     first = Database(db_path)
-    with patch.object(db_module, "_MIGRATIONS", (_M1, _BROKEN, _M3)), pytest.raises(Exception):
+    with patch.object(db_module, "_MIGRATIONS", (_M1, _BROKEN, _M3)), pytest.raises(aiosqlite.Error):
         await first.start()
     await first.stop()
 

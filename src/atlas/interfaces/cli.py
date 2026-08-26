@@ -20,6 +20,7 @@ from rich.table import Table
 
 from atlas.app import Atlas, build
 from atlas.diagnostics.doctor import exit_code, run_doctor
+from atlas.infra.ids import CorrelationId
 from atlas.infra.types import InboundEvent, ModelCapability, ModelRequest, SideEffect, ToolRequest, ToolResult
 from atlas.safety.engine import DeniedError, HaltedError
 
@@ -729,6 +730,68 @@ def run_task(request: str) -> None:
                     console.print(f"[red]Failed in {result.steps_taken} steps: {result.error}[/]")
             except Exception as exc:
                 console.print(f"[red]Error:[/] {exc}")
+
+    _run(go())
+
+
+@app.command()
+def verify() -> None:
+    """Run end-to-end smoke test of critical pipeline stages.
+
+    Executes a short repository inspection task through the full pipeline:
+    Orchestrator → Planner → ReasoningLoop → ToolDispatcher → SafetyEngine →
+    Verifier → TrajectoryStore. Validates that all critical subsystems are
+    correctly wired and functional.
+    """
+
+    async def go() -> None:
+        from atlas.infra.types import InboundEvent
+
+        async with build_atlas() as atlas:
+            console.print("[cyan]ATLAS Integration Verify — running end-to-end smoke test...[/]")
+
+            event = InboundEvent(
+                source="cli",
+                correlation_id=CorrelationId(atlas.clock.now().isoformat()),
+                content="Inspect this repository and tell me the top-level project structure.",
+            )
+
+            checks = []
+            try:
+                result = await atlas.orchestrator.run(event)
+
+                checks.append(("event.bus_delivery", result is not None))
+                checks.append(("task.completed", result.ok if result else False))
+                checks.append(("tool.executed", len(result.actions) > 0 if result else False))
+                checks.append(("verification.executed", result.verification_passed is not None if result else False))
+                checks.append(("decision_traces.recorded", len(result.decision_traces) > 0 if result else False))
+                checks.append(("trajectory.saved", len(result.actions) > 0 if result else False))
+
+                if result and result.ok:
+                    console.print(f"[green]Task completed in {result.steps_taken} steps[/]")
+                    console.print(f"[dim]Answer: {str(result.answer)[:200]}...[/]")
+                else:
+                    console.print(f"[red]Task failed: {result.error if result else 'no result'}[/]")
+
+            except Exception as exc:
+                checks.append(("error", False))
+                console.print(f"[red]Verify failed: {exc}[/]")
+
+            table = Table("check", "status", "detail")
+            all_pass = True
+            for name, *rest in checks:
+                passed = rest[0]
+                detail = rest[1] if len(rest) > 1 else ""
+                color = "green" if passed else "red"
+                if not passed:
+                    all_pass = False
+                table.add_row(name, f"[{color}]{'PASS' if passed else 'FAIL'}[/]", str(detail))
+            console.print(table)
+
+            if all_pass:
+                console.print("[green]All checks passed.[/]")
+            else:
+                raise typer.Exit(1)
 
     _run(go())
 

@@ -84,8 +84,7 @@ class RegressionGate:
 
     def check(self, baseline: ExperimentResult, candidate: ExperimentResult) -> tuple[bool, dict[str, float]]:
         deltas = {
-            key: round(candidate.metrics.get(key, 0.0) - baseline.metrics.get(key, 0.0), 3)
-            for key in baseline.metrics
+            key: round(candidate.metrics.get(key, 0.0) - baseline.metrics.get(key, 0.0), 3) for key in baseline.metrics
         }
         primary_ok = deltas.get(self.primary_metric, 0.0) >= self.min_delta
         no_regression = all(v >= -self.max_regression for v in deltas.values())

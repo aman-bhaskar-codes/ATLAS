@@ -92,9 +92,7 @@ async def build_knowledge_fabric(
 
     pipeline = IngestionPipeline(store, hybrid, ids, clock, embedder=embedder, vector=vectors)
     telemetry = RagTelemetry()
-    synthesizer = AnswerSynthesizer(
-        CitationEngine(), model=GatewaySynthesizer(gateway, ids) if use_models else None
-    )
+    synthesizer = AnswerSynthesizer(CitationEngine(), model=GatewaySynthesizer(gateway, ids) if use_models else None)
     fabric = KnowledgeFabric(
         retriever=hybrid,
         reranker=FeatureReranker(),

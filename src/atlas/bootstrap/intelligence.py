@@ -178,7 +178,7 @@ async def build_intelligence(
                 )
             )
             _log.info("provider.registered", event_type="lifecycle", provider="openrouter", cost_class="hybrid")
-            
+
         if "paid" in profile.allowed_cost_classes:
             if settings.anthropic_api_key:
                 try:
@@ -204,10 +204,11 @@ async def build_intelligence(
 
     # ── Model registry + selection ────────────────────────────────────
     model_registry = ModelRegistry.from_yaml(config_dir / "models.yaml")
-    
+
     if settings.openrouter_api_key:
         try:
             from atlas.intelligence.registry.openrouter_sync import sync_openrouter_free_models
+
             synced = await sync_openrouter_free_models(model_registry)
             _log.info("openrouter_sync.startup", event_type="lifecycle", synced=synced)
         except ImportError:

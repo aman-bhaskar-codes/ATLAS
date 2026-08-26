@@ -63,7 +63,7 @@ _FIXTURE_HTML = """<!DOCTYPE html>
 
 
 _NODE_RE = re.compile(r'^- ([\w]+)(?: "(.*)")?(?: \[(.*)\])?$')
-_ATTR_RE = re.compile(r'(\w+)=([^ \]]+)')
+_ATTR_RE = re.compile(r"(\w+)=([^ \]]+)")
 
 
 def _parse_aria_snapshot(text: str) -> AccessibilityNode | None:
@@ -182,15 +182,11 @@ class MiniBrowserPlatform:
                     text=text,
                     attributes=attrs,
                     bounding_box=(
-                        BoundingBox(x=box["x"], y=box["y"], width=box["width"], height=box["height"])
-                        if box
-                        else None
+                        BoundingBox(x=box["x"], y=box["y"], width=box["width"], height=box["height"]) if box else None
                     ),
                 )
             )
-        dom_hash = hashlib.sha256(
-            str(await page.evaluate("document.body.innerHTML")).encode()
-        ).hexdigest()[:16]
+        dom_hash = hashlib.sha256(str(await page.evaluate("document.body.innerHTML")).encode()).hexdigest()[:16]
         return PageState(
             handle=handle,
             url=page.url,

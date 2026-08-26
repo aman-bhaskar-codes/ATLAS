@@ -151,9 +151,7 @@ async def test_reranker_pipeline_improves_or_keeps_margin(store: FabricStore, cl
     assert rows and rows[0]["state"] == AdapterState.EXPERIMENTAL.value
 
 
-async def test_retriever_pipeline_exports_jsonl_dataset(
-    store: FabricStore, clock: Clock, tmp_path: Path
-) -> None:
+async def test_retriever_pipeline_exports_jsonl_dataset(store: FabricStore, clock: Clock, tmp_path: Path) -> None:
     registry = ModelAdapterRegistry(store, clock)
     report = _report()
     out = tmp_path / "datasets" / "triplets.jsonl"

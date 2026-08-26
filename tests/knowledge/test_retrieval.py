@@ -61,9 +61,7 @@ async def test_lexical_only_retrieval_flags_honest_degradation(
     assert "lexical only" in result.degradation_reason
 
 
-async def test_retrieval_ranks_matching_document_first(
-    pipeline: IngestionPipeline, retriever: HybridRetriever
-) -> None:
+async def test_retrieval_ranks_matching_document_first(pipeline: IngestionPipeline, retriever: HybridRetriever) -> None:
     await pipeline.ingest(source_id="a", source_type=SourceType.WEB_PAGE, content=SAMPLE_DOC)
     await pipeline.ingest(source_id="b", source_type=SourceType.WEB_PAGE, content=SAMPLE_DOC_B)
     result = await retriever.retrieve("bamboo steamer vegetables vitamins", k=10)
@@ -72,9 +70,7 @@ async def test_retrieval_ranks_matching_document_first(
     assert top_doc.title == "Cooking With Steam"
 
 
-async def test_source_type_filter_restricts_candidates(
-    pipeline: IngestionPipeline, retriever: HybridRetriever
-) -> None:
+async def test_source_type_filter_restricts_candidates(pipeline: IngestionPipeline, retriever: HybridRetriever) -> None:
     await pipeline.ingest(source_id="a", source_type=SourceType.LOCAL_FILE, content=SAMPLE_DOC)
     await pipeline.ingest(source_id="b", source_type=SourceType.WEB_PAGE, content=SAMPLE_DOC_B)
     result = await retriever.retrieve("steamer", source_types=("local_file",))
@@ -102,9 +98,7 @@ async def test_dense_leg_participates_via_rrf_and_clears_degradation(
     assert chunk_ids[-1] in top_ids
 
 
-async def test_dense_leg_failure_degrades_but_lexical_survives(
-    pipeline: IngestionPipeline, store: FabricStore
-) -> None:
+async def test_dense_leg_failure_degrades_but_lexical_survives(pipeline: IngestionPipeline, store: FabricStore) -> None:
     await pipeline.ingest(source_id="a", source_type=SourceType.WEB_PAGE, content=SAMPLE_DOC)
     hybrid = HybridRetriever(store, BM25Index(), FakeEmbedder(fail=True), FakeVector(fail=True))
     await hybrid.rebuild()

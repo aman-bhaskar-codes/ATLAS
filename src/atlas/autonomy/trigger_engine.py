@@ -72,7 +72,7 @@ class TriggerEngine:
             req = action.request_template
             if "{{ payload }}" in req:
                 req = req.replace("{{ payload }}", json.dumps(payload))
-            
+
             # Very naive replacement for flat keys for v1
             for k, v in payload.items():
                 if isinstance(v, (str, int, float, bool)):

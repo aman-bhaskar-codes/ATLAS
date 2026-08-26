@@ -23,7 +23,7 @@ from atlas.intelligence.errors import FallbackError, IntelligenceError
 
 if TYPE_CHECKING:
     from atlas.infra.bus import MessageBus
-    
+
 from atlas.infra.bus import Event
 
 

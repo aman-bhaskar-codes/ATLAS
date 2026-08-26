@@ -29,9 +29,7 @@ from atlas.knowledge.domain import (
 from atlas.knowledge.injection import untrusted_prefix
 from atlas.knowledge.router import QueryPlan
 
-_UNTRUSTED_TYPES = frozenset(
-    {SourceType.WEB_PAGE, SourceType.BROWSER_PAGE, SourceType.RSS, SourceType.PUBLIC_API}
-)
+_UNTRUSTED_TYPES = frozenset({SourceType.WEB_PAGE, SourceType.BROWSER_PAGE, SourceType.RSS, SourceType.PUBLIC_API})
 
 _SYSTEM = (
     "You answer STRICTLY from the numbered evidence provided. Cite every factual "
@@ -75,10 +73,7 @@ def build_evidence_context(evidence: list[Evidence], *, max_chars: int = 6000) -
             framing = (
                 untrusted_prefix(ev.source.value, SecurityStatus(ev.provenance.get("security_status", "SAFE"))) + "\n"
             )
-        line = (
-            f"[{i}] {ev.title or ev.uri} ({ev.source.value}, authority={ev.authority:.2f})\n"
-            f"{framing}\"{ev.quote}\"\n"
-        )
+        line = f'[{i}] {ev.title or ev.uri} ({ev.source.value}, authority={ev.authority:.2f})\n{framing}"{ev.quote}"\n'
         if used + len(line) > max_chars:
             break
         lines.append(line)

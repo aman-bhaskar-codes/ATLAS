@@ -142,8 +142,10 @@ async def test_self_question_survives_extraction_failure() -> None:
 @pytest.mark.asyncio
 async def test_unknown_enum_values_fall_back_instead_of_raising() -> None:
     ex, _ = _extractor(
-        ['{"objective":"x","domain":"telepathy","risk":"catastrophic",'
-         '"urgency":"immediately","complexity":"epic","confidence":"very"}']
+        [
+            '{"objective":"x","domain":"telepathy","risk":"catastrophic",'
+            '"urgency":"immediately","complexity":"epic","confidence":"very"}'
+        ]
     )
     intent = await ex.understand("x", _CORR)
     assert intent.domain is TaskDomain.UNKNOWN
@@ -155,8 +157,10 @@ async def test_unknown_enum_values_fall_back_instead_of_raising() -> None:
 @pytest.mark.asyncio
 async def test_non_list_fields_do_not_crash_extraction() -> None:
     ex, _ = _extractor(
-        ['{"objective":"x","domain":"coding","success_criteria":"tests pass",'
-         '"constraints":null,"required_capabilities":{"a":1}}']
+        [
+            '{"objective":"x","domain":"coding","success_criteria":"tests pass",'
+            '"constraints":null,"required_capabilities":{"a":1}}'
+        ]
     )
     intent = await ex.understand("x", _CORR)
     assert intent.success_criteria == ()
@@ -204,9 +208,7 @@ def test_reasoning_levels_are_ordered() -> None:
 
 
 def test_capabilities_projection_needs_no_model_call() -> None:
-    caps = capabilities_from_intent(
-        TaskIntent(objective="x", domain=TaskDomain.FILESYSTEM, risk=RiskLevel.LOW)
-    )
+    caps = capabilities_from_intent(TaskIntent(objective="x", domain=TaskDomain.FILESYSTEM, risk=RiskLevel.LOW))
     assert caps.needs_tools is True
     assert caps.needs_retrieval is True
     assert caps.max_risk is RiskLevel.LOW
@@ -226,9 +228,7 @@ def test_capabilities_projection_requires_confirmation_for_side_effects() -> Non
 
 
 def test_capabilities_projection_pure_conversation_needs_no_tools() -> None:
-    caps = capabilities_from_intent(
-        TaskIntent(objective="say hi", domain=TaskDomain.CONVERSATION)
-    )
+    caps = capabilities_from_intent(TaskIntent(objective="say hi", domain=TaskDomain.CONVERSATION))
     assert caps.needs_tools is False
     assert caps.needs_retrieval is False
 
@@ -236,7 +236,5 @@ def test_capabilities_projection_pure_conversation_needs_no_tools() -> None:
 def test_capabilities_projection_never_forces_cloud() -> None:
     """Egress is the model router's decision under the active cost/privacy
     policy, not the understanding stage's."""
-    caps = capabilities_from_intent(
-        TaskIntent(objective="x", domain=TaskDomain.RESEARCH, risk=RiskLevel.HIGH)
-    )
+    caps = capabilities_from_intent(TaskIntent(objective="x", domain=TaskDomain.RESEARCH, risk=RiskLevel.HIGH))
     assert caps.needs_cloud is False

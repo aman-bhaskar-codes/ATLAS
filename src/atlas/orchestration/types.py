@@ -115,6 +115,8 @@ class TaskResult(BaseModel):
     # Phase 2: Trajectory data for Orchestrator to save
     actions: tuple[Any, ...] = ()  # ActionRecord list
     observations: tuple[Any, ...] = ()  # ObservationRecord list
+    decision_traces: tuple[Any, ...] = ()  # Phase 3: DecisionTrace list
+    failure_records: tuple[Any, ...] = ()  # Phase 3: FailureRecord list
     latency_ms: int = 0  # Total execution time
     tokens_used: int = 0  # Total tokens
     model_calls: int = 0  # LLM invocations

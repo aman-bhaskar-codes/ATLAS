@@ -29,9 +29,7 @@ class NominatimProvider:
         timeout_s: float = 15.0,
         user_agent: str = "ATLAS/0.1.0 (github.com/aman-bhaskar-codes/ATLAS)",
     ) -> None:
-        self._client = httpx.AsyncClient(
-            timeout=timeout_s, follow_redirects=True, headers={"User-Agent": user_agent}
-        )
+        self._client = httpx.AsyncClient(timeout=timeout_s, follow_redirects=True, headers={"User-Agent": user_agent})
 
     async def initialize(self) -> None: ...
     async def authenticate(self) -> None: ...

@@ -35,9 +35,7 @@ async def test_version_is_the_installed_package_version(api_client: AsyncClient)
     body = (await api_client.get("/api/v1/runtime/status")).json()
 
     assert body["version"] == pkg_version("atlas")
-    assert body["version"] != "1.0.0" or pkg_version("atlas") == "1.0.0", (
-        "the hardcoded 1.0.0 is back"
-    )
+    assert body["version"] != "1.0.0" or pkg_version("atlas") == "1.0.0", "the hardcoded 1.0.0 is back"
 
 
 async def test_version_falls_back_to_unknown_not_to_a_plausible_number(tmp_path: Path) -> None:
@@ -58,9 +56,7 @@ async def test_health_reports_every_supervised_component(api_client: AsyncClient
     body = (await api_client.get("/api/v1/runtime/health")).json()
 
     names = [c["name"] for c in body["checks"]]
-    assert len(names) > 1, (
-        f"only {names} reported — the single hardcoded 'database' check is back"
-    )
+    assert len(names) > 1, f"only {names} reported — the single hardcoded 'database' check is back"
     assert len(names) == len(set(names)), "duplicate component names"
     assert all(c["status"] in {"pass", "warn", "fail"} for c in body["checks"])
 
@@ -77,9 +73,7 @@ async def test_health_degrades_when_a_component_fails(tmp_path: Path) -> None:
     async with app_client(tmp_path) as (app, client):
         supervisor = app.state.atlas.runtime_supervisor
         assert supervisor is not None, "the managed startup path must install a supervisor"
-        supervisor._set_component_health(
-            "database", ComponentStatus.UNAVAILABLE, detail="forced down by test"
-        )
+        supervisor._set_component_health("database", ComponentStatus.UNAVAILABLE, detail="forced down by test")
         body = (await client.get("/api/v1/runtime/health")).json()
 
     database = next(c for c in body["checks"] if c["name"] == "database")
@@ -123,8 +117,7 @@ async def test_capabilities_report_real_auth_requirements(api_client: AsyncClien
 
     flags = {c["requires_auth"] for c in caps}
     assert flags != {False}, (
-        "no capability requires auth — email/calendar/contacts declare "
-        "requires_auth=True in bootstrap/capabilities.py"
+        "no capability requires auth — email/calendar/contacts declare requires_auth=True in bootstrap/capabilities.py"
     )
 
 
@@ -137,8 +130,7 @@ async def test_capability_state_is_derived_not_assumed(api_client: AsyncClient) 
         # A capability with providers is ready only if some are healthy.
         if cap["providers"] and not cap["healthy_providers"]:
             assert cap["state"] == "degraded", (
-                f"{cap['name']} has {cap['providers']} providers, none healthy, "
-                f"yet reports {cap['state']!r}"
+                f"{cap['name']} has {cap['providers']} providers, none healthy, yet reports {cap['state']!r}"
             )
 
 

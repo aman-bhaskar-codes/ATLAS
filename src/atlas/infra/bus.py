@@ -13,8 +13,9 @@ import uuid
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
+from aiosqlite import Row
 from pydantic import BaseModel, Field
 
 from atlas.autonomy.events import AtlasEvent, DeliveryStatus, DurabilityTier
@@ -86,6 +87,8 @@ class MessageBus:
 
     async def start(self) -> None:
         if self._task is None:
+            # Recover any events stuck in_flight from a previous crash
+            await self.recover_in_flight()
             self._task = asyncio.create_task(self._process_queue())
 
     def subscribe(self, topic: str, handler: Handler) -> None:
@@ -100,11 +103,23 @@ class MessageBus:
             raise BusError("publish on a closed bus")
 
         now = datetime.now(UTC).isoformat()
-        
+
         event_dict = event.model_dump()
         task_id = event_dict.get("task_id")
         correlation_id = event_dict.get("correlation_id", getattr(event, "correlation_id", "unknown"))
-        
+
+        # Check idempotency: skip if an event with the same key was already delivered
+        dedup_key = getattr(event, "deduplication_key", None)
+        if dedup_key is not None:
+            cur = await self._db.conn.execute(
+                "SELECT delivery_status FROM events WHERE deduplication_key = ? ORDER BY occurred_at ASC LIMIT 1",
+                (dedup_key,),
+            )
+            existing = await cur.fetchone()
+            if existing and existing["delivery_status"] == "delivered":
+                _log.debug("bus.publish.idempotent_skip", event_type="bus", dedup_key=dedup_key)
+                return
+
         atlas_event = AtlasEvent(
             id=str(uuid.uuid4()),
             type=topic,
@@ -113,32 +128,32 @@ class MessageBus:
             causation_id=task_id,
             occurred_at=now,
             payload=event_dict,
-            metadata={"original_type": event.__class__.__name__}
+            metadata={"original_type": event.__class__.__name__},
         )
-        
+
         payload_json = event.model_dump_json()
 
         await self._db.conn.execute(
             """INSERT INTO events(
-                id, type, source, correlation_id, causation_id, deduplication_key, 
-                occurred_at, payload, metadata, schema_version, durability, 
+                id, type, source, correlation_id, causation_id, deduplication_key,
+                occurred_at, payload, metadata, schema_version, durability,
                 delivery_status, attempt_count
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", 
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 atlas_event.id,
                 atlas_event.type,
                 atlas_event.source,
                 atlas_event.correlation_id,
                 atlas_event.causation_id,
-                atlas_event.deduplication_key,
+                dedup_key,
                 atlas_event.occurred_at,
                 payload_json,
                 json.dumps(atlas_event.metadata),
                 atlas_event.schema_version,
                 DurabilityTier.DURABLE.value,
                 DeliveryStatus.PENDING.value,
-                0
-            )
+                0,
+            ),
         )
 
         await self._db.conn.commit()
@@ -160,6 +175,18 @@ class MessageBus:
                     await self._wake_event.wait()
                     continue
 
+                # Atomically claim all events in this batch by transitioning to in_flight.
+                # This prevents duplicate delivery if the dispatcher crashes mid-batch.
+                ids = [row["id"] for row in rows]
+                placeholders = ",".join("?" * len(ids))
+                await self._db.conn.execute(
+                    f"UPDATE events SET delivery_status = 'in_flight', "
+                    f"attempt_count = attempt_count + 1 "
+                    f"WHERE id IN ({placeholders}) AND delivery_status = 'pending'",
+                    ids,
+                )
+                await self._db.conn.commit()
+
                 delivered_ids = []
                 dead_letter_ids = []
                 for row in rows:
@@ -176,6 +203,7 @@ class MessageBus:
                         continue
 
                     handlers = tuple(self._subs.get(topic, ()))
+                    handler_error = False
                     if handlers:
                         results = await asyncio.gather(*(h(event) for h in handlers), return_exceptions=True)
                         for res in results:
@@ -187,31 +215,52 @@ class MessageBus:
                                     correlation_id=event.correlation_id,
                                     error=repr(res),
                                 )
-                    
+                                handler_error = True
+
                     # Global subscribers
                     if self._global_subs:
                         global_results = await asyncio.gather(
-                            *(g(topic, payload_json) for g in self._global_subs), return_exceptions=True
+                            *(g(topic, payload_json) for g in self._global_subs),
+                            return_exceptions=True,
                         )
                         for res in global_results:
                             if isinstance(res, Exception):
                                 _log.warning("bus.global_handler_error", event_type="bus", error=repr(res))
-                                
-                    delivered_ids.append(eid)
+                                handler_error = True
+
+                    # An event is only "delivered" if dispatch succeeded.
+                    # If a handler raised, leave it pending for retry (will be re-claimed next loop).
+                    # Only dead-letter on deserialization failures (non-recoverable) or after max retries.
+                    if handler_error:
+                        # Check if we've exceeded max retries
+                        cur = await self._db.conn.execute("SELECT attempt_count FROM events WHERE id = ?", (eid,))
+                        attempt_row: Row | None = await cur.fetchone()
+                        attempts = attempt_row["attempt_count"] if attempt_row is not None else 1
+                        if attempts >= 5:
+                            dead_letter_ids.append(("max retries exceeded", eid))
+                        # Otherwise leave as pending for retry
+                        else:
+                            # Reset back to pending for retry
+                            await self._db.conn.execute(
+                                "UPDATE events SET delivery_status = 'pending' WHERE id = ?",
+                                (eid,),
+                            )
+                    else:
+                        delivered_ids.append(eid)
 
                 if delivered_ids:
-                    placeholders = ','.join('?' * len(delivered_ids))
+                    placeholders = ",".join("?" * len(delivered_ids))
                     await self._db.conn.execute(
                         f"UPDATE events SET delivery_status = 'delivered' WHERE id IN ({placeholders})",
-                        delivered_ids
+                        delivered_ids,
                     )
                 if dead_letter_ids:
                     for reason, eid in dead_letter_ids:
                         await self._db.conn.execute(
                             "UPDATE events SET delivery_status = 'dead_letter', dead_letter_reason = ? WHERE id = ?",
-                            (reason, eid)
+                            (reason, eid),
                         )
-                        
+
                 if delivered_ids or dead_letter_ids:
                     await self._db.conn.commit()
             except Exception as e:
@@ -229,3 +278,40 @@ class MessageBus:
             except asyncio.CancelledError:
                 pass
         self._subs.clear()
+
+    async def recover_in_flight(self) -> int:
+        """Reset any in_flight events back to pending (crash recovery).
+
+        Call this on startup before starting _process_queue to ensure events
+        that were claimed but not delivered due to a crash are retried.
+
+        Returns the count of recovered events.
+        """
+        cur = await self._db.conn.execute(
+            "UPDATE events SET delivery_status = 'pending' WHERE delivery_status = 'in_flight'",
+        )
+        await self._db.conn.commit()
+        recovered = cur.rowcount or 0
+        if recovered:
+            _log.info("bus.recovered_in_flight", event_type="bus", count=recovered)
+        return recovered
+
+    async def replay_dead_letter(self, event_id: str) -> str | None:
+        """Move a dead-lettered event back to pending for reprocessing.
+
+        Returns the topic of the replayed event, or None if not found.
+        """
+        cur = await self._db.conn.execute(
+            "SELECT type FROM events WHERE id = ? AND delivery_status = 'dead_letter'",
+            (event_id,),
+        )
+        row = await cur.fetchone()
+        if row is None:
+            return None
+        await self._db.conn.execute(
+            "UPDATE events SET delivery_status = 'pending', attempt_count = 0, dead_letter_reason = NULL WHERE id = ?",
+            (event_id,),
+        )
+        await self._db.conn.commit()
+        self._wake_event.set()
+        return cast("str", row["type"])

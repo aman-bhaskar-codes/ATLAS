@@ -16,23 +16,24 @@ from pydantic import BaseModel, ConfigDict, Field
 class DurabilityTier(enum.StrEnum):
     """Event durability tiers."""
 
-    EPHEMERAL = "ephemeral"      # In-memory only (or drops if not processed)
-    DURABLE = "durable"          # Persisted until delivered to all subscribers
-    REPLAYABLE = "replayable"    # Persisted indefinitely for historical replay
+    EPHEMERAL = "ephemeral"  # In-memory only (or drops if not processed)
+    DURABLE = "durable"  # Persisted until delivered to all subscribers
+    REPLAYABLE = "replayable"  # Persisted indefinitely for historical replay
 
 
 class DeliveryStatus(enum.StrEnum):
     """Event delivery statuses."""
 
     PENDING = "pending"
+    IN_FLIGHT = "in_flight"
     DELIVERED = "delivered"
     DEAD_LETTER = "dead_letter"
 
 
 class AtlasEvent(BaseModel):
     """Canonical event model for the entire ATLAS platform.
-    
-    All system events (tasks, safety, routing, memory) are encapsulated 
+
+    All system events (tasks, safety, routing, memory) are encapsulated
     within this unified schema before entering the MessageBus.
     """
 

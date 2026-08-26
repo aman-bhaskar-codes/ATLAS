@@ -100,6 +100,7 @@ ignore = []
 "src/atlas/interfaces/api/routes_providers.py" = ["ASYNC240", "RUF002"]  # small local config read; × in docstring is intentional
 "src/atlas/knowledge/document_processor.py" = ["ASYNC240"]  # local file ingestion, sub-ms path ops
 "src/atlas_cli/main.py" = ["ASYNC240"]  # CLI reads local config.yaml, sub-ms path ops
+"src/atlas/tools/filesystem.py" = ["ASYNC240"]  # local filesystem ops, sub-ms path operations
 
 [tool.mypy]
 python_version = "3.13"

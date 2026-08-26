@@ -60,9 +60,7 @@ class LiveBridge:
         self._timeout = timeout_s
 
     async def gather(self, query: str) -> list[IngestionJob]:
-        results = await asyncio.gather(
-            *(self._search_one(p, query) for p in self._providers), return_exceptions=False
-        )
+        results = await asyncio.gather(*(self._search_one(p, query) for p in self._providers), return_exceptions=False)
         jobs: list[IngestionJob] = []
         for provider, items in results:
             source_type = _PROVIDER_SOURCE.get(provider, SourceType.WEB_PAGE)

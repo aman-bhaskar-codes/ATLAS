@@ -104,9 +104,7 @@ async def discover_free_models(client: httpx.AsyncClient | None = None) -> FreeM
             await c.aclose()
 
 
-def diff_against_static(
-    discovery: FreeModelDiscovery, known_provider_model_ids: set[str]
-) -> dict[str, list[str]]:
+def diff_against_static(discovery: FreeModelDiscovery, known_provider_model_ids: set[str]) -> dict[str, list[str]]:
     """Compare a discovery against static models.yaml entries.
 
     Returns {'appeared': [...], 'disappeared': [...]} of OpenRouter model ids.

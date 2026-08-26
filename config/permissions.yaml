@@ -1,8 +1,13 @@
 version: 1
 
 allowed_paths:
-  read:  ["~/projects/**", "~/atlas/inbox/**"]
-  write: ["~/projects/scratch/**", "~/atlas/outbox/**"]
+  read:
+    - "~/projects/**"
+    - "~/atlas/inbox/**"
+    - "~/Agentic & AI Agent Projects/**"
+    - "~/Agentic*/**"
+    - "~/**"   # reads are tier-0; path is a belt-and-suspenders guard, not the primary gate
+  write: ["~/projects/scratch/**", "~/atlas/outbox/**", "/tmp/atlas/**"]
 
 allowed_commands:
   read_only:   ["ls", "cat", "grep", "find", "git status", "git log", "git diff"]
@@ -25,18 +30,25 @@ safety:
 
 rules:
   # ── Filesystem ──
-  - {tool: filesystem, operation: read,      tier: 0}
-  - {tool: filesystem, operation: search,    tier: 0}
-  - {tool: filesystem, operation: write,     tier: 1, constraint: within_write_paths}
-  - {tool: filesystem, operation: delete,    tier: 2}
-  - {tool: filesystem, operation: overwrite, tier: 2}
+  - {tool: filesystem, operation: read,             tier: 0}
+  - {tool: filesystem, operation: search,           tier: 0}
+  - {tool: filesystem, operation: list,             tier: 0}  # model-generated
+  - {tool: filesystem, operation: list_directory,   tier: 0}  # model-generated
+  - {tool: filesystem, operation: inspect,          tier: 0}  # model-generated
+  - {tool: filesystem, operation: stat,             tier: 0}  # model-generated
+  - {tool: filesystem, operation: tree,             tier: 0}  # model-generated
+  - {tool: filesystem, operation: "read_*",         tier: 0}  # any read_X variant
+  - {tool: filesystem, operation: write,            tier: 1, constraint: within_write_paths}
+  - {tool: filesystem, operation: delete,           tier: 2}
+  - {tool: filesystem, operation: overwrite,        tier: 2}
   # ── Knowledge / Memory ──
   - {tool: knowledge,  operation: search,    tier: 0}
   - {tool: memory,     operation: search,    tier: 0}
   - {tool: memory,     operation: store,     tier: 0}
   # ── Shell ──
-  - {tool: shell,      operation: read_only,   tier: 1, constraint: cmd_in_read_only}
-  - {tool: shell,      operation: side_effect, tier: 2, constraint: cmd_in_side_effect}
+  - {tool: shell, operation: read_only,   tier: 1, constraint: cmd_in_read_only}
+  - {tool: shell, operation: "read*",     tier: 1, constraint: cmd_in_read_only}
+  - {tool: shell, operation: side_effect, tier: 2, constraint: cmd_in_side_effect}
   # ── Code Execution (sandboxed) ──
   - {tool: code,       operation: execute,   tier: 1}
   # ── HTTP Requests ──

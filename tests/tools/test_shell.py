@@ -1,37 +1,101 @@
+"""Tests for shell tool."""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
 import pytest
 
-from atlas.safety.sandbox_docker import SandboxResult  # type: ignore
-from atlas.tools.shell import ShellTool
+from atlas.safety.sandbox import SandboxResult
+from atlas.tools.shell import _SHELL_OPERATORS, ShellTool
 
 
-class DummySandbox:
-    async def run(
-        self,
-        command: list[str],
-        *,
-        mounts: dict[str, str],
-        network: bool = False,
-        timeout_s: float = 60.0,
-        stdin: bytes | None = None,
-    ) -> SandboxResult:
-        return SandboxResult(0, "mock_out", "", 10)
+class TestShellOperators:
+    def test_operators_is_frozenset(self) -> None:
+        assert isinstance(_SHELL_OPERATORS, frozenset)
+
+    def test_contains_pipe(self) -> None:
+        assert "|" in _SHELL_OPERATORS
+
+    def test_contains_semicolon(self) -> None:
+        assert ";" in _SHELL_OPERATORS
 
 
-@pytest.mark.asyncio
-async def test_shell_tool_allowlist() -> None:
-    tool = ShellTool(read_only=["ls"], side_effect=["git"], sandbox=DummySandbox(), mounts={})
+class TestShellTool:
+    @pytest.fixture
+    def mock_sandbox(self) -> AsyncMock:
+        return AsyncMock()
 
-    # Valid read-only
-    res1 = await tool.execute({"command": "ls -la"})
-    assert res1.ok
-    assert len(res1.side_effects) == 0
+    @pytest.fixture
+    def tool(self, mock_sandbox: AsyncMock) -> ShellTool:
+        return ShellTool(
+            read_only=["ls", "cat", "echo"],
+            side_effect=["git", "npm"],
+            sandbox=mock_sandbox,
+            mounts={},
+        )
 
-    # Valid side-effect
-    res2 = await tool.execute({"command": "git commit -m msg"})
-    assert res2.ok
-    assert len(res2.side_effects) == 1
+    def test_dry_run(self, tool: ShellTool) -> None:
+        result = tool.dry_run({"command": "ls -la"})
+        assert "ls -la" in result
 
-    # Invalid
-    res3 = await tool.execute({"command": "curl evil.com"})
-    assert not res3.ok
-    assert "not allowlisted" in (res3.error or "")
+    def test_allowed_command(self, tool: ShellTool) -> None:
+        allowed, reason = tool._allowed("ls -la /tmp")
+        assert allowed is True
+        assert reason == ""
+
+    def test_disallowed_executable(self, tool: ShellTool) -> None:
+        allowed, reason = tool._allowed("rm -rf /")
+        assert allowed is False
+        assert "not in allowlist" in reason
+
+    def test_shell_operator_rejected(self, tool: ShellTool) -> None:
+        allowed, reason = tool._allowed("ls | grep foo")
+        assert allowed is False
+        assert "not permitted" in reason
+
+    def test_empty_command_rejected(self, tool: ShellTool) -> None:
+        allowed, reason = tool._allowed("")
+        assert allowed is False
+        assert "empty" in reason
+
+    def test_unparseable_command(self, tool: ShellTool) -> None:
+        allowed, reason = tool._allowed("echo 'unclosed quote")
+        assert allowed is False
+        assert "unparseable" in reason
+
+    @pytest.mark.asyncio
+    async def test_execute_empty_command(self, tool: ShellTool) -> None:
+        result = await tool.execute({"command": ""})
+        assert result.ok is False
+        assert "no command" in result.error
+
+    @pytest.mark.asyncio
+    async def test_execute_disallowed_command(self, tool: ShellTool) -> None:
+        result = await tool.execute({"command": "rm -rf /"})
+        assert result.ok is False
+        assert "not allowlisted" in result.error
+
+    @pytest.mark.asyncio
+    async def test_execute_allowed_command(self, tool: ShellTool, mock_sandbox: AsyncMock) -> None:
+        mock_sandbox.run.return_value = SandboxResult(
+            exit_code=0,
+            stdout_tail="output",
+            stderr_tail="",
+            duration_ms=100,
+        )
+        result = await tool.execute({"command": "ls -la"})
+        assert result.ok is True
+        assert result.output["exit_code"] == 0
+
+    @pytest.mark.asyncio
+    async def test_execute_network_command(self, tool: ShellTool, mock_sandbox: AsyncMock) -> None:
+        mock_sandbox.run.return_value = SandboxResult(
+            exit_code=0,
+            stdout_tail="cloned",
+            stderr_tail="",
+            duration_ms=5000,
+        )
+        await tool.execute({"command": "git clone https://example.com/repo.git"})
+        call_args = mock_sandbox.run.call_args
+        assert call_args[1]["network"] is True

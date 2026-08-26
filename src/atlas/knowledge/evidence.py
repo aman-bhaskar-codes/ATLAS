@@ -171,9 +171,8 @@ class ClaimExtractor:
             if len(s) < 25 or len(s) > 500:
                 continue
             low = s.lower()
-            factual = (
-                bool(_NUMBER_RE.search(s))
-                or any(c in low for c in (" is ", " are ", " was ", " were ", " requires ", " supports "))
+            factual = bool(_NUMBER_RE.search(s)) or any(
+                c in low for c in (" is ", " are ", " was ", " were ", " requires ", " supports ")
             )
             if not factual:
                 continue
@@ -212,11 +211,7 @@ class ClaimVerifier:
                     best = overlap
                     best_ev = ev
             if best >= self._threshold and best_ev is not None:
-                status = (
-                    ClaimStatus.DISPUTED
-                    if best_ev.evidence_id in contradiction_ev_ids
-                    else ClaimStatus.SUPPORTED
-                )
+                status = ClaimStatus.DISPUTED if best_ev.evidence_id in contradiction_ev_ids else ClaimStatus.SUPPORTED
                 verified.append(
                     claim.model_copy(
                         update={

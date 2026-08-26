@@ -76,9 +76,7 @@ async def test_embedding_unavailable_ingestion_and_retrieval_survive(
 
 
 # ── 2. vector store unavailable ─────────────────────────────────────────
-async def test_vector_store_unavailable_falls_back_to_lexical(
-    pipeline: IngestionPipeline, store: FabricStore
-) -> None:
+async def test_vector_store_unavailable_falls_back_to_lexical(pipeline: IngestionPipeline, store: FabricStore) -> None:
     await pipeline.ingest(source_id="a.md", source_type=SourceType.LOCAL_FILE, content=FACT_DOC)
     hybrid = HybridRetriever(store, BM25Index(), FakeEmbedder(), FakeVector(fail=True))
     await hybrid.rebuild()
@@ -177,12 +175,14 @@ class FastProvider:
     name = "fast"
 
     async def search(self, query: str, *, limit: int) -> list[FakeItem]:
-        return [FakeItem(title="Quick", snippet="Steam engines drove the industrial revolution forward.", url="https://f.test/1")]
+        return [
+            FakeItem(
+                title="Quick", snippet="Steam engines drove the industrial revolution forward.", url="https://f.test/1"
+            )
+        ]
 
 
-async def test_source_timeout_is_cut_off_while_others_continue(
-    pipeline: IngestionPipeline, store: FabricStore
-) -> None:
+async def test_source_timeout_is_cut_off_while_others_continue(pipeline: IngestionPipeline, store: FabricStore) -> None:
     bridge = LiveBridge([SlowProvider(), FastProvider()], pipeline, timeout_s=0.05)
     jobs = await bridge.gather("steam engines")
     assert len(jobs) == 1  # slow provider dropped; fast provider served

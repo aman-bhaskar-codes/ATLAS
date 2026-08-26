@@ -35,23 +35,26 @@ _log = get_logger("atlas.agents.hierarchical")
 
 class PlanLevel(Enum):
     """Planning abstraction levels."""
-    STRATEGIC = "strategic"      # High-level goals (what to achieve)
-    TACTICAL = "tactical"        # Mid-level strategies (how to achieve)
+
+    STRATEGIC = "strategic"  # High-level goals (what to achieve)
+    TACTICAL = "tactical"  # Mid-level strategies (how to achieve)
     OPERATIONAL = "operational"  # Low-level actions (exact steps)
 
 
 class DecompositionStrategy(Enum):
     """Strategies for task decomposition."""
-    SEQUENTIAL = "sequential"          # Linear dependency chain
-    PARALLEL = "parallel"              # Independent subtasks
-    CONDITIONAL = "conditional"        # Branching based on conditions
-    ITERATIVE = "iterative"            # Repeated refinement
-    HIERARCHICAL = "hierarchical"      # Nested decomposition
+
+    SEQUENTIAL = "sequential"  # Linear dependency chain
+    PARALLEL = "parallel"  # Independent subtasks
+    CONDITIONAL = "conditional"  # Branching based on conditions
+    ITERATIVE = "iterative"  # Repeated refinement
+    HIERARCHICAL = "hierarchical"  # Nested decomposition
 
 
 @dataclass
 class PlanningContext:
     """Context for planning decisions."""
+
     task_id: str
     correlation_id: str
     objective: str
@@ -67,6 +70,7 @@ class PlanningContext:
 @dataclass
 class TaskDecomposition:
     """Result of decomposing a task into subtasks."""
+
     parent_task: str
     level: PlanLevel
     strategy: DecompositionStrategy
@@ -82,6 +86,7 @@ class TaskDecomposition:
 @dataclass
 class RefinedPlan:
     """A refined, executable plan with metadata."""
+
     plan: Plan
     level: PlanLevel
     decomposition_path: list[str]
@@ -94,7 +99,7 @@ class RefinedPlan:
 
 class HierarchicalPlanner:
     """Advanced multi-level task planner with adaptive decomposition."""
-    
+
     def __init__(
         self,
         *,
@@ -113,10 +118,10 @@ class HierarchicalPlanner:
         self._parallel = parallel_decomposition
         self._consensus = consensus_voting
         self._min_confidence = min_confidence_threshold
-        
+
         # Cache for similar tasks
         self._decomposition_cache: dict[str, TaskDecomposition] = {}
-        
+
         # Statistics for adaptive planning
         self._stats: dict[str, Any] = {
             "decompositions": 0,
@@ -131,11 +136,11 @@ class HierarchicalPlanner:
         ctx: PlanningContext,
     ) -> RefinedPlan:
         """Generate a refined, executable plan from a planning context.
-        
+
         This is the main entry point for hierarchical planning.
         """
         start_time = time.perf_counter()
-        
+
         _log.info(
             "hierarchical_planning.started",
             event_type="planning",
@@ -143,24 +148,24 @@ class HierarchicalPlanner:
             objective=ctx.objective[:100],
             complexity=ctx.complexity_threshold,
         )
-        
+
         # Step 1: Strategic decomposition (what to achieve)
         strategic = await self._decompose_strategic(ctx)
-        
+
         # Step 2: Tactical decomposition (how to achieve)
         tactical_decompositions = await self._decompose_tactical(ctx, strategic)
-        
+
         # Step 3: Operational decomposition (exact steps)
         operational_plans = await self._decompose_operational(ctx, tactical_decompositions)
-        
+
         # Step 4: Select best plan (with consensus voting if enabled)
         final_plan = await self._select_best_plan(ctx, operational_plans)
-        
+
         # Step 5: Generate fallback plans
         fallbacks = await self._generate_fallbacks(ctx, final_plan)
-        
+
         duration = time.perf_counter() - start_time
-        
+
         _log.info(
             "hierarchical_planning.completed",
             event_type="planning",
@@ -169,7 +174,7 @@ class HierarchicalPlanner:
             steps=len(final_plan.plan.steps),
             duration_ms=int(duration * 1000),
         )
-        
+
         return RefinedPlan(
             plan=final_plan.plan,
             level=PlanLevel.OPERATIONAL,
@@ -186,7 +191,7 @@ class HierarchicalPlanner:
         ctx: PlanningContext,
     ) -> TaskDecomposition:
         """Strategic level: Identify high-level goals and success criteria."""
-        
+
         prompt = f"""Analyze this task and identify high-level strategic goals:
 
 TASK: {ctx.objective}
@@ -195,7 +200,7 @@ CONSTRAINTS:
 {json.dumps(ctx.constraints, indent=2)}
 
 AVAILABLE CAPABILITIES:
-{', '.join(ctx.available_tools)}
+{", ".join(ctx.available_tools)}
 
 Provide:
 1. 2-4 strategic goals (what must be achieved)
@@ -227,9 +232,9 @@ Output as JSON:
                 temperature=0.3,
             )
         )
-        
+
         data = self._parse_json_response(resp.text)
-        
+
         return TaskDecomposition(
             parent_task=ctx.objective,
             level=PlanLevel.STRATEGIC,
@@ -242,7 +247,7 @@ Output as JSON:
                     operation=None,
                     args={},
                     depends_on=(),
-                    )
+                )
                 for g in data.get("goals", [])
             ],
             confidence=data.get("confidence", 0.7),
@@ -257,13 +262,10 @@ Output as JSON:
         strategic: TaskDecomposition,
     ) -> list[TaskDecomposition]:
         """Tactical level: Convert goals into actionable strategies."""
-        
+
         if self._parallel and len(strategic.subtasks) > 1:
             # Decompose goals in parallel
-            tasks = [
-                self._decompose_single_tactical(ctx, strategic, step)
-                for step in strategic.subtasks
-            ]
+            tasks = [self._decompose_single_tactical(ctx, strategic, step) for step in strategic.subtasks]
             return list(await asyncio.gather(*tasks))
         else:
             # Sequential decomposition
@@ -280,7 +282,7 @@ Output as JSON:
         goal_step: PlanStep,
     ) -> TaskDecomposition:
         """Decompose a single strategic goal into tactical steps."""
-        
+
         prompt = f"""Convert this strategic goal into tactical steps:
 
 STRATEGIC GOAL: {goal_step.intent}
@@ -288,7 +290,7 @@ STRATEGIC GOAL: {goal_step.intent}
 OVERALL OBJECTIVE: {ctx.objective}
 
 AVAILABLE TOOLS:
-{chr(10).join(f'- {tool}' for tool in ctx.available_tools)}
+{chr(10).join(f"- {tool}" for tool in ctx.available_tools)}
 
 Generate 2-5 tactical steps that achieve this goal.
 Each step should be specific and actionable.
@@ -320,9 +322,9 @@ Output as JSON:
                 temperature=0.4,
             )
         )
-        
+
         data = self._parse_json_response(resp.text)
-        
+
         return TaskDecomposition(
             parent_task=goal_step.intent,
             level=PlanLevel.TACTICAL,
@@ -349,13 +351,13 @@ Output as JSON:
         tactical_decompositions: list[TaskDecomposition],
     ) -> list[RefinedPlan]:
         """Operational level: Convert tactical steps into executable actions."""
-        
+
         plans = []
-        
+
         for tactical in tactical_decompositions:
             plan = await self._create_operational_plan(ctx, tactical)
             plans.append(plan)
-        
+
         # Merge all operational plans into final plans
         return plans
 
@@ -365,9 +367,9 @@ Output as JSON:
         tactical: TaskDecomposition,
     ) -> RefinedPlan:
         """Create an operational plan from tactical decomposition."""
-        
+
         operational_steps = []
-        
+
         for _idx, tactical_step in enumerate(tactical.subtasks):
             # Convert tactical step to operational step(s)
             if tactical_step.tool:
@@ -377,7 +379,7 @@ Output as JSON:
                 # Need to determine tool and operation
                 determined = await self._determine_tool_operation(ctx, tactical_step)
                 operational_steps.extend(determined)
-        
+
         plan = Plan(
             goal=ctx.objective,
             steps=tuple(operational_steps),
@@ -385,7 +387,7 @@ Output as JSON:
             risk=RiskLevel.LOW,
             confidence=tactical.confidence,
         )
-        
+
         return RefinedPlan(
             plan=plan,
             level=PlanLevel.OPERATIONAL,
@@ -403,14 +405,14 @@ Output as JSON:
         step: PlanStep,
     ) -> list[PlanStep]:
         """Determine which tool and operation to use for a step."""
-        
+
         # Use LLM to determine tool
         prompt = f"""Determine the best tool and operation for this step:
 
 STEP: {step.intent}
 
 AVAILABLE TOOLS:
-{chr(10).join(f'- {tool}' for tool in ctx.available_tools)}
+{chr(10).join(f"- {tool}" for tool in ctx.available_tools)}
 
 Output as JSON:
 {{
@@ -432,9 +434,9 @@ Output as JSON:
                 temperature=0.2,
             )
         )
-        
+
         data = self._parse_json_response(resp.text)
-        
+
         return [
             PlanStep(
                 index=0,
@@ -451,20 +453,20 @@ Output as JSON:
         plans: list[RefinedPlan],
     ) -> RefinedPlan:
         """Select the best plan using consensus voting or confidence scoring."""
-        
+
         if not plans:
             raise ValueError("No plans generated")
-        
+
         if len(plans) == 1:
             return plans[0]
-        
+
         if self._consensus:
             # Consensus voting: select plan with highest agreement
             scored = []
             for plan in plans:
                 score = await self._score_plan(ctx, plan)
                 scored.append((plan, score))
-            
+
             scored.sort(key=lambda x: x[1], reverse=True)
             return scored[0][0]
         else:
@@ -478,14 +480,14 @@ Output as JSON:
         plan: RefinedPlan,
     ) -> float:
         """Score a plan based on multiple criteria."""
-        
+
         scores = {
             "confidence": plan.total_confidence * 0.3,
             "complexity": (1.0 - len(plan.plan.steps) / 20.0) * 0.2,  # Prefer fewer steps
             "cost": (1.0 - min(plan.estimated_cost / 1.0, 1.0)) * 0.2,  # Prefer lower cost
             "risk": (1.0 - sum(plan.risk_assessment.values()) / len(plan.risk_assessment)) * 0.3,
         }
-        
+
         return sum(scores.values())
 
     async def _generate_fallbacks(
@@ -494,9 +496,9 @@ Output as JSON:
         primary: RefinedPlan,
     ) -> list[Plan]:
         """Generate fallback plans for risk mitigation."""
-        
+
         fallbacks = []
-        
+
         # Generate a simpler fallback
         if len(primary.plan.steps) > 2:
             simpler = Plan(
@@ -507,7 +509,7 @@ Output as JSON:
                 confidence=primary.total_confidence * 0.8,
             )
             fallbacks.append(simpler)
-        
+
         # Generate a parallel fallback (if sequential)
         if primary.level == PlanLevel.OPERATIONAL:
             # Try to make steps more parallel
@@ -529,7 +531,7 @@ Output as JSON:
                 confidence=primary.total_confidence * 0.7,
             )
             fallbacks.append(parallel)
-        
+
         return fallbacks
 
     def _assess_risks(
@@ -537,19 +539,19 @@ Output as JSON:
         plan: Plan,
     ) -> dict[str, float]:
         """Assess risks for a plan."""
-        
+
         risks = {}
-        
+
         # Complexity risk
         risks["complexity"] = min(len(plan.steps) / 10.0, 1.0)
-        
+
         # Dependency risk
         dep_count = sum(len(s.depends_on) for s in plan.steps)
         risks["dependencies"] = min(dep_count / 10.0, 1.0)
-        
+
         # Tool availability risk
         risks["tool_availability"] = 0.1  # Low risk if tools are registered
-        
+
         return risks
 
     def _strategic_system_prompt(self) -> str:
@@ -577,7 +579,7 @@ Be specific and practical."""
         text: str,
     ) -> dict[str, Any]:
         """Parse JSON from LLM response with error handling."""
-        
+
         try:
             # Find JSON boundaries
             start = text.find("{")

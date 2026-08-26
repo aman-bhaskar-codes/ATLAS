@@ -171,6 +171,11 @@ class EventBroadcaster:
                 pass
         self._tasks.clear()
 
+        # Unsubscribe from the bus to prevent handler leaks after shutdown
+        for topic in ["orchestrator", "safety", "planning", "memory", "tool"]:
+            if self._broadcast_handler in self._bus._subs.get(topic, []):
+                self._bus._subs[topic].remove(self._broadcast_handler)
+
 
 class MemoryBroadcaster:
     """Subscribes ONLY to the 'memory' bus topic and broadcasts MemoryEvents
@@ -225,3 +230,7 @@ class MemoryBroadcaster:
             except asyncio.CancelledError:
                 pass
         self._tasks.clear()
+
+        # Unsubscribe from the bus to prevent handler leaks after shutdown
+        if self._broadcast_handler in self._bus._subs.get("memory", []):
+            self._bus._subs["memory"].remove(self._broadcast_handler)

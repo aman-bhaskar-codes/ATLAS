@@ -161,9 +161,7 @@ async def test_runner_resumes_prior_session_and_skips_visited_sources(
     assert second.stop_reason
 
 
-async def test_runner_empty_corpus_stops_quickly(
-    retriever: HybridRetriever, store: FabricStore
-) -> None:
+async def test_runner_empty_corpus_stops_quickly(retriever: HybridRetriever, store: FabricStore) -> None:
     runner = ResearchRunner(retriever, store, FakeIdGen(), FakeClock(NOW))
     outcome = await runner.start("anything at all about obscure topics")
     assert outcome.candidates == ()

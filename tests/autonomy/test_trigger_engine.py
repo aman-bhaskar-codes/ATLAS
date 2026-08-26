@@ -35,7 +35,7 @@ async def test_trigger_engine_matches(trigger_engine, registry):
     payload1 = json.dumps({"status": "failed", "metadata": {"fatal": True}, "error": "OOM"})
     await trigger_engine.handle_event("test.event", payload1)
     assert trigger_engine._execute.call_count == 1
-    
+
     # Reset
     trigger_engine._execute.reset_mock()
 
@@ -57,7 +57,7 @@ def test_trigger_matches_logic():
         trigger_config=TriggerConfig(event_type="*", filters={"issue.labels": "bug"}),
         action_config=ActionConfig(type="task", request_template="Fix"),
     )
-    
+
     # Matches wildcard topic and dot notation
     assert engine._matches("any.topic", {"issue": {"labels": "bug", "title": "Crash"}}, auto) is True
     assert engine._matches("any.topic", {"issue": {"labels": "feature"}}, auto) is False

@@ -35,15 +35,17 @@ _log = get_logger("atlas.agents.tool_orchestration")
 
 class ExecutionMode(Enum):
     """Tool execution modes."""
-    SEQUENTIAL = "sequential"          # One after another
-    PARALLEL = "parallel"               # All at once
-    PIPELINE = "pipeline"              # Output feeds next input
-    CONDITIONAL = "conditional"        # Based on conditions
-    RETRY_WITH_FALLBACK = "fallback"   # Try primary, fallback on failure
+
+    SEQUENTIAL = "sequential"  # One after another
+    PARALLEL = "parallel"  # All at once
+    PIPELINE = "pipeline"  # Output feeds next input
+    CONDITIONAL = "conditional"  # Based on conditions
+    RETRY_WITH_FALLBACK = "fallback"  # Try primary, fallback on failure
 
 
 class ToolCategory(Enum):
     """Categories of tools."""
+
     FILESYSTEM = "filesystem"
     NETWORK = "network"
     COMPUTATION = "computation"
@@ -57,6 +59,7 @@ class ToolCategory(Enum):
 @dataclass
 class ToolRequirement:
     """A requirement for a tool to accomplish a subtask."""
+
     requirement_id: str
     description: str
     category: ToolCategory | None
@@ -69,6 +72,7 @@ class ToolRequirement:
 @dataclass
 class ToolBinding:
     """A binding between a requirement and a specific tool."""
+
     requirement_id: str
     tool_name: str
     operation: str
@@ -82,6 +86,7 @@ class ToolBinding:
 @dataclass
 class ExecutionPlan:
     """A plan for executing multiple tools."""
+
     plan_id: str
     bindings: list[ToolBinding]
     execution_mode: ExecutionMode
@@ -95,6 +100,7 @@ class ExecutionPlan:
 @dataclass
 class ToolExecutionResult:
     """Result from executing a tool."""
+
     requirement_id: str
     tool_name: str
     success: bool
@@ -106,7 +112,7 @@ class ToolExecutionResult:
 
 class DynamicToolOrchestrator:
     """Advanced dynamic tool orchestration system."""
-    
+
     def __init__(
         self,
         *,
@@ -125,13 +131,13 @@ class DynamicToolOrchestrator:
         self._max_parallel = max_parallel_tools
         self._cost_opt = cost_optimization
         self._time_opt = time_optimization
-        
+
         # Tool health tracking
         self._tool_health: dict[str, float] = {}
-        
+
         # Execution history for learning
         self._execution_history: dict[str, list[ToolExecutionResult]] = {}
-        
+
         # Statistics
         self._stats = {
             "total_orchestrations": 0,
@@ -149,7 +155,7 @@ class DynamicToolOrchestrator:
         constraints: dict[str, Any] | None = None,
     ) -> ExecutionPlan:
         """Create an optimal execution plan for a task.
-        
+
         Process:
         1. Analyze task to identify tool requirements
         2. Discover and bind tools to requirements
@@ -157,33 +163,33 @@ class DynamicToolOrchestrator:
         4. Generate fallback plans
         5. Return executable plan
         """
-        
+
         _log.info(
             "tool_orchestration.started",
             event_type="orchestration",
             task=task_description[:100],
         )
-        
+
         # Step 1: Identify requirements
         requirements = await self._identify_requirements(task_description)
-        
+
         # Step 2: Bind tools to requirements
         bindings = await self._bind_tools(
             requirements,
             available_tools or list(self._registry.registered().keys()),
             constraints or {},
         )
-        
+
         # Step 3: Determine execution mode and ordering
         execution_mode, parallel_groups = self._determine_execution_mode(
             requirements,
             bindings,
             constraints or {},
         )
-        
+
         # Step 4: Calculate estimates
         total_duration, total_cost, confidence = self._calculate_estimates(bindings)
-        
+
         # Step 5: Generate fallback plans
         fallbacks = await self._generate_fallback_plans(
             task_description,
@@ -191,7 +197,7 @@ class DynamicToolOrchestrator:
             bindings,
             constraints or {},
         )
-        
+
         plan = ExecutionPlan(
             plan_id=self._ids.execution_id(),
             bindings=bindings,
@@ -202,9 +208,9 @@ class DynamicToolOrchestrator:
             confidence=confidence,
             fallback_plans=fallbacks,
         )
-        
+
         self._stats["total_orchestrations"] += 1
-        
+
         _log.info(
             "tool_orchestration.plan_created",
             event_type="orchestration",
@@ -213,7 +219,7 @@ class DynamicToolOrchestrator:
             tools=len(bindings),
             duration_ms=total_duration,
         )
-        
+
         return plan
 
     async def execute_plan(
@@ -222,7 +228,7 @@ class DynamicToolOrchestrator:
         context: dict[str, Any],
     ) -> list[ToolExecutionResult]:
         """Execute a plan with the specified context."""
-        
+
         results: list[ToolExecutionResult] = []
 
         if plan.execution_mode == ExecutionMode.PARALLEL:
@@ -232,10 +238,10 @@ class DynamicToolOrchestrator:
             results = await self._execute_pipeline(plan, context)
         else:
             results = await self._execute_sequential(plan, context)
-        
+
         # Check if we need fallback
         failures = [r for r in results if not r.success]
-        
+
         if failures and plan.fallback_plans:
             _log.warning(
                 "tool_orchestration.fallback_triggered",
@@ -244,29 +250,25 @@ class DynamicToolOrchestrator:
                 failures=len(failures),
             )
             self._stats["fallback_invocations"] += 1
-            
+
             # Try fallback plan
             fallback_results = await self.execute_plan(
                 plan.fallback_plans[0],
                 context,
             )
             results.extend(fallback_results)
-        
+
         # Update statistics
         success_count = sum(1 for r in results if r.success)
         if success_count == len(results):
             self._stats["successful_executions"] += 1
-        
+
         total_duration = sum(r.duration_ms for r in results)
         total_cost = sum(r.cost_usd for r in results)
         n = self._stats["total_orchestrations"]
-        self._stats["avg_duration_ms"] = (
-            self._stats["avg_duration_ms"] * (n - 1) + total_duration
-        ) / n
-        self._stats["avg_cost_usd"] = (
-            self._stats["avg_cost_usd"] * (n - 1) + total_cost
-        ) / n
-        
+        self._stats["avg_duration_ms"] = (self._stats["avg_duration_ms"] * (n - 1) + total_duration) / n
+        self._stats["avg_cost_usd"] = (self._stats["avg_cost_usd"] * (n - 1) + total_cost) / n
+
         return results
 
     async def _identify_requirements(
@@ -274,13 +276,13 @@ class DynamicToolOrchestrator:
         task_description: str,
     ) -> list[ToolRequirement]:
         """Identify tool requirements from task description."""
-        
+
         prompt = f"""Analyze this task and identify the tool requirements:
 
 TASK: {task_description}
 
 AVAILABLE TOOL CATEGORIES:
-{chr(10).join(f'- {c.value}' for c in ToolCategory)}
+{chr(10).join(f"- {c.value}" for c in ToolCategory)}
 
 For each requirement, specify:
 1. What needs to be done
@@ -314,16 +316,16 @@ Output JSON:
                 temperature=0.3,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         requirements = []
         for idx, req_data in enumerate(data.get("requirements", [])):
             try:
                 category = ToolCategory(req_data.get("category", "computation"))
             except ValueError:
                 category = None
-            
+
             requirement = ToolRequirement(
                 requirement_id=f"req_{idx}",
                 description=req_data.get("description", ""),
@@ -334,7 +336,7 @@ Output JSON:
                 constraints=req_data.get("constraints", {}),
             )
             requirements.append(requirement)
-        
+
         return requirements
 
     async def _bind_tools(
@@ -344,9 +346,9 @@ Output JSON:
         constraints: dict[str, Any],
     ) -> list[ToolBinding]:
         """Bind each requirement to a specific tool."""
-        
+
         bindings = []
-        
+
         for req in requirements:
             binding = await self._bind_single_requirement(
                 req,
@@ -354,7 +356,7 @@ Output JSON:
                 constraints,
             )
             bindings.append(binding)
-        
+
         return bindings
 
     async def _bind_single_requirement(
@@ -364,18 +366,18 @@ Output JSON:
         constraints: dict[str, Any],
     ) -> ToolBinding:
         """Bind a single requirement to the best matching tool."""
-        
+
         # Get tool catalog
         # catalog() returns a formatted string summary; list tools directly
-        
+
         prompt = f"""Select the best tool for this requirement:
 
 REQUIREMENT: {requirement.description}
-CAPABILITIES NEEDED: {', '.join(requirement.capabilities)}
-CATEGORY: {requirement.category.value if requirement.category else 'any'}
+CAPABILITIES NEEDED: {", ".join(requirement.capabilities)}
+CATEGORY: {requirement.category.value if requirement.category else "any"}
 
 AVAILABLE TOOLS:
-{chr(10).join(f'- {name}' for name in available_tools[:20])}
+{chr(10).join(f"- {name}" for name in available_tools[:20])}
 
 Select the best tool and specify how to use it.
 
@@ -401,9 +403,9 @@ Output JSON:
                 temperature=0.2,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         return ToolBinding(
             requirement_id=requirement.requirement_id,
             tool_name=data.get("tool", available_tools[0] if available_tools else ""),
@@ -421,17 +423,17 @@ Output JSON:
         constraints: dict[str, Any],
     ) -> tuple[ExecutionMode, list[list[str]]]:
         """Determine optimal execution mode and grouping."""
-        
+
         # Build dependency graph
         dependencies: dict[str, list[str]] = {}
         for binding in bindings:
             dependencies[binding.requirement_id] = binding.prerequisites
-        
+
         # Find parallel groups using topological sort
         parallel_groups: list[list[str]] = []
         remaining = set(b.requirement_id for b in bindings)
         completed: set[str] = set()
-        
+
         while remaining:
             # Find all requirements with no pending dependencies
             ready = []
@@ -439,19 +441,19 @@ Output JSON:
                 prereqs = dependencies.get(req_id, [])
                 if all(p in completed for p in prereqs):
                     ready.append(req_id)
-            
+
             if not ready:
                 # Circular dependency - just add remaining
                 ready = list(remaining)
-            
+
             # Limit parallelism
             if len(ready) > self._max_parallel:
-                ready = ready[:self._max_parallel]
-            
+                ready = ready[: self._max_parallel]
+
             parallel_groups.append(ready)
             completed.update(ready)
             remaining -= set(ready)
-        
+
         # Determine mode
         if len(parallel_groups) == 1 and len(parallel_groups[0]) > 1:
             mode = ExecutionMode.PARALLEL
@@ -461,7 +463,7 @@ Output JSON:
             mode = ExecutionMode.PIPELINE
         else:
             mode = ExecutionMode.SEQUENTIAL
-        
+
         return mode, parallel_groups
 
     def _calculate_estimates(
@@ -469,18 +471,18 @@ Output JSON:
         bindings: list[ToolBinding],
     ) -> tuple[int, float, float]:
         """Calculate total duration, cost, and confidence."""
-        
+
         # Use health-adjusted estimates
         total_duration = 0
         total_cost = 0.0
         total_confidence = 1.0
-        
+
         for binding in bindings:
             health = self._tool_health.get(binding.tool_name, 1.0)
             total_duration += binding.estimated_duration_ms
             total_cost += binding.estimated_cost_usd
             total_confidence *= binding.confidence * health
-        
+
         return total_duration, total_cost, total_confidence
 
     async def _generate_fallback_plans(
@@ -491,16 +493,16 @@ Output JSON:
         constraints: dict[str, Any],
     ) -> list[ExecutionPlan]:
         """Generate alternative fallback plans."""
-        
+
         fallbacks = []
-        
+
         # Strategy 1: Use different tools if available
         alternative_bindings = await self._find_alternative_bindings(
             requirements,
             bindings,
             constraints,
         )
-        
+
         if alternative_bindings:
             mode, groups = self._determine_execution_mode(
                 requirements,
@@ -508,7 +510,7 @@ Output JSON:
                 constraints,
             )
             duration, cost, conf = self._calculate_estimates(alternative_bindings)
-            
+
             fallback = ExecutionPlan(
                 plan_id=self._ids.execution_id(),
                 bindings=alternative_bindings,
@@ -519,7 +521,7 @@ Output JSON:
                 confidence=conf,
             )
             fallbacks.append(fallback)
-        
+
         # Strategy 2: Simpler sequential execution
         sequential = ExecutionPlan(
             plan_id=self._ids.execution_id(),
@@ -531,7 +533,7 @@ Output JSON:
             confidence=min(b.confidence for b in bindings) * 0.9,
         )
         fallbacks.append(sequential)
-        
+
         return fallbacks
 
     async def _find_alternative_bindings(
@@ -541,16 +543,13 @@ Output JSON:
         constraints: dict[str, Any],
     ) -> list[ToolBinding] | None:
         """Find alternative tool bindings."""
-        
+
         alternatives = []
-        
+
         for orig in original_bindings:
             # Try to find a different tool
-            other_tools = [
-                t for t in self._registry.registered().keys()
-                if t != orig.tool_name
-            ]
-            
+            other_tools = [t for t in self._registry.registered().keys() if t != orig.tool_name]
+
             if other_tools:
                 req = next(
                     (r for r in requirements if r.requirement_id == orig.requirement_id),
@@ -565,12 +564,12 @@ Output JSON:
                     if alt_binding.tool_name != orig.tool_name:
                         alternatives.append(alt_binding)
                         continue
-            
+
             alternatives.append(orig)
-        
+
         if alternatives == original_bindings:
             return None
-        
+
         return alternatives
 
     async def _execute_parallel(
@@ -579,33 +578,35 @@ Output JSON:
         context: dict[str, Any],
     ) -> list[ToolExecutionResult]:
         """Execute tools in parallel."""
-        
+
         all_results = []
-        
+
         for group in plan.parallel_groups:
             # Execute this group in parallel
             tasks = []
             for binding in plan.bindings:
                 if binding.requirement_id in group:
                     tasks.append(self._execute_single_tool(binding, context))
-            
+
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             for result in results:
                 if isinstance(result, BaseException):
                     # Convert exception to result
-                    all_results.append(ToolExecutionResult(
-                        requirement_id="unknown",
-                        tool_name="unknown",
-                        success=False,
-                        output=None,
-                        error=str(result),
-                        duration_ms=0,
-                        cost_usd=0.0,
-                    ))
+                    all_results.append(
+                        ToolExecutionResult(
+                            requirement_id="unknown",
+                            tool_name="unknown",
+                            success=False,
+                            output=None,
+                            error=str(result),
+                            duration_ms=0,
+                            cost_usd=0.0,
+                        )
+                    )
                 elif isinstance(result, ToolExecutionResult):
                     all_results.append(result)
-        
+
         return all_results
 
     async def _execute_sequential(
@@ -614,21 +615,21 @@ Output JSON:
         context: dict[str, Any],
     ) -> list[ToolExecutionResult]:
         """Execute tools sequentially."""
-        
+
         results = []
-        
+
         for binding in plan.bindings:
             result = await self._execute_single_tool(binding, context)
             results.append(result)
-            
+
             # Update context with output
             if result.success:
                 context[result.requirement_id] = result.output
-            
+
             # Stop on failure if not using fallbacks
             if not result.success and not plan.fallback_plans:
                 break
-        
+
         return results
 
     async def _execute_pipeline(
@@ -637,20 +638,20 @@ Output JSON:
         context: dict[str, Any],
     ) -> list[ToolExecutionResult]:
         """Execute tools as a pipeline (output feeds next input)."""
-        
+
         results = []
         current_input = context
-        
+
         for binding in plan.bindings:
             result = await self._execute_single_tool(binding, current_input)
             results.append(result)
-            
+
             if result.success:
                 # Feed output to next stage
                 current_input = {**current_input, **result.output}
             else:
                 break
-        
+
         return results
 
     async def _execute_single_tool(
@@ -659,10 +660,11 @@ Output JSON:
         context: dict[str, Any],
     ) -> ToolExecutionResult:
         """Execute a single tool."""
-        
+
         import time
+
         start = time.perf_counter()
-        
+
         try:
             tool = self._registry.get(binding.tool_name)
             if not tool:
@@ -675,17 +677,17 @@ Output JSON:
                     duration_ms=0,
                     cost_usd=0.0,
                 )
-            
+
             # Prepare args
             args = {}
             for arg_name, source_field in binding.args_mapping.items():
                 args[arg_name] = context.get(source_field)
-            
+
             # Execute (Tool.execute is always async per the base protocol)
             output = await tool.execute(args)
-            
+
             duration_ms = int((time.perf_counter() - start) * 1000)
-            
+
             return ToolExecutionResult(
                 requirement_id=binding.requirement_id,
                 tool_name=binding.tool_name,
@@ -695,10 +697,10 @@ Output JSON:
                 duration_ms=duration_ms,
                 cost_usd=binding.estimated_cost_usd,
             )
-        
+
         except Exception as e:
             duration_ms = int((time.perf_counter() - start) * 1000)
-            
+
             return ToolExecutionResult(
                 requirement_id=binding.requirement_id,
                 tool_name=binding.tool_name,
@@ -715,9 +717,9 @@ Output JSON:
         success: bool,
     ) -> None:
         """Update tool health based on execution result."""
-        
+
         current = self._tool_health.get(tool_name, 1.0)
-        
+
         # Exponential moving average
         alpha = 0.1
         if success:
@@ -730,7 +732,7 @@ Output JSON:
         text: str,
     ) -> dict[str, Any]:
         """Parse JSON from text."""
-        
+
         try:
             start = text.find("{")
             end = text.rfind("}") + 1
@@ -742,7 +744,7 @@ Output JSON:
 
     def get_statistics(self) -> dict[str, Any]:
         """Get orchestration statistics."""
-        
+
         return {
             **self._stats,
             "tool_health": dict(self._tool_health),

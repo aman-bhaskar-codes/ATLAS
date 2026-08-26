@@ -171,9 +171,7 @@ class IngestionPipeline:
         document_id = make_document_id(source_type, uri or source_id, now)
         report = scan_for_injection(parsed.text)
         if report.status is SecurityStatus.BLOCKED:
-            _log.warning(
-                "fabric.ingest_blocked", event_type="knowledge", uri=uri, flags=list(report.flags)
-            )
+            _log.warning("fabric.ingest_blocked", event_type="knowledge", uri=uri, flags=list(report.flags))
             return _fail(job, f"blocked: injection severity {report.severity}", FailureCause.BROWSER_EXTRACTION_FAILURE)
 
         auth = authority if authority is not None else max(domain_authority(uri), AUTHORITY_FLOOR.get(source_type, 0.5))

@@ -23,6 +23,7 @@ from atlas.intelligence.governance.quota_governor import (
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
+
 def _spec(
     id: str = "test-model",
     provider: str = "test",
@@ -53,6 +54,7 @@ PAID = _spec("deepseek-v4", "deepseek", CostClass.PAID, 0.95, usd_in=0.14, usd_o
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. Policy Enums
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestCostClass:
     def test_local_value(self):
@@ -98,12 +100,17 @@ class TestPrivacyClass:
 # 2. ModelSpec cost_class integration
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestModelSpecCostClass:
     def test_default_is_paid(self):
         """Safe default: if cost_class is omitted, assume PAID."""
         spec = ModelSpec(
-            id="x", provider="x", provider_model="x",
-            context_length=1, usd_per_1m_input=0, usd_per_1m_output=0,
+            id="x",
+            provider="x",
+            provider_model="x",
+            context_length=1,
+            usd_per_1m_input=0,
+            usd_per_1m_output=0,
         )
         assert spec.cost_class == CostClass.PAID
 
@@ -120,6 +127,7 @@ class TestModelSpecCostClass:
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. Constraints with policy fields
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestConstraints:
     def test_default_is_unrestricted(self):
@@ -138,6 +146,7 @@ class TestConstraints:
 # ═══════════════════════════════════════════════════════════════════════════
 # 4. FreeQuotaGovernor
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestFreeQuotaGovernor:
     def test_no_config_no_block(self):
@@ -201,6 +210,7 @@ class TestFreeQuotaGovernor:
 # 5. Profile System
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestProfiles:
     def test_local_free_defaults(self):
         p = resolve_profile("local_free")
@@ -240,6 +250,7 @@ class TestProfiles:
 # 6. Error Taxonomy
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestErrorTaxonomy:
     def test_quota_exhausted_is_switchable(self):
         err = QuotaExhaustedError("test-provider", "quota hit")
@@ -256,9 +267,11 @@ class TestErrorTaxonomy:
 # 7. Embedding Failover
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestEmbeddingFailover:
     def test_embedding_error_exists(self):
         from atlas.memory.embedder import EmbeddingError
+
         err = EmbeddingError("test")
         assert str(err) == "test"
 

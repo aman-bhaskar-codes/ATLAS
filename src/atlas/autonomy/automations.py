@@ -17,23 +17,27 @@ from atlas.infra.errors import NotFoundError
 
 def now_iso8601() -> str:
     from datetime import UTC, datetime
+
     return datetime.now(UTC).isoformat()
 
 
 class TriggerConfig(BaseModel):
     """Defines the conditions under which an automation triggers."""
+
     event_type: str
     filters: dict[str, Any] = Field(default_factory=dict)
 
 
 class ActionConfig(BaseModel):
     """Defines the action to take when triggered."""
+
     type: str  # e.g., "task"
     request_template: str
 
 
 class Automation(BaseModel):
     """The core Automation model."""
+
     id: str = Field(default_factory=lambda: f"auto_{uuid.uuid4().hex[:12]}")
     name: str
     description: str
@@ -82,7 +86,7 @@ class AutomationRegistry:
         if enabled_only:
             query += " WHERE enabled = 1"
         query += " ORDER BY created_ts DESC"
-        
+
         cur = await self.db.conn.execute(query)
         rows = await cur.fetchall()
         return [self._row_to_auto(row) for row in rows]

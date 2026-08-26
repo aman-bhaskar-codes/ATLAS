@@ -33,12 +33,8 @@ async def test_orchestrator_imports():
 @pytest.mark.asyncio
 async def test_inbound_event_creation():
     """Test creating an InboundEvent."""
-    event = InboundEvent(
-        correlation_id="test_001",
-        source="cli",
-        content="test command"
-    )
-    
+    event = InboundEvent(correlation_id="test_001", source="cli", content="test command")
+
     assert event.correlation_id == "test_001"
     assert event.source == "cli"
     assert event.content == "test command"

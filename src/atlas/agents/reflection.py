@@ -33,29 +33,32 @@ _log = get_logger("atlas.agents.reflection")
 
 class ReflectionType(Enum):
     """Types of reflection."""
-    POST_EXECUTION = "post_execution"          # After task completion
-    MID_EXECUTION = "mid_execution"            # During task execution
-    ERROR_ANALYSIS = "error_analysis"           # After failure
-    SUCCESS_ANALYSIS = "success_analysis"      # After success
-    STRATEGY_REVIEW = "strategy_review"         # Review chosen approach
-    ALTERNATIVE_GENERATION = "alternative"     # Generate alternatives
+
+    POST_EXECUTION = "post_execution"  # After task completion
+    MID_EXECUTION = "mid_execution"  # During task execution
+    ERROR_ANALYSIS = "error_analysis"  # After failure
+    SUCCESS_ANALYSIS = "success_analysis"  # After success
+    STRATEGY_REVIEW = "strategy_review"  # Review chosen approach
+    ALTERNATIVE_GENERATION = "alternative"  # Generate alternatives
 
 
 class ImprovementCategory(Enum):
     """Categories of improvements."""
-    PLANNING = "planning"              # Better task decomposition
-    EXECUTION = "execution"            # More efficient execution
-    REASONING = "reasoning"           # Better logical deduction
-    TOOL_USAGE = "tool_usage"          # More effective tool use
-    COMMUNICATION = "communication"    # Clearer communication
+
+    PLANNING = "planning"  # Better task decomposition
+    EXECUTION = "execution"  # More efficient execution
+    REASONING = "reasoning"  # Better logical deduction
+    TOOL_USAGE = "tool_usage"  # More effective tool use
+    COMMUNICATION = "communication"  # Clearer communication
     ERROR_HANDLING = "error_handling"  # Better error recovery
     RESOURCE_MANAGEMENT = "resources"  # Better cost/time management
-    QUALITY = "quality"               # Higher quality outputs
+    QUALITY = "quality"  # Higher quality outputs
 
 
 @dataclass
 class Reflection:
     """A reflection on a decision or execution."""
+
     reflection_id: str
     reflection_type: ReflectionType
     task_id: str
@@ -74,6 +77,7 @@ class Reflection:
 @dataclass
 class SelfCritique:
     """A self-critique of performance."""
+
     critique_id: str
     task_id: str
     strengths: list[str]
@@ -88,6 +92,7 @@ class SelfCritique:
 @dataclass
 class Improvement:
     """An identified improvement opportunity."""
+
     improvement_id: str
     category: ImprovementCategory
     description: str
@@ -102,7 +107,7 @@ class Improvement:
 
 class ReflectionEngine:
     """Advanced self-reflection and improvement system."""
-    
+
     def __init__(
         self,
         *,
@@ -119,17 +124,17 @@ class ReflectionEngine:
         self._depth = reflection_depth
         self._track_improvements = improvement_tracking
         self._auto_apply = auto_apply_learnings
-        
+
         # Reflection history
         self._reflections: list[Reflection] = []
         self._max_reflections = 5000
-        
+
         # Improvements registry
         self._improvements: dict[str, Improvement] = {}
-        
+
         # Learning cache
         self._learnings: dict[str, list[str]] = {}
-        
+
         # Statistics
         self._stats = {
             "total_reflections": 0,
@@ -147,17 +152,17 @@ class ReflectionEngine:
         outcome: str,
     ) -> Reflection:
         """Reflect on a completed execution."""
-        
+
         _log.info(
             "reflection.started",
             event_type="reflection",
             task_id=task_id,
             outcome=outcome[:50],
         )
-        
+
         # Determine reflection type
         reflection_type = self._determine_reflection_type(execution_trace)
-        
+
         # Generate reflection
         reflection = await self._generate_reflection(
             task_id=task_id,
@@ -166,24 +171,24 @@ class ReflectionEngine:
             outcome=outcome,
             reflection_type=reflection_type,
         )
-        
+
         # Store reflection
         self._reflections.append(reflection)
         if len(self._reflections) > self._max_reflections:
-            self._reflections = self._reflections[-self._max_reflections:]
-        
+            self._reflections = self._reflections[-self._max_reflections :]
+
         # Extract improvements
         if self._track_improvements:
             improvements = await self._extract_improvements(reflection)
             for improvement in improvements:
                 self._improvements[improvement.improvement_id] = improvement
                 self._stats["improvements_identified"] += 1
-        
+
         # Store learnings
         await self._store_learnings(reflection)
-        
+
         self._stats["total_reflections"] += 1
-        
+
         _log.info(
             "reflection.completed",
             event_type="reflection",
@@ -191,7 +196,7 @@ class ReflectionEngine:
             lessons=len(reflection.lessons_learned),
             improvements=len(reflection.improvements),
         )
-        
+
         return reflection
 
     async def mid_execution_reflection(
@@ -200,7 +205,7 @@ class ReflectionEngine:
         current_state: dict[str, Any],
     ) -> Reflection:
         """Reflect during execution to adjust course."""
-        
+
         prompt = f"""Reflect on current execution state and suggest adjustments:
 
 TASK ID: {task_id}
@@ -233,9 +238,9 @@ Output JSON:
                 temperature=0.4,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         reflection = Reflection(
             reflection_id=self._ids.execution_id(),
             reflection_type=ReflectionType.MID_EXECUTION,
@@ -250,7 +255,7 @@ Output JSON:
             reasoning=json.dumps(data.get("issues", [])),
             improvements=data.get("adjustments", []),
         )
-        
+
         return reflection
 
     async def self_critique(
@@ -260,7 +265,7 @@ Output JSON:
         execution_trace: dict[str, Any],
     ) -> SelfCritique:
         """Generate a comprehensive self-critique."""
-        
+
         prompt = f"""Perform a thorough self-critique of this execution:
 
 TASK: {task_description}
@@ -300,9 +305,9 @@ Output JSON:
                 temperature=0.3,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         critique = SelfCritique(
             critique_id=self._ids.execution_id(),
             task_id=task_id,
@@ -314,7 +319,7 @@ Output JSON:
             quality_issues=data.get("quality_issues", []),
             recommendations=data.get("recommendations", []),
         )
-        
+
         return critique
 
     async def generate_alternatives(
@@ -325,7 +330,7 @@ Output JSON:
         num_alternatives: int = 3,
     ) -> list[str]:
         """Generate alternative approaches that might have worked better."""
-        
+
         prompt = f"""Generate {num_alternatives} alternative approaches for this task:
 
 TASK: {task_description}
@@ -360,15 +365,12 @@ Output JSON:
                 temperature=0.8,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        alternatives = [
-            alt.get("approach", "")
-            for alt in data.get("alternatives", [])
-        ]
-        
+        alternatives = [alt.get("approach", "") for alt in data.get("alternatives", [])]
+
         self._stats["alternative_approaches_generated"] += len(alternatives)
-        
+
         return alternatives
 
     async def get_improvement_priorities(
@@ -376,14 +378,14 @@ Output JSON:
         limit: int = 10,
     ) -> list[Improvement]:
         """Get prioritized list of improvements to work on."""
-        
+
         # Sort by priority (impact / effort)
         sorted_improvements = sorted(
             self._improvements.values(),
-            key=lambda imp: (imp.impact_estimate / max(imp.effort_estimate, 0.1)),
+            key=lambda imp: imp.impact_estimate / max(imp.effort_estimate, 0.1),
             reverse=True,
         )
-        
+
         return sorted_improvements[:limit]
 
     async def apply_learning(
@@ -391,22 +393,22 @@ Output JSON:
         improvement_id: str,
     ) -> bool:
         """Mark a learning as applied and update statistics."""
-        
+
         if improvement_id not in self._improvements:
             return False
-        
+
         improvement = self._improvements[improvement_id]
         improvement.status = "implemented"
-        
+
         self._stats["improvements_applied"] += 1
-        
+
         _log.info(
             "reflection.improvement_applied",
             event_type="reflection",
             improvement_id=improvement_id,
             category=improvement.category.value,
         )
-        
+
         return True
 
     def get_lessons_for_context(
@@ -415,15 +417,15 @@ Output JSON:
         limit: int = 5,
     ) -> list[str]:
         """Get relevant lessons for a given context."""
-        
+
         # Simple keyword matching
         relevant = []
         context_lower = context.lower()
-        
+
         for key, lessons in self._learnings.items():
             if key.lower() in context_lower:
                 relevant.extend(lessons)
-        
+
         return relevant[:limit]
 
     async def _generate_reflection(
@@ -435,7 +437,7 @@ Output JSON:
         reflection_type: ReflectionType,
     ) -> Reflection:
         """Generate a reflection using LLM."""
-        
+
         prompt = f"""Reflect deeply on this execution:
 
 TASK: {task_description}
@@ -478,9 +480,9 @@ Output JSON:
                 temperature=0.4,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         return Reflection(
             reflection_id=self._ids.execution_id(),
             reflection_type=reflection_type,
@@ -501,13 +503,13 @@ Output JSON:
         reflection: Reflection,
     ) -> list[Improvement]:
         """Extract concrete improvements from a reflection."""
-        
+
         improvements = []
-        
+
         for desc in reflection.improvements:
             # Categorize improvement
             category = await self._categorize_improvement(desc)
-            
+
             improvement = Improvement(
                 improvement_id=self._ids.execution_id(),
                 category=category,
@@ -520,7 +522,7 @@ Output JSON:
                 created_ts=self._clock.now(),
             )
             improvements.append(improvement)
-        
+
         return improvements
 
     async def _categorize_improvement(
@@ -528,7 +530,7 @@ Output JSON:
         description: str,
     ) -> ImprovementCategory:
         """Categorize an improvement."""
-        
+
         keywords = {
             ImprovementCategory.PLANNING: ["plan", "decompose", "structure", "organize"],
             ImprovementCategory.EXECUTION: ["execute", "run", "perform", "implement"],
@@ -539,13 +541,13 @@ Output JSON:
             ImprovementCategory.RESOURCE_MANAGEMENT: ["cost", "time", "resource", "efficient"],
             ImprovementCategory.QUALITY: ["quality", "better", "improve", "enhance"],
         }
-        
+
         desc_lower = description.lower()
-        
+
         for category, words in keywords.items():
             if any(w in desc_lower for w in words):
                 return category
-        
+
         return ImprovementCategory.QUALITY
 
     def _calculate_improvement_priority(
@@ -554,23 +556,23 @@ Output JSON:
         category: ImprovementCategory,
     ) -> float:
         """Calculate priority for an improvement."""
-        
+
         # Higher priority if:
         # - Low confidence in decision
         # - Would not repeat
         # - From error analysis
-        
+
         base_priority = 0.5
-        
+
         if reflection.confidence_in_decision < 0.5:
             base_priority += 0.2
-        
+
         if not reflection.would_repeat:
             base_priority += 0.2
-        
+
         if reflection.reflection_type == ReflectionType.ERROR_ANALYSIS:
             base_priority += 0.3
-        
+
         return min(base_priority, 1.0)
 
     async def _store_learnings(
@@ -578,14 +580,14 @@ Output JSON:
         reflection: Reflection,
     ) -> None:
         """Store lessons learned for future reference."""
-        
+
         for lesson in reflection.lessons_learned:
             # Extract key concept
             key = self._extract_key_concept(lesson)
-            
+
             if key not in self._learnings:
                 self._learnings[key] = []
-            
+
             self._learnings[key].append(lesson)
             self._stats["lessons_learned"] += 1
 
@@ -594,7 +596,7 @@ Output JSON:
         lesson: str,
     ) -> str:
         """Extract key concept from a lesson (simplified)."""
-        
+
         # Use first few words as key
         words = lesson.split()
         return " ".join(words[:3]) if len(words) >= 3 else lesson
@@ -604,9 +606,9 @@ Output JSON:
         execution_trace: dict[str, Any],
     ) -> ReflectionType:
         """Determine the type of reflection based on execution trace."""
-        
+
         success = execution_trace.get("success", True)
-        
+
         if success:
             return ReflectionType.SUCCESS_ANALYSIS
         else:
@@ -636,7 +638,7 @@ Be proactive and honest."""
         text: str,
     ) -> dict[str, Any]:
         """Parse JSON from text with error handling."""
-        
+
         try:
             start = text.find("{")
             end = text.rfind("}") + 1
@@ -648,7 +650,7 @@ Be proactive and honest."""
 
     def get_statistics(self) -> dict[str, Any]:
         """Get reflection statistics."""
-        
+
         return {
             **self._stats,
             "total_improvements": len(self._improvements),

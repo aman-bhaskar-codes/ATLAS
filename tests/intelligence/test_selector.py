@@ -102,17 +102,13 @@ def _selector_for(*specs: ModelSpec) -> ModelSelector:
 
 def test_fast_tier_prefers_the_quick_cheap_model() -> None:
     selector = _selector_for(_fast_local(), _deep_local())
-    ranked = selector.select(
-        frozenset([Capability.REASONING]), Constraints(tier=ModelTier.FAST)
-    )
+    ranked = selector.select(frozenset([Capability.REASONING]), Constraints(tier=ModelTier.FAST))
     assert ranked[0].id == "fast", "FAST tier must weight latency/cost over quality"
 
 
 def test_deep_tier_prefers_the_stronger_slower_model() -> None:
     selector = _selector_for(_fast_local(), _deep_local())
-    ranked = selector.select(
-        frozenset([Capability.REASONING]), Constraints(tier=ModelTier.DEEP)
-    )
+    ranked = selector.select(frozenset([Capability.REASONING]), Constraints(tier=ModelTier.DEEP))
     assert ranked[0].id == "deep", "DEEP tier must weight quality/reasoning over latency"
 
 

@@ -16,28 +16,21 @@ def get_registry(request: Request) -> AutomationRegistry:
 
 @router.get("")
 async def list_automations(
-    enabled_only: bool = False,
-    registry: AutomationRegistry = Depends(get_registry)
+    enabled_only: bool = False, registry: AutomationRegistry = Depends(get_registry)
 ) -> list[Automation]:
     """List all automations."""
     return await registry.list_all(enabled_only=enabled_only)
 
 
 @router.post("")
-async def create_automation(
-    auto: Automation,
-    registry: AutomationRegistry = Depends(get_registry)
-) -> Automation:
+async def create_automation(auto: Automation, registry: AutomationRegistry = Depends(get_registry)) -> Automation:
     """Create a new automation."""
     await registry.create(auto)
     return auto
 
 
 @router.get("/{auto_id}")
-async def get_automation(
-    auto_id: str,
-    registry: AutomationRegistry = Depends(get_registry)
-) -> Automation:
+async def get_automation(auto_id: str, registry: AutomationRegistry = Depends(get_registry)) -> Automation:
     """Get an automation by ID."""
     try:
         return await registry.get(auto_id)
@@ -47,9 +40,7 @@ async def get_automation(
 
 @router.put("/{auto_id}")
 async def update_automation(
-    auto_id: str,
-    auto: Automation,
-    registry: AutomationRegistry = Depends(get_registry)
+    auto_id: str, auto: Automation, registry: AutomationRegistry = Depends(get_registry)
 ) -> Automation:
     """Update an automation."""
     if auto.id != auto_id:
@@ -62,10 +53,7 @@ async def update_automation(
 
 
 @router.delete("/{auto_id}")
-async def delete_automation(
-    auto_id: str,
-    registry: AutomationRegistry = Depends(get_registry)
-) -> dict[str, str]:
+async def delete_automation(auto_id: str, registry: AutomationRegistry = Depends(get_registry)) -> dict[str, str]:
     """Delete an automation."""
     try:
         await registry.delete(auto_id)
