@@ -169,9 +169,7 @@ class HybridRetriever:
         """Parallel retrieval for rewritten query variants (§14), fused by RRF."""
         if len(queries) == 1:
             return await self.retrieve(queries[0], k=k, source_types=source_types)
-        results = await asyncio.gather(
-            *(self.retrieve(q, k=k, source_types=source_types) for q in queries)
-        )
+        results = await asyncio.gather(*(self.retrieve(q, k=k, source_types=source_types) for q in queries))
         scores: dict[str, float] = {}
         best: dict[str, Candidate] = {}
         degraded = False

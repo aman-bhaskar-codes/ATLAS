@@ -250,7 +250,29 @@ class DefaultAtlasControlPlane:
 
         async def _run_safely() -> None:
             try:
-                await self.atlas.orchestrator.run(inbound)
+                result = await self.atlas.orchestrator.run(inbound)
+
+                # Fetch existing payload to merge
+                cur = await self.atlas.db.conn.execute("SELECT payload FROM tasks WHERE id = ?", (task_id,))
+                row = await cur.fetchone()
+                payload = json.loads(row["payload"]) if row and row["payload"] else {}
+
+                payload["ok"] = result.ok
+                if result.error:
+                    payload["error"] = result.error
+                if getattr(result, "answer", None):
+                    payload["answer"] = result.answer
+                elif result.ok and getattr(result, "observations", None):
+                    payload["answer"] = (
+                        str(result.observations[-1].content) if result.observations else "Task completed."
+                    )
+
+                await self.atlas.db.conn.execute(
+                    "UPDATE tasks SET payload = ?, updated_ts = ? WHERE id = ?",
+                    (json.dumps(payload), self.atlas.clock.now().isoformat(), task_id),
+                )
+                await self.atlas.db.conn.commit()
+
             except Exception as exc:
                 # Settle the row. Without this the task stays 'created' forever:
                 # runtime_status counts non-terminal rows, so active_task_count

@@ -114,9 +114,7 @@ class IntentExtractor:
                     correlation_id=correlation_id,
                     system=_UNDERSTAND_SYSTEM,
                     prompt=request,
-                    required_capabilities=frozenset(
-                        {ModelCapability.CLASSIFICATION, ModelCapability.JSON_GENERATION}
-                    ),
+                    required_capabilities=frozenset({ModelCapability.CLASSIFICATION, ModelCapability.JSON_GENERATION}),
                     # WHY 4096: qwen3:4b is a thinking model that writes verbose
                     # chain-of-thought THEN the JSON. With 1024 tokens it would
                     # run out mid-thought and return no JSON at all.
@@ -195,9 +193,7 @@ class IntentExtractor:
         return intent
 
 
-def select_reasoning_level(
-    domain: TaskDomain, complexity: Complexity, risk: RiskLevel
-) -> ReasoningLevel:
+def select_reasoning_level(domain: TaskDomain, complexity: Complexity, risk: RiskLevel) -> ReasoningLevel:
     """Choose bounded reasoning effort (Phase 10).
 
     Deterministic on purpose: the level decides step and token budgets, so it
@@ -253,9 +249,7 @@ def _privacy(raw: object) -> str:
         return PrivacyClass.INTERNAL.value
 
 
-def _enum_or[T: (TaskDomain, RiskLevel, Urgency, Complexity)](
-    enum_cls: type[T], raw: object, default: T
-) -> T:
+def _enum_or[T: (TaskDomain, RiskLevel, Urgency, Complexity)](enum_cls: type[T], raw: object, default: T) -> T:
     try:
         return enum_cls(str(raw))
     except ValueError:

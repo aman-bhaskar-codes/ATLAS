@@ -68,10 +68,17 @@ class TierClassifier:
                     reason or f"rule {req.tool}.{req.operation}",
                     matched_rule,
                 )
+        _log.warning(
+            "classifier.no_rule_matched",
+            event_type="safety",
+            tool=req.tool,
+            operation=req.operation,
+            correlation_id=req.correlation_id,
+        )
         return SafetyDecision(
             decision="deny",
             tier=Tier.CONFIRM,
-            reason="deny-by-default: no manifest rule matched",
+            reason=f"deny-by-default: no manifest rule matched for {req.tool}.{req.operation}",
         )
 
     def _hard_block(self, req: ToolRequest) -> SafetyDecision | None:

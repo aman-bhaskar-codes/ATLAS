@@ -32,27 +32,30 @@ _log = get_logger("atlas.agents.causal")
 
 class CausalRelationType(Enum):
     """Types of causal relationships."""
-    DIRECT_CAUSE = "direct_cause"        # A directly causes B
-    INDIRECT_CAUSE = "indirect_cause"    # A causes B through intermediaries
-    CONTRIBUTING = "contributing"        # A contributes to B but is not sufficient
-    NECESSARY = "necessary"              # B cannot happen without A
-    SUFFICIENT = "sufficient"            # A alone can cause B
-    ENABLING = "enabling"                # A enables B but doesn't cause it
-    PREVENTING = "preventing"            # A prevents B
+
+    DIRECT_CAUSE = "direct_cause"  # A directly causes B
+    INDIRECT_CAUSE = "indirect_cause"  # A causes B through intermediaries
+    CONTRIBUTING = "contributing"  # A contributes to B but is not sufficient
+    NECESSARY = "necessary"  # B cannot happen without A
+    SUFFICIENT = "sufficient"  # A alone can cause B
+    ENABLING = "enabling"  # A enables B but doesn't cause it
+    PREVENTING = "preventing"  # A prevents B
 
 
 class InterventionType(Enum):
     """Types of interventions."""
-    DO = "do"                            # Do-intervention (set variable)
-    ENCOURAGE = "encourage"              # Increase probability
-    DISCOURAGE = "discourage"            # Decrease probability
-    REMOVE = "remove"                    # Remove cause
-    ADD = "add"                          # Add new cause
+
+    DO = "do"  # Do-intervention (set variable)
+    ENCOURAGE = "encourage"  # Increase probability
+    DISCOURAGE = "discourage"  # Decrease probability
+    REMOVE = "remove"  # Remove cause
+    ADD = "add"  # Add new cause
 
 
 @dataclass
 class CausalVariable:
     """A variable in a causal model."""
+
     name: str
     description: str
     possible_values: list[Any]
@@ -63,6 +66,7 @@ class CausalVariable:
 @dataclass
 class CausalRelation:
     """A causal relationship between variables."""
+
     cause: str
     effect: str
     relation_type: CausalRelationType
@@ -75,35 +79,37 @@ class CausalRelation:
 @dataclass
 class CausalGraph:
     """A causal graph representing causal relationships."""
+
     variables: dict[str, CausalVariable]
     relations: list[CausalRelation]
-    
+
     def get_causes(self, effect: str) -> list[CausalRelation]:
         """Get all direct causes of an effect."""
         return [r for r in self.relations if r.effect == effect]
-    
+
     def get_effects(self, cause: str) -> list[CausalRelation]:
         """Get all direct effects of a cause."""
         return [r for r in self.relations if r.cause == cause]
-    
+
     def get_ancestors(self, variable: str) -> set[str]:
         """Get all ancestor variables (transitive causes)."""
         ancestors = set()
         to_process = [variable]
-        
+
         while to_process:
             current = to_process.pop()
             for rel in self.get_causes(current):
                 if rel.cause not in ancestors:
                     ancestors.add(rel.cause)
                     to_process.append(rel.cause)
-        
+
         return ancestors
 
 
 @dataclass
 class Intervention:
     """An intervention on a causal model."""
+
     intervention_type: InterventionType
     target_variable: str
     intervention_value: Any
@@ -113,6 +119,7 @@ class Intervention:
 @dataclass
 class Counterfactual:
     """A counterfactual scenario."""
+
     counterfactual_id: str
     premise: str  # The counterfactual premise
     factual_scenario: dict[str, Any]  # What actually happened
@@ -125,6 +132,7 @@ class Counterfactual:
 @dataclass
 class CausalExplanation:
     """A causal explanation of an event."""
+
     explanation_id: str
     event: str
     causes: list[tuple[str, float]]  # (cause, contribution)
@@ -135,7 +143,7 @@ class CausalExplanation:
 
 class CausalReasoningEngine:
     """Advanced causal reasoning system."""
-    
+
     def __init__(
         self,
         *,
@@ -150,13 +158,13 @@ class CausalReasoningEngine:
         self._clock = clock
         self._discovery_threshold = discovery_threshold
         self._max_depth = max_causal_depth
-        
+
         # Causal model cache
         self._causal_graphs: dict[str, CausalGraph] = {}
-        
+
         # Intervention history
         self._intervention_history: list[tuple[Intervention, dict[str, Any]]] = []
-        
+
         # Statistics
         self._stats = {
             "graphs_built": 0,
@@ -171,32 +179,32 @@ class CausalReasoningEngine:
         context: str = "",
     ) -> CausalGraph:
         """Build a causal model from observations.
-        
+
         Uses LLM-guided causal discovery to identify:
         1. Relevant variables
         2. Causal relationships
         3. Relationship strengths
         """
-        
+
         _log.info(
             "causal.building_model",
             event_type="causal",
             observations=len(observations),
         )
-        
+
         # Step 1: Identify variables
         variables = await self._discover_variables(observations, context)
-        
+
         # Step 2: Discover causal relations
         relations = await self._discover_relations(variables, observations, context)
-        
+
         graph = CausalGraph(variables=variables, relations=relations)
-        
+
         # Cache
         graph_id = self._ids.execution_id()
         self._causal_graphs[graph_id] = graph
         self._stats["graphs_built"] += 1
-        
+
         return graph
 
     async def analyze_intervention(
@@ -206,15 +214,15 @@ class CausalReasoningEngine:
         current_state: dict[str, Any],
     ) -> dict[str, Any]:
         """Analyze the effects of an intervention.
-        
+
         Answers: "What would happen if we do X?"
         """
-        
+
         self._stats["interventions_analyzed"] += 1
-        
+
         # Build intervention prompt
         prompt = self._build_intervention_prompt(graph, intervention, current_state)
-        
+
         resp = await self._gw.infer(
             InferenceRequest(
                 correlation_id=CorrelationId(self._ids.execution_id()),
@@ -227,12 +235,12 @@ class CausalReasoningEngine:
                 temperature=0.4,
             )
         )
-        
+
         result = self._parse_json(resp.text)
-        
+
         # Record intervention
         self._intervention_history.append((intervention, result))
-        
+
         return result
 
     async def generate_counterfactual(
@@ -242,17 +250,17 @@ class CausalReasoningEngine:
         counterfactual_premise: str,
     ) -> Counterfactual:
         """Generate a counterfactual scenario.
-        
+
         Answers: "What would have happened if Y instead of X?"
         """
-        
+
         self._stats["counterfactuals_generated"] += 1
-        
+
         prompt = f"""Generate a counterfactual analysis:
 
 CAUSAL MODEL:
-Variables: {', '.join(graph.variables.keys())}
-Relations: {chr(10).join(f'- {r.cause} -> {r.effect} ({r.relation_type.value})' for r in graph.relations[:10])}
+Variables: {", ".join(graph.variables.keys())}
+Relations: {chr(10).join(f"- {r.cause} -> {r.effect} ({r.relation_type.value})" for r in graph.relations[:10])}
 
 WHAT ACTUALLY HAPPENED:
 {json.dumps(factual_event, indent=2)}
@@ -282,9 +290,9 @@ Output JSON:
                 temperature=0.5,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         return Counterfactual(
             counterfactual_id=self._ids.execution_id(),
             premise=counterfactual_premise,
@@ -302,29 +310,27 @@ Output JSON:
         context: dict[str, Any],
     ) -> CausalExplanation:
         """Generate a causal explanation for an event.
-        
+
         Provides:
         1. Contributing causes with weights
         2. Mechanism of how causes led to event
         3. Counterfactual alternatives
         """
-        
+
         self._stats["explanations_generated"] += 1
-        
+
         # Identify causes
         causes = await self._identify_causes(graph, event, context)
-        
+
         # Generate mechanism explanation
         mechanism = await self._explain_mechanism(graph, event, causes, context)
-        
+
         # Generate counterfactuals
-        counterfactuals = await self._generate_counterfactuals_for_event(
-            graph, event, causes, context
-        )
-        
+        counterfactuals = await self._generate_counterfactuals_for_event(graph, event, causes, context)
+
         # Calculate confidence
         confidence = sum(c[1] for c in causes) / len(causes) if causes else 0.5
-        
+
         return CausalExplanation(
             explanation_id=self._ids.execution_id(),
             event=event,
@@ -341,18 +347,18 @@ Output JSON:
         current_state: dict[str, Any],
     ) -> list[tuple[Intervention, float]]:
         """Suggest interventions to achieve a desired outcome.
-        
+
         Uses causal understanding to identify:
         1. Most effective intervention points
         2. Expected effect sizes
         3. Potential side effects
         """
-        
+
         prompt = f"""Suggest interventions to achieve a desired outcome:
 
 CAUSAL MODEL:
-Variables: {', '.join(graph.variables.keys())}
-Relations: {chr(10).join(f'- {r.cause} -> {r.effect} (strength: {r.strength})' for r in graph.relations[:10])}
+Variables: {", ".join(graph.variables.keys())}
+Relations: {chr(10).join(f"- {r.cause} -> {r.effect} (strength: {r.strength})" for r in graph.relations[:10])}
 
 CURRENT STATE:
 {json.dumps(current_state, indent=2)}
@@ -392,9 +398,9 @@ Output JSON:
                 temperature=0.5,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         interventions = []
         for int_data in data.get("interventions", []):
             intervention = Intervention(
@@ -405,7 +411,7 @@ Output JSON:
             )
             confidence = int_data.get("confidence", 0.5)
             interventions.append((intervention, confidence))
-        
+
         return interventions
 
     async def _discover_variables(
@@ -414,12 +420,12 @@ Output JSON:
         context: str,
     ) -> dict[str, CausalVariable]:
         """Discover relevant variables from observations."""
-        
+
         # Extract variable names from observations
         all_keys: set[str] = set()
         for obs in observations:
             all_keys.update(obs.keys())
-        
+
         # Use LLM to identify relevant variables
         prompt = f"""Identify relevant causal variables from these observations:
 
@@ -457,9 +463,9 @@ Output JSON:
                 temperature=0.3,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         variables = {}
         for var_data in data.get("variables", []):
             name = var_data.get("name", "")
@@ -470,7 +476,7 @@ Output JSON:
                     possible_values=var_data.get("possible_values", []),
                     is_exogenous=var_data.get("is_exogenous", False),
                 )
-        
+
         # Add any missing keys from observations
         for key in all_keys:
             if key not in variables:
@@ -479,7 +485,7 @@ Output JSON:
                     description=f"Variable {key}",
                     possible_values=[],
                 )
-        
+
         return variables
 
     async def _discover_relations(
@@ -489,13 +495,13 @@ Output JSON:
         context: str,
     ) -> list[CausalRelation]:
         """Discover causal relations between variables."""
-        
+
         prompt = f"""Identify causal relationships between variables:
 
 CONTEXT: {context}
 
 VARIABLES:
-{chr(10).join(f'- {name}: {var.description}' for name, var in variables.items())}
+{chr(10).join(f"- {name}: {var.description}" for name, var in variables.items())}
 
 SAMPLE OBSERVATIONS:
 {json.dumps(observations[:3], indent=2)}
@@ -534,29 +540,31 @@ Output JSON:
                 temperature=0.4,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         relations = []
         for rel_data in data.get("relations", []):
             try:
                 rel_type = CausalRelationType(rel_data.get("type", "direct_cause"))
             except ValueError:
                 rel_type = CausalRelationType.DIRECT_CAUSE
-            
-            relations.append(CausalRelation(
-                cause=rel_data.get("cause", ""),
-                effect=rel_data.get("effect", ""),
-                relation_type=rel_type,
-                strength=rel_data.get("strength", 0.5),
-                confidence=rel_data.get("confidence", 0.5),
-                mechanism=rel_data.get("mechanism", ""),
-                conditions=rel_data.get("conditions", []),
-            ))
-        
+
+            relations.append(
+                CausalRelation(
+                    cause=rel_data.get("cause", ""),
+                    effect=rel_data.get("effect", ""),
+                    relation_type=rel_type,
+                    strength=rel_data.get("strength", 0.5),
+                    confidence=rel_data.get("confidence", 0.5),
+                    mechanism=rel_data.get("mechanism", ""),
+                    conditions=rel_data.get("conditions", []),
+                )
+            )
+
         # Filter by threshold
         relations = [r for r in relations if r.confidence >= self._discovery_threshold]
-        
+
         return relations
 
     async def _identify_causes(
@@ -566,10 +574,10 @@ Output JSON:
         context: dict[str, Any],
     ) -> list[tuple[str, float]]:
         """Identify causes for an event."""
-        
+
         # Get direct causes from graph
         direct_causes = graph.get_causes(event)
-        
+
         if not direct_causes:
             # Use LLM to infer causes
             prompt = f"""Identify causes for this event:
@@ -595,10 +603,10 @@ Output JSON:
                     temperature=0.4,
                 )
             )
-            
+
             data = self._parse_json(resp.text)
             return [(c["cause"], c["contribution"]) for c in data.get("causes", [])]
-        
+
         return [(r.cause, r.strength) for r in direct_causes]
 
     async def _explain_mechanism(
@@ -609,13 +617,13 @@ Output JSON:
         context: dict[str, Any],
     ) -> str:
         """Explain the mechanism of how causes led to event."""
-        
+
         prompt = f"""Explain how these causes led to this event:
 
 EVENT: {event}
 
 CAUSES:
-{chr(10).join(f'- {cause} (contribution: {contrib:.2f})' for cause, contrib in causes)}
+{chr(10).join(f"- {cause} (contribution: {contrib:.2f})" for cause, contrib in causes)}
 
 CONTEXT:
 {json.dumps(context, indent=2)}
@@ -634,7 +642,7 @@ Provide a clear, step-by-step explanation of the causal mechanism."""
                 temperature=0.5,
             )
         )
-        
+
         return resp.text
 
     async def _generate_counterfactuals_for_event(
@@ -645,9 +653,9 @@ Provide a clear, step-by-step explanation of the causal mechanism."""
         context: dict[str, Any],
     ) -> list[Counterfactual]:
         """Generate counterfactuals for an event."""
-        
+
         counterfactuals = []
-        
+
         # Generate one counterfactual per major cause
         for cause, contribution in causes[:2]:
             if contribution > 0.5:
@@ -658,7 +666,7 @@ Provide a clear, step-by-step explanation of the causal mechanism."""
                     cf_premise,
                 )
                 counterfactuals.append(cf)
-        
+
         return counterfactuals
 
     def _build_intervention_prompt(
@@ -668,12 +676,12 @@ Provide a clear, step-by-step explanation of the causal mechanism."""
         current_state: dict[str, Any],
     ) -> str:
         """Build prompt for intervention analysis."""
-        
+
         return f"""Analyze the effects of this intervention:
 
 CAUSAL MODEL:
-Variables: {', '.join(graph.variables.keys())}
-Relations: {chr(10).join(f'- {r.cause} -> {r.effect}' for r in graph.relations[:10])}
+Variables: {", ".join(graph.variables.keys())}
+Relations: {chr(10).join(f"- {r.cause} -> {r.effect}" for r in graph.relations[:10])}
 
 CURRENT STATE:
 {json.dumps(current_state, indent=2)}
@@ -718,7 +726,7 @@ Be imaginative but grounded in causal logic."""
         text: str,
     ) -> dict[str, Any]:
         """Parse JSON from text."""
-        
+
         try:
             start = text.find("{")
             end = text.rfind("}") + 1
@@ -730,7 +738,7 @@ Be imaginative but grounded in causal logic."""
 
     def get_statistics(self) -> dict[str, Any]:
         """Get causal reasoning statistics."""
-        
+
         return {
             **self._stats,
             "cached_graphs": len(self._causal_graphs),

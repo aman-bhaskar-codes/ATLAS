@@ -85,9 +85,7 @@ class DomainVerifierRouter:
                 domain=domain.value,
                 reason=result.failure_reason,
             )
-            return await self._default.verify(
-                goal, answer, correlation_id, context, domain, evidence
-            )
+            return await self._default.verify(goal, answer, correlation_id, context, domain, evidence)
         return result
 
 
@@ -165,9 +163,7 @@ class CommandVerifier:
                 score=0.0,
                 verifier=self.name,
                 criteria_results=(
-                    CriterionResult(
-                        criterion=self._command, passed=False, detail=err[:500] or "command failed"
-                    ),
+                    CriterionResult(criterion=self._command, passed=False, detail=err[:500] or "command failed"),
                 ),
                 failure_reason=f"{self._command} failed: {err[:300]}",
                 suggested_next_action="fix the failure reported by the check command",
@@ -238,9 +234,7 @@ class FilesystemStateVerifier:
                     correlation_id,
                 )
             except Exception as exc:
-                results.append(
-                    CriterionResult(criterion=path, passed=False, detail=f"check failed: {exc!r}")
-                )
+                results.append(CriterionResult(criterion=path, passed=False, detail=f"check failed: {exc!r}"))
                 continue
             exists = bool(obs.ok)
             results.append(
@@ -314,10 +308,7 @@ class GroundingVerifier:
                     CriterionResult(
                         criterion="answer is grounded in observed sources",
                         passed=False,
-                        detail=(
-                            f"{len(successful)} successful observation(s); "
-                            f"at least {self._min_sources} required"
-                        ),
+                        detail=(f"{len(successful)} successful observation(s); at least {self._min_sources} required"),
                     ),
                 ),
                 failure_reason="answer is not grounded in any successful observation",
@@ -331,9 +322,7 @@ class GroundingVerifier:
         )
 
 
-def _extract_paths(
-    criteria: tuple[str, ...], answer: str, evidence: tuple[Evidence, ...]
-) -> list[str]:
+def _extract_paths(criteria: tuple[str, ...], answer: str, evidence: tuple[Evidence, ...]) -> list[str]:
     """Collect candidate paths, preserving order and removing duplicates."""
     seen: dict[str, None] = {}
     for e in evidence:

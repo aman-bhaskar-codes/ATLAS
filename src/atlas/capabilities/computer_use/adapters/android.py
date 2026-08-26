@@ -104,10 +104,7 @@ def _find_node(nodes: tuple[_AndroidNode, ...], target: TargetRef) -> _AndroidNo
     wanted_text = target.text or target.label or target.value
     exact = target.exact
     matches = [
-        n
-        for n in nodes
-        if n.label
-        and (n.label == wanted_text if exact else wanted_text.lower() in n.label.lower())
+        n for n in nodes if n.label and (n.label == wanted_text if exact else wanted_text.lower() in n.label.lower())
     ]
     if not matches:
         return None

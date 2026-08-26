@@ -13,12 +13,14 @@ async def test_nominatim_geocode_success() -> None:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.url = "https://nominatim.openstreetmap.org/search?q=Berlin&format=json&limit=1"
-        mock_resp.json.return_value = [{
-            "lat": "52.5200",
-            "lon": "13.4050",
-            "display_name": "Berlin, Germany",
-            "address": {"country": "Germany", "city": "Berlin"}
-        }]
+        mock_resp.json.return_value = [
+            {
+                "lat": "52.5200",
+                "lon": "13.4050",
+                "display_name": "Berlin, Germany",
+                "address": {"country": "Germany", "city": "Berlin"},
+            }
+        ]
         mock_resp.raise_for_status.return_value = None
         mock_get.return_value = mock_resp
 
@@ -55,15 +57,19 @@ async def test_nominatim_country_info_success() -> None:
     with patch("httpx.AsyncClient.get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.url = "https://restcountries.com/v3.1/name/Germany?fields=name,capital,region,currencies,languages,timezones"
-        mock_resp.json.return_value = [{
-            "name": {"common": "Germany", "official": "Federal Republic of Germany"},
-            "capital": ["Berlin"],
-            "region": "Europe",
-            "currencies": {"EUR": {"name": "Euro", "symbol": "€"}},
-            "languages": {"deu": "German"},
-            "timezones": ["Europe/Berlin"]
-        }]
+        mock_resp.url = (
+            "https://restcountries.com/v3.1/name/Germany?fields=name,capital,region,currencies,languages,timezones"
+        )
+        mock_resp.json.return_value = [
+            {
+                "name": {"common": "Germany", "official": "Federal Republic of Germany"},
+                "capital": ["Berlin"],
+                "region": "Europe",
+                "currencies": {"EUR": {"name": "Euro", "symbol": "€"}},
+                "languages": {"deu": "German"},
+                "timezones": ["Europe/Berlin"],
+            }
+        ]
         mock_resp.raise_for_status.return_value = None
         mock_get.return_value = mock_resp
 

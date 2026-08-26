@@ -138,10 +138,7 @@ class ComputerUseEngine:
         return self._telemetry
 
     def registered(self) -> dict[Substrate, dict[str, bool]]:
-        return {
-            s: {"perception": s in self._perception, "control": s in self._control}
-            for s in Substrate
-        }
+        return {s: {"perception": s in self._perception, "control": s in self._control} for s in Substrate}
 
     async def health(self) -> dict[Substrate, str]:
         out: dict[Substrate, str] = {}

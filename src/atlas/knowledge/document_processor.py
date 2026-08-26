@@ -108,16 +108,18 @@ class DocumentProcessor:
         for para in paragraphs:
             if len(current) + len(para) + 2 > self._chunk_size and current:
                 chunk_id = hashlib.sha256(f"{source}:{chunk_idx}:{current[:100]}".encode()).hexdigest()[:16]
-                chunks.append(Chunk(
-                    chunk_id=chunk_id,
-                    text=current.strip(),
-                    source_path=source,
-                    chunk_index=chunk_idx,
-                    total_chunks=0,  # filled in after
-                    metadata={},
-                ))
+                chunks.append(
+                    Chunk(
+                        chunk_id=chunk_id,
+                        text=current.strip(),
+                        source_path=source,
+                        chunk_index=chunk_idx,
+                        total_chunks=0,  # filled in after
+                        metadata={},
+                    )
+                )
                 # Overlap: keep last N chars
-                current = current[-self._overlap:] + "\n\n" + para
+                current = current[-self._overlap :] + "\n\n" + para
                 chunk_idx += 1
             else:
                 current = current + "\n\n" + para if current else para
@@ -125,14 +127,16 @@ class DocumentProcessor:
         # Last chunk
         if current.strip():
             chunk_id = hashlib.sha256(f"{source}:{chunk_idx}:{current[:100]}".encode()).hexdigest()[:16]
-            chunks.append(Chunk(
-                chunk_id=chunk_id,
-                text=current.strip(),
-                source_path=source,
-                chunk_index=chunk_idx,
-                total_chunks=0,
-                metadata={},
-            ))
+            chunks.append(
+                Chunk(
+                    chunk_id=chunk_id,
+                    text=current.strip(),
+                    source_path=source,
+                    chunk_index=chunk_idx,
+                    total_chunks=0,
+                    metadata={},
+                )
+            )
 
         # Fill in total_chunks
         total = len(chunks)

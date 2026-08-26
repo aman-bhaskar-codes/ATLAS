@@ -102,8 +102,7 @@ class FreeQuotaGovernor:
         if state.requests_today >= quota.daily_requests:
             raise QuotaExhaustedError(
                 provider,
-                f"daily request limit ({quota.daily_requests}) exhausted "
-                f"({state.requests_today} used)",
+                f"daily request limit ({quota.daily_requests}) exhausted ({state.requests_today} used)",
             )
 
         # Daily token limit

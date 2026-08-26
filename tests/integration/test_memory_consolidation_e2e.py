@@ -11,25 +11,19 @@ from atlas.interfaces.api.routes_learning import router as learning_router
 @pytest.fixture
 def mock_atlas():
     atlas = SimpleNamespace()
-    
+
     # Mock Consolidator
     atlas.consolidator = MagicMock()
-    atlas.consolidator.run = AsyncMock(return_value={
-        "episodes": 10,
-        "applied": 5,
-        "proposed": 2
-    })
-    
+    atlas.consolidator.run = AsyncMock(return_value={"episodes": 10, "applied": 5, "proposed": 2})
+
     # Mock SkillPromoter
     atlas.skill_promoter = MagicMock()
     mock_skill1 = MagicMock()
     mock_skill1.name = "research: browser"
     mock_skill2 = MagicMock()
     mock_skill2.name = "coding: python"
-    atlas.skill_promoter.promote_from_experiences = AsyncMock(return_value=[
-        mock_skill1, mock_skill2
-    ])
-    
+    atlas.skill_promoter.promote_from_experiences = AsyncMock(return_value=[mock_skill1, mock_skill2])
+
     return atlas
 
 

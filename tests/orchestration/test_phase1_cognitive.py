@@ -142,9 +142,7 @@ def test_goal_state_with_progress_clamps() -> None:
 async def test_null_verifier_reports_not_applicable_not_a_pass() -> None:
     """score must be 0.0 and verifier must be "none": a task that was never
     checked must not be recordable as evidence that it was checked."""
-    result = await NullVerifier().verify(
-        GoalState(objective="anything", success_criteria=("a", "b")), "answer", _CORR
-    )
+    result = await NullVerifier().verify(GoalState(objective="anything", success_criteria=("a", "b")), "answer", _CORR)
     assert result.verifier == "none"
     assert result.score == 0.0
     assert result.failure_reason == "verification disabled"

@@ -37,21 +37,22 @@ from atlas.orchestration.types import TaskResult
 @pytest.mark.asyncio
 async def test_first_light_simple_task(tmp_path: Path) -> None:
     """Test that ATLAS can complete a simple filesystem task end-to-end.
-    
+
     This is the "first light" test - if this fails, nothing else matters.
     The task is intentionally simple and local-only to avoid external dependencies.
     """
     # Setup: Use temporary data directory
     import os
+
     os.environ["ATLAS_DATA_DIR"] = str(tmp_path)
     os.environ["ATLAS_ENV"] = "dev"
-    
+
     # Mock Ollama and other external dependencies
     from unittest.mock import AsyncMock, patch
-    
+
     def _dummy_embedding() -> list[float]:
         return [0.0] * 1024
-    
+
     with (
         patch(
             "atlas.memory.embedder.OllamaEmbedder.embed",
@@ -78,16 +79,16 @@ async def test_first_light_simple_task(tmp_path: Path) -> None:
     ):
         # Step 1: Start ATLAS
         atlas = await build()
-        
+
         try:
             # Step 2: Start runtime and verify READY state
             health_report = await atlas.start()
-            
+
             assert health_report.overall_status in (
                 SystemState.READY,
                 SystemState.DEGRADED,
             ), f"Expected READY or DEGRADED, got {health_report.overall_status}"
-            
+
             # Step 3: Submit a simple task
             task_request = "List the Python files in the current directory"
             event = InboundEvent(
@@ -95,14 +96,14 @@ async def test_first_light_simple_task(tmp_path: Path) -> None:
                 source="system",
                 content=task_request,
             )
-            
+
             # Step 4: Execute task through orchestrator
             result = await atlas.orchestrator.run(event)
-            
+
             # Step 5: Verify task completed successfully
             assert result.ok, f"Task failed: {result.error if hasattr(result, 'error') else 'Unknown error'}"
             assert result.answer, "Task should return an answer"
-            
+
             # Step 6: Verify system is still in operational state
             final_health = atlas.runtime_supervisor.get_health_report()
             assert final_health.overall_status in (
@@ -110,9 +111,10 @@ async def test_first_light_simple_task(tmp_path: Path) -> None:
                 SystemState.DEGRADED,
                 SystemState.BUSY,
             ), f"System should remain operational, got {final_health.overall_status}"
-            
+
             # Step 7: Verify task was persisted
             from atlas.infra.backends import SQLiteConnection
+
             conn = SQLiteConnection(atlas.db.conn)
             task_row = await conn.fetchone(
                 "SELECT * FROM tasks WHERE id = ?",
@@ -120,7 +122,7 @@ async def test_first_light_simple_task(tmp_path: Path) -> None:
             )
             assert task_row is not None, "Task should be persisted"
             assert task_row["state"] in ("completed", "failed"), f"Task should be terminal, got {task_row['state']}"
-            
+
         finally:
             # Cleanup: Close atlas
             await atlas.close()
@@ -130,14 +132,15 @@ async def test_first_light_simple_task(tmp_path: Path) -> None:
 async def test_runtime_health_endpoints(tmp_path: Path) -> None:
     """Test that the health endpoints work correctly."""
     import os
+
     os.environ["ATLAS_DATA_DIR"] = str(tmp_path)
     os.environ["ATLAS_ENV"] = "dev"
-    
+
     from unittest.mock import AsyncMock, MagicMock, patch
-    
+
     def _dummy_embedding() -> list[float]:
         return [0.0] * 1024
-    
+
     with (
         patch(
             "atlas.memory.embedder.OllamaEmbedder.embed",
@@ -159,27 +162,27 @@ async def test_runtime_health_endpoints(tmp_path: Path) -> None:
         ),
     ):
         atlas = await build()
-        
+
         try:
             await atlas.start()
-            
+
             # Test health report through supervisor
             health = atlas.runtime_supervisor.get_health_report()
-            
+
             assert health.overall_status in (SystemState.READY, SystemState.DEGRADED)
             assert health.uptime_seconds >= 0
             assert isinstance(health.components, dict)
             assert isinstance(health.degraded_components, list)
             assert isinstance(health.unavailable_capabilities, list)
-            
+
             # Test degraded components query
             degraded = atlas.runtime_supervisor.get_degraded_components()
             assert isinstance(degraded, list)
-            
+
             # Test unavailable capabilities query
             unavailable = atlas.runtime_supervisor.get_unavailable_capabilities()
             assert isinstance(unavailable, list)
-            
+
         finally:
             await atlas.close()
 
@@ -188,14 +191,15 @@ async def test_runtime_health_endpoints(tmp_path: Path) -> None:
 async def test_graceful_shutdown(tmp_path: Path) -> None:
     """Test that ATLAS can shut down gracefully."""
     import os
+
     os.environ["ATLAS_DATA_DIR"] = str(tmp_path)
     os.environ["ATLAS_ENV"] = "dev"
-    
+
     from unittest.mock import AsyncMock, MagicMock, patch
-    
+
     def _dummy_embedding() -> list[float]:
         return [0.0] * 1024
-    
+
     with (
         patch(
             "atlas.memory.embedder.OllamaEmbedder.embed",
@@ -217,19 +221,19 @@ async def test_graceful_shutdown(tmp_path: Path) -> None:
         ),
     ):
         atlas = await build()
-        
+
         try:
             await atlas.start()
-            
+
             # Verify runtime is operational
             assert atlas.runtime_supervisor.state in (SystemState.READY, SystemState.DEGRADED)
-            
+
             # Trigger graceful shutdown
             await atlas.runtime_supervisor.shutdown(timeout_seconds=5.0)
-            
+
             # Verify shutdown completed
             assert atlas.runtime_supervisor.state == SystemState.SHUTTING_DOWN
-            
+
         finally:
             await atlas.close()
 
@@ -238,14 +242,15 @@ async def test_graceful_shutdown(tmp_path: Path) -> None:
 async def test_task_state_transitions(tmp_path: Path) -> None:
     """Test that tasks transition through proper states."""
     import os
+
     os.environ["ATLAS_DATA_DIR"] = str(tmp_path)
     os.environ["ATLAS_ENV"] = "dev"
-    
+
     from unittest.mock import AsyncMock, patch
-    
+
     def _dummy_embedding() -> list[float]:
         return [0.0] * 1024
-    
+
     with (
         patch(
             "atlas.memory.embedder.OllamaEmbedder.embed",
@@ -271,27 +276,28 @@ async def test_task_state_transitions(tmp_path: Path) -> None:
         ),
     ):
         atlas = await build()
-        
+
         try:
             await atlas.start()
-            
+
             # Submit a task
             event = InboundEvent(
                 correlation_id="test_state",
                 source="system",
                 content="Test task",
             )
-            
+
             result = await atlas.orchestrator.run(event)
-            
+
             # Verify task reached terminal state
             from atlas.infra.backends import SQLiteConnection
+
             conn = SQLiteConnection(atlas.db.conn)
             task_row = await conn.fetchone(
                 "SELECT state FROM tasks WHERE id = ?",
                 (result.task_id,),
             )
-            
+
             assert task_row["state"] in ("completed", "failed", "cancelled")
 
         finally:
@@ -385,9 +391,7 @@ def _atlas_mocks(
 
 
 async def _run_task(atlas: Atlas, correlation_id: str, content: str) -> TaskResult:
-    return await atlas.orchestrator.run(
-        InboundEvent(correlation_id=correlation_id, source="system", content=content)
-    )
+    return await atlas.orchestrator.run(InboundEvent(correlation_id=correlation_id, source="system", content=content))
 
 
 async def _orchestrator_events(atlas: Atlas, task_id: str) -> list[dict[str, Any]]:
@@ -445,9 +449,9 @@ async def test_lifecycle_events_emitted_in_canonical_order(tmp_path: Path) -> No
             terminal = {"task.completed", "task.failed"}
             assert terminal & set(kinds), "a terminal lifecycle event must be emitted"
             last_terminal = max(i for i, k in enumerate(kinds) if k in terminal)
-            assert (
-                kinds.index("task.created") < kinds.index("task.started") < last_terminal
-            ), f"events out of canonical order: {kinds}"
+            assert kinds.index("task.created") < kinds.index("task.started") < last_terminal, (
+                f"events out of canonical order: {kinds}"
+            )
         finally:
             await atlas.close()
 
@@ -486,9 +490,7 @@ async def test_local_free_profile_costs_zero_and_uses_no_paid_provider(tmp_path:
             await atlas.start()
             result = await _run_task(atlas, "test_zero_cost", "List three prime numbers")
             assert result.ok
-            rows = await SQLiteConnection(atlas.db.conn).fetchall(
-                "SELECT provider, cost_usd FROM llm_calls", ()
-            )
+            rows = await SQLiteConnection(atlas.db.conn).fetchall("SELECT provider, cost_usd FROM llm_calls", ())
             assert rows, "the run must have recorded at least one inference call"
             providers = {r["provider"] for r in rows}
             assert providers == {"ollama"}, f"local_free must only use the local provider, saw: {sorted(providers)}"

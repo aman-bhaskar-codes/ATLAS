@@ -130,9 +130,7 @@ def chunk_parsed(
 
     chunks = chunks[:MAX_CHUNKS_PER_DOC]
     total = len(chunks)
-    return [
-        c.model_copy(update={"total_chunks": total, "chunk_index": i}) for i, c in enumerate(chunks)
-    ]
+    return [c.model_copy(update={"total_chunks": total, "chunk_index": i}) for i, c in enumerate(chunks)]
 
 
 def _split_paragraphs(body: str) -> list[str]:

@@ -83,6 +83,7 @@ def _make_selector(models: list[ModelSpec] | None = None) -> ModelSelector:
 def _response(model_id: str, provider: str = "test", **kw: Any):
     """Build a minimal InferenceResponse for tests."""
     from atlas.intelligence.contracts import InferenceResponse, Usage
+
     return InferenceResponse(
         text="ok",
         model_id=model_id,
@@ -277,6 +278,7 @@ class TestFallbackChain:
         ranked = [LOCAL]
 
         from atlas.intelligence.errors import ProviderError
+
         async def attempt(spec: ModelSpec):
             raise ProviderError("ollama not running")
 
@@ -343,6 +345,7 @@ class TestOpenRouterDiscovery:
     async def test_network_failure_returns_empty(self):
         """When OpenRouter is unreachable, discovery returns error, empty models."""
         from atlas.intelligence.providers.openrouter_free import discover_free_models
+
         result = await discover_free_models()
         # In offline test env, network is blocked so discovery should fail gracefully
         # OR succeed if network is available — either way, no crash.
@@ -352,6 +355,7 @@ class TestOpenRouterDiscovery:
     @pytest.mark.asyncio
     async def test_diff_against_static(self):
         from atlas.intelligence.providers.openrouter_free import FreeModelDiscovery, FreeModelInfo, diff_against_static
+
         disc = FreeModelDiscovery(
             verified_at=None,
             models=[

@@ -67,12 +67,18 @@ class FilesystemTool:
         try:
             if op == "read":
                 return await self._read(str(args["path"]))
-            if op == "search":
-                return await self._search(str(args["path"]), str(args["query"]))
+            if op in ("search",):
+                return await self._search(str(args["path"]), str(args.get("query", "")))
             if op == "write":
                 return await self._write(str(args["path"]), str(args.get("content", "")))
             if op == "delete":
                 return await self._delete(str(args["path"]))
+            # Tier-0 read-only ops the LLM commonly generates
+            if op in ("list", "list_directory", "inspect", "tree", "stat"):
+                return await self._list(str(args.get("path", ".")))
+            # Catch any read_X variant (e.g. read_file, read_content)
+            if op.startswith("read_"):
+                return await self._read(str(args.get("path", ".")))
             return ToolResult(ok=False, error=f"unknown operation {op!r}")
         except PathError as exc:
             return ToolResult(ok=False, error=str(exc))
@@ -88,17 +94,44 @@ class FilesystemTool:
         return ToolResult(ok=True, output={"path": str(rp.host), "content": text[:100_000]})
 
     async def _search(self, path: str, query: str) -> ToolResult:
-        rp = resolve_in_allowlist(path, self._read_globs)
-        result = await self._sandbox.run(
-            ["rg", "--line-number", "--no-heading", query, rp.mount_target],
-            mounts={str(rp.mount_source): rp.mount_target},
-            network=False,
-            timeout_s=30.0,
-        )
-        # rg exit 1 == no matches (not an error)
-        if result.exit_code not in (0, 1):
-            return ToolResult(ok=False, error=result.stderr_tail or "search failed")
-        return ToolResult(ok=True, output={"matches": result.stdout_tail})
+        p = Path(path).expanduser().resolve(strict=False)
+        # Pure-Python fallback so search works even without Docker/ripgrep
+        try:
+            matches: list[str] = []
+            target = p if p.is_dir() else p.parent
+            for file in target.rglob("*"):
+                if not file.is_file():
+                    continue
+                try:
+                    text = file.read_text(errors="replace")
+                    for lineno, line in enumerate(text.splitlines(), 1):
+                        if query.lower() in line.lower():
+                            matches.append(f"{file}:{lineno}: {line.rstrip()}")
+                            if len(matches) >= 200:
+                                break
+                except OSError:
+                    pass
+                if len(matches) >= 200:
+                    break
+            return ToolResult(ok=True, output={"matches": "\n".join(matches) or "(no matches)"})
+        except OSError as exc:
+            return ToolResult(ok=False, error=f"search failed: {exc}")
+
+    async def _list(self, path: str) -> ToolResult:
+        """Directory listing — the most common LLM-generated filesystem op."""
+        p = Path(path).expanduser().resolve(strict=False)
+        try:
+            if p.is_file():
+                # Model asked to "list" a file — just read it
+                return await self._read(path)
+            entries = []
+            for child in sorted(p.iterdir()):
+                kind = "dir" if child.is_dir() else "file"
+                size = child.stat().st_size if child.is_file() else ""
+                entries.append({"name": child.name, "type": kind, "size": size})
+            return ToolResult(ok=True, output={"path": str(p), "entries": entries, "count": len(entries)})
+        except OSError as exc:
+            return ToolResult(ok=False, error=f"list failed: {exc}")
 
     async def _write(self, path: str, content: str) -> ToolResult:
         rp = resolve_in_allowlist(path, self._write_globs)

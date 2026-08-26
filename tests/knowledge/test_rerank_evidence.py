@@ -61,9 +61,10 @@ def test_reranker_respects_relevance_weight() -> None:
 
 def test_reranker_penalizes_same_document_repeats() -> None:
     c1 = _cand("same", "steam engines first chunk text", rrf=1.0)
-    c2 = replace(_cand("same", "steam engines second chunk text", rrf=0.9), chunk=FabricChunk(
-        chunk_id="chk_same_2", document_id="same", content="steam engines second chunk text"
-    ))
+    c2 = replace(
+        _cand("same", "steam engines second chunk text", rrf=0.9),
+        chunk=FabricChunk(chunk_id="chk_same_2", document_id="same", content="steam engines second chunk text"),
+    )
     other = _cand("other", "steam engines from another source", rrf=0.85)
     out = FeatureReranker().rerank("steam engines", [c1, c2, other], k=3)
     ids = [c.document.document_id for c in out]
@@ -106,8 +107,7 @@ def test_selector_dedupes_identical_quotes_and_caps_count() -> None:
 
 def test_selector_respects_max_evidence() -> None:
     cands = [
-        _cand(f"d{i}", f"Unique sentence number {i} about a distinct topic altogether.", rrf=0.5)
-        for i in range(6)
+        _cand(f"d{i}", f"Unique sentence number {i} about a distinct topic altogether.", rrf=0.5) for i in range(6)
     ]
     selector = EvidenceSelector(FakeIdGen(), FakeClock(NOW), max_evidence=3)
     evidence = selector.select("distinct topic", cands)

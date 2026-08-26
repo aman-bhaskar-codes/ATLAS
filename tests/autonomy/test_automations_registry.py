@@ -44,11 +44,11 @@ async def test_automation_crud(registry):
 
     all_autos = await registry.list_all()
     assert len(all_autos) == 1
-    
+
     enabled_autos = await registry.list_all(enabled_only=True)
     assert len(enabled_autos) == 0
 
     await registry.delete(auto.id)
-    
+
     autos = await registry.list_all()
     assert len(autos) == 0

@@ -24,3 +24,7 @@ class SessionManager:
 
     async def release(self, session_id: str) -> None:
         await self._pool.release(session_id)
+
+    async def shutdown(self) -> None:
+        """Shut down all managed sessions."""
+        await self._pool.shutdown()

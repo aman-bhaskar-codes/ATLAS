@@ -70,9 +70,7 @@ class FabricStore:
                 len(chunks),
             ),
         )
-        await self._db.conn.execute(
-            "DELETE FROM fabric_chunks WHERE document_id = ?", (doc.document_id,)
-        )
+        await self._db.conn.execute("DELETE FROM fabric_chunks WHERE document_id = ?", (doc.document_id,))
         for c in chunks:
             await self._db.conn.execute(
                 """
@@ -105,16 +103,12 @@ class FabricStore:
         return _row_to_document(row) if row else None
 
     async def get_document(self, document_id: str) -> KnowledgeDocument | None:
-        cur = await self._db.conn.execute(
-            "SELECT * FROM fabric_documents WHERE document_id = ?", (document_id,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM fabric_documents WHERE document_id = ?", (document_id,))
         row = await cur.fetchone()
         return _row_to_document(row) if row else None
 
     async def list_documents(self, limit: int = 50) -> list[KnowledgeDocument]:
-        cur = await self._db.conn.execute(
-            "SELECT * FROM fabric_documents ORDER BY retrieved_at DESC LIMIT ?", (limit,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM fabric_documents ORDER BY retrieved_at DESC LIMIT ?", (limit,))
         rows = await cur.fetchall()
         return [d for r in rows if (d := _row_to_document(r)) is not None]
 
@@ -278,9 +272,7 @@ class FabricStore:
         await self._db.conn.commit()
 
     async def recent_sessions(self, limit: int = 10) -> list[dict[str, Any]]:
-        cur = await self._db.conn.execute(
-            "SELECT * FROM research_sessions ORDER BY updated_ts DESC LIMIT ?", (limit,)
-        )
+        cur = await self._db.conn.execute("SELECT * FROM research_sessions ORDER BY updated_ts DESC LIMIT ?", (limit,))
         rows = await cur.fetchall()
         return [
             {

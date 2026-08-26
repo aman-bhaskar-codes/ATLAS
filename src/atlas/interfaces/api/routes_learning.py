@@ -299,9 +299,7 @@ async def consolidate(request: Request) -> ConsolidateResultOut:
         raise HTTPException(500, "Consolidator not initialized")
     result = await atlas.consolidator.run()
     return ConsolidateResultOut(
-        episodes=result.get("episodes", 0),
-        applied=result.get("applied", 0),
-        proposed=result.get("proposed", 0)
+        episodes=result.get("episodes", 0), applied=result.get("applied", 0), proposed=result.get("proposed", 0)
     )
 
 
@@ -317,7 +315,4 @@ async def promote(request: Request, limit: int = Query(20, ge=1, le=100)) -> Pro
     if not atlas.skill_promoter:
         raise HTTPException(500, "SkillPromoter not initialized")
     skills = await atlas.skill_promoter.promote_from_experiences(limit=limit)
-    return PromoteResultOut(
-        promoted_skills=len(skills),
-        skill_names=[s.name for s in skills]
-    )
+    return PromoteResultOut(promoted_skills=len(skills), skill_names=[s.name for s in skills])

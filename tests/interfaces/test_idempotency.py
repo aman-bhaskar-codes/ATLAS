@@ -90,9 +90,7 @@ class TestIdempotencyStore:
         assert result2[1] == '{"result": 2}'
         assert result3[1] == '{"result": 3}'
 
-    async def test_fingerprint_collision_detection(
-        self, store: IdempotencyStore
-    ) -> None:
+    async def test_fingerprint_collision_detection(self, store: IdempotencyStore) -> None:
         """Should detect when same key used with different payload fingerprint."""
         key = "same-key"
         fp1 = "fingerprint-one"
@@ -112,9 +110,7 @@ class TestIdempotencyStore:
 class TestIdempotencyIntegration:
     """Integration tests simulating API-level idempotency behavior."""
 
-    async def test_idempotent_post_returns_cached_response(
-        self, store: IdempotencyStore
-    ) -> None:
+    async def test_idempotent_post_returns_cached_response(self, store: IdempotencyStore) -> None:
         """Second identical POST should return cached response without re-execution."""
         # Simulate first request
         payload = {"action": "create", "data": "test"}
@@ -142,9 +138,7 @@ class TestIdempotencyIntegration:
         cached_data = json.loads(cached_response)
         assert cached_data == response_data
 
-    async def test_idempotent_post_detects_payload_mismatch(
-        self, store: IdempotencyStore
-    ) -> None:
+    async def test_idempotent_post_detects_payload_mismatch(self, store: IdempotencyStore) -> None:
         """Same key with different payload should detect conflict."""
         idempotency_key = "req-conflict"
 

@@ -78,9 +78,7 @@ async def test_probes_are_open_in_local_mode(api_client: AsyncClient) -> None:
 # ── enforcing mode ─────────────────────────────────────────────────────────────
 
 
-async def test_keys_set_rejects_a_request_with_no_header(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_keys_set_rejects_a_request_with_no_header(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     async with app_client(tmp_path, monkeypatch, ATLAS_API_KEYS=_KEYS_ENV) as (app, client):
         assert len(app.state.api_keys) == 2, "the keys did not reach app.state"
         response = await client.get(_GUARDED)
@@ -88,27 +86,21 @@ async def test_keys_set_rejects_a_request_with_no_header(
     assert response.status_code == 401
 
 
-async def test_keys_set_rejects_an_unknown_key(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_keys_set_rejects_an_unknown_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     async with app_client(tmp_path, monkeypatch, ATLAS_API_KEYS=_KEYS_ENV) as (_app, client):
         response = await client.get(_GUARDED, headers=_bearer("not-a-configured-key"))
 
     assert response.status_code == 401
 
 
-async def test_keys_set_accepts_a_valid_admin_key(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_keys_set_accepts_a_valid_admin_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     async with app_client(tmp_path, monkeypatch, ATLAS_API_KEYS=_KEYS_ENV) as (_app, client):
         response = await client.get(_GUARDED, headers=_bearer(_ADMIN_KEY))
 
     assert response.status_code == 200, response.text
 
 
-async def test_probes_stay_open_with_keys_set(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_probes_stay_open_with_keys_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A container HEALTHCHECK has no key; making it 401 breaks orchestration."""
     async with app_client(tmp_path, monkeypatch, ATLAS_API_KEYS=_KEYS_ENV) as (_app, client):
         for path in _PROBES:
@@ -126,9 +118,7 @@ async def test_a_readonly_key_can_read(tmp_path: Path, monkeypatch: pytest.Monke
     assert response.status_code == 200, response.text
 
 
-async def test_a_readonly_key_cannot_mutate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_a_readonly_key_cannot_mutate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The documented guarantee, now actually enforced."""
     async with app_client(tmp_path, monkeypatch, ATLAS_API_KEYS=_KEYS_ENV) as (_app, client):
         response = await client.post(
@@ -156,9 +146,7 @@ async def test_an_admin_key_can_mutate(tmp_path: Path, monkeypatch: pytest.Monke
 # ── quota identity ─────────────────────────────────────────────────────────────
 
 
-async def test_the_quota_is_per_key_once_keys_are_set(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_the_quota_is_per_key_once_keys_are_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Exhausting one key's bucket must not throttle a different key.
 
     Before auth was wired, ``request.state.principal`` was never set and every
@@ -186,9 +174,7 @@ async def test_the_quota_is_per_key_once_keys_are_set(
 
 
 @pytest.mark.parametrize("raw", [",,,", "ro:", " , ro: , ", "  "])
-def test_configured_but_unusable_keys_refuse_to_start(
-    raw: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_configured_but_unusable_keys_refuse_to_start(raw: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """An operator who configured auth must never get an open server.
 
     ``ATLAS_API_KEYS="ro:"`` used to parse to ``{"": "readonly"}`` — non-empty, so
@@ -221,9 +207,7 @@ def test_the_refusal_is_actionable_without_quoting_the_value(
     assert _ENV_KEYS in str(excinfo.value), "the operator cannot tell which setting is wrong"
 
 
-async def test_a_rejected_key_is_never_echoed_back(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_a_rejected_key_is_never_echoed_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A 401 must not reflect the credential the caller presented.
 
     An error message built as f"invalid API key: {token}" is an easy and common
@@ -259,7 +243,7 @@ def test_parse_api_keys_assigns_roles_by_prefix() -> None:
 
 
 def test_parse_api_keys_drops_empty_key_material() -> None:
-    """"ro:" is a prefix with no key — storing it would enforce against nothing."""
+    """ "ro:" is a prefix with no key — storing it would enforce against nothing."""
     assert parse_api_keys("ro:") == {}
     assert parse_api_keys(",,,") == {}
     assert parse_api_keys("") == {}

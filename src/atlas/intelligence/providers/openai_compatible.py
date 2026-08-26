@@ -63,7 +63,7 @@ class OpenAICompatibleProvider:
                 {
                     "role": m.role.value,
                     "content": m.content,
-                    **({"reasoning_details": m.reasoning_details} if m.reasoning_details else {})
+                    **({"reasoning_details": m.reasoning_details} if m.reasoning_details else {}),
                 }
                 for m in messages
             ],
@@ -115,9 +115,7 @@ class OpenAICompatibleProvider:
         if not text:
             import logging
 
-            logging.getLogger("atlas.intel.provider").warning(
-                f"{self.name} returned empty text. Raw response: {data}"
-            )
+            logging.getLogger("atlas.intel.provider").warning(f"{self.name} returned empty text. Raw response: {data}")
             text = ""
         u = data.get("usage", {})
         it, ot = int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0))
@@ -126,17 +124,13 @@ class OpenAICompatibleProvider:
         reasoning_details = data["choices"][0]["message"].get("reasoning_details")
         if isinstance(reasoning_details, list):
             reasoning_details = "\n".join(
-                str(r.get("text", r)) if isinstance(r, dict) else str(r)
-                for r in reasoning_details
+                str(r.get("text", r)) if isinstance(r, dict) else str(r) for r in reasoning_details
             )
         elif reasoning_details is not None and not isinstance(reasoning_details, str):
             reasoning_details = str(reasoning_details)
 
         return ProviderCompletion(
-            str(text), 
-            Usage(input_tokens=it, output_tokens=ot, usd=usd), 
-            tool_calls, 
-            reasoning_details
+            str(text), Usage(input_tokens=it, output_tokens=ot, usd=usd), tool_calls, reasoning_details
         )
 
     @staticmethod

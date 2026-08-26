@@ -39,7 +39,7 @@ class BrowserTool:
     def dry_run(self, args: dict[str, Any]) -> str:
         op = str(args.get("operation", ""))
         url = str(args.get("url", args.get("seed_url", "")))
-        
+
         if op == "research":
             return f"CRAWL {url} (depth={args.get('depth', 1)}, budget={args.get('budget', 5)})"
         if op == "goto":
@@ -49,7 +49,7 @@ class BrowserTool:
         if op == "click":
             selector = str(args.get("selector", ""))
             return f"CLICK element matching {selector}"
-        
+
         return f"unknown browser op {op!r}"
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
@@ -61,14 +61,14 @@ class BrowserTool:
                 seed = str(args["seed_url"])
                 depth = int(args.get("depth", 1))
                 budget = int(args.get("budget", 5))
-                
+
                 # Auto-create session if needed for crawler
                 if not self._default_session_id:
                     session = await self._platform.create_session()
                     self._default_session_id = session.id
-                    
+
                 result = await self._platform.research(self._default_session_id, seed, depth, budget, cid)
-                
+
                 # Serialize the result
                 output = {
                     "seed_url": result.seed_url,
@@ -79,10 +79,10 @@ class BrowserTool:
                         {
                             "title": a.title,
                             "markdown_length": len(a.markdown),
-                            "preview": a.markdown[:500] + "..." if len(a.markdown) > 500 else a.markdown
+                            "preview": a.markdown[:500] + "..." if len(a.markdown) > 500 else a.markdown,
                         }
                         for a in result.articles
-                    ]
+                    ],
                 }
                 return ToolResult(ok=True, output=output)
 

@@ -73,6 +73,7 @@ def parse_html(content: str, *, title: str = "") -> Parsed:
     if not found_title and m:
         found_title = _strip_tags(m.group(1))
     body = _HTML_BLOCK.sub(" ", content)
+
     # Keep heading markers so the chunker can respect section boundaries.
     def _head_repl(hm: re.Match[str]) -> str:
         return f"\n\n{'#' * int(hm.group(1))} {_strip_tags(hm.group(2))}\n\n"

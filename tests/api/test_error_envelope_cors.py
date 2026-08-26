@@ -48,9 +48,7 @@ _TARGET = "/api/v1/runtime/status"
 
 
 def _denied() -> DeniedError:
-    return DeniedError(
-        SafetyDecision(decision="deny", tier=4, reason="blocked by policy", matched_rule="test-rule")
-    )
+    return DeniedError(SafetyDecision(decision="deny", tier=4, reason="blocked by policy", matched_rule="test-rule"))
 
 
 # (exception, expected status, expected envelope code)
@@ -148,9 +146,7 @@ async def test_stream_for_unknown_task_fails_before_the_connected_frame(
     a 200 that truncates mid-stream. ``stream_task_events`` therefore awaits
     ``get_task`` before constructing the StreamingResponse.
     """
-    response = await api_client.get(
-        "/api/v1/tasks/task-does-not-exist/events/stream", headers=_ORIGIN
-    )
+    response = await api_client.get("/api/v1/tasks/task-does-not-exist/events/stream", headers=_ORIGIN)
 
     assert response.status_code == 404
     assert "connected" not in response.text, "the stream opened before validating the task"
@@ -185,4 +181,3 @@ async def test_preflight_allows_the_automation_mutation_methods(
     assert response.status_code == 200, f"{method} preflight refused: {response.text}"
     assert method in (response.headers.get("access-control-allow-methods") or "")
     assert response.headers.get(_CORS_HEADER) == "http://localhost:3000"
-

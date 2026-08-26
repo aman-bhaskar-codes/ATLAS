@@ -112,9 +112,7 @@ class SourceTrustLearner:
         freshness = move(existing.freshness_score if existing else 0.5, fresh)
         n = (existing.n_observations if existing else 0) + 1
         prior_contradiction = existing.contradiction_rate if existing else 0.0
-        contradiction_rate = (
-            (prior_contradiction * (n - 1) + (1.0 if contradicted else 0.0)) / n if n else 0.0
-        )
+        contradiction_rate = (prior_contradiction * (n - 1) + (1.0 if contradicted else 0.0)) / n if n else 0.0
         # Trust: quality signals raise it slowly; contradictions pull it down.
         quality = (usefulness + correctness + acceptance + freshness) / 4
         trust = (existing.trust if existing else 0.5) + alpha * (quality - 0.5)

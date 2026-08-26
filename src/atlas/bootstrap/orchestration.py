@@ -90,27 +90,44 @@ def build_orchestration(
     """Build orchestration layer: tools, dispatcher, planner, reasoning loop, orchestrator."""
 
     tool_registry = ToolRegistry()
-    _operations = ("read", "write", "delete", "side_effect", "read_only")
+    _fs_operations = ("read", "list", "search", "inspect", "tree", "stat", "write", "delete", "overwrite")
+    _shell_operations = ("read_only", "side_effect")
     _metadata_map = {
         "filesystem": ToolMetadata(
             name="filesystem",
-            operations=_operations,
-            description="Read and write files within allowed paths.",
+            operations=_fs_operations,
+            description=(
+                "Read, list, search, and write files within allowed paths. "
+                "Operations: read (read file content), list (list directory entries), "
+                "search (text search), inspect/tree/stat (directory metadata), "
+                "write (create/overwrite), delete (remove)."
+            ),
             estimated_latency_ms=50,
             idempotent=False,
             side_effects=True,
         ),
         "shell": ToolMetadata(
             name="shell",
-            operations=_operations,
-            description="Run allowlisted commands in a sandbox.",
+            operations=_shell_operations,
+            description=(
+                "Run allowlisted shell commands. Operations: read_only "
+                "(safe cmds: ls, cat, grep, find, git log), side_effect "
+                "(modifying cmds, requires confirmation)."
+            ),
             estimated_latency_ms=1500,
             idempotent=False,
             side_effects=True,
         ),
     }
     for t in tools.values():
-        tool_registry.register(t, _operations, _metadata_map.get(t.name))
+        ops = (
+            _fs_operations
+            if t.name == "filesystem"
+            else _shell_operations
+            if t.name == "shell"
+            else ("read", "write", "delete")
+        )
+        tool_registry.register(t, ops, _metadata_map.get(t.name))
 
     events = EventPublisher(bus)
     safety.set_events(events)
@@ -172,9 +189,7 @@ def build_orchestration(
     else:
         # The general-purpose fallback: model judgement against the intent's
         # success criteria. Domains that can be checked mechanically override it.
-        default_verifier = GoalVerifier(
-            gateway, min_pass_score=config.verification.min_pass_score
-        )
+        default_verifier = GoalVerifier(gateway, min_pass_score=config.verification.min_pass_score)
         by_domain: dict[TaskDomain, Verifier] = {}
         # Coding work is verified by running the configured check command
         # (tests/lint), not by asking the model whether it worked. Only wired

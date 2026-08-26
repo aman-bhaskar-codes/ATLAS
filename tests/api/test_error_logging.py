@@ -52,9 +52,7 @@ async def test_unmapped_exception_is_logged_exactly_once(tmp_path: Path) -> None
             response = await client.get(_TARGET, headers={"X-Request-ID": "rid-500"})
 
     assert response.status_code == 500
-    assert log.exception.call_count == 1, (
-        f"expected one error record, got {log.exception.call_count}"
-    )
+    assert log.exception.call_count == 1, f"expected one error record, got {log.exception.call_count}"
     event, kwargs = log.exception.call_args.args[0], log.exception.call_args.kwargs
     assert event == "api.unhandled_exception"
     assert kwargs["path"] == _TARGET

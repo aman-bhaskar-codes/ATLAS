@@ -30,6 +30,7 @@ _log = get_logger("atlas.runtime.supervisor")
 
 class SystemState(Enum):
     """Runtime system states."""
+
     BOOTING = "booting"
     INITIALIZING = "initializing"
     DEGRADED = "degraded"
@@ -42,6 +43,7 @@ class SystemState(Enum):
 
 class ComponentStatus(Enum):
     """Component health status."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNAVAILABLE = "unavailable"
@@ -51,6 +53,7 @@ class ComponentStatus(Enum):
 @dataclass
 class ComponentHealth:
     """Health status of a single component."""
+
     name: str
     status: ComponentStatus
     latency_ms: float = 0.0
@@ -63,6 +66,7 @@ class ComponentHealth:
 @dataclass
 class HealthReport:
     """Overall system health report."""
+
     overall_status: SystemState
     timestamp: datetime
     components: dict[str, ComponentHealth]
@@ -74,6 +78,7 @@ class HealthReport:
 @dataclass
 class StartupPhase:
     """Definition of a startup phase."""
+
     name: str
     critical: bool = True
     timeout_seconds: float = 30.0
@@ -81,13 +86,15 @@ class StartupPhase:
 
 
 # Critical components that must be healthy for READY state
-CRITICAL_COMPONENTS = frozenset({
-    "database",
-    "safety",
-    "orchestrator",
-    "configuration",
-    "intelligence_gateway",
-})
+CRITICAL_COMPONENTS = frozenset(
+    {
+        "database",
+        "safety",
+        "orchestrator",
+        "configuration",
+        "intelligence_gateway",
+    }
+)
 
 # Startup phases in order
 STARTUP_PHASES = [
@@ -125,20 +132,20 @@ class RuntimeSupervisor:
         self._config = config
         self._clock = clock
         self._metrics = metrics
-        
+
         # State management
         self._state = SystemState.BOOTING
         self._startup_time: datetime | None = None
         self._component_health: dict[str, ComponentHealth] = {}
-        
+
         # Lifecycle control
         self._shutdown_event = asyncio.Event()
         self._background_tasks: set[asyncio.Task[None]] = set()
-        
+
         # Component references (set during startup)
         self._atlas: Any = None
         self._worker_registry: dict[str, Any] = {}
-        
+
         # Health monitoring
         self._health_check_interval = 60.0  # seconds
         self._health_check_task: asyncio.Task[None] | None = None
@@ -157,46 +164,46 @@ class RuntimeSupervisor:
 
     async def start(self, atlas: Any) -> HealthReport:
         """Start the runtime supervisor with staged initialization.
-        
+
         Args:
             atlas: The fully constructed Atlas instance
-            
+
         Returns:
             HealthReport showing final system state
         """
         self._atlas = atlas
         self._startup_time = self._clock.now()
         _log.info("runtime.startup.started", state=self._state.value)
-        
+
         try:
             # Execute staged startup
             for phase in STARTUP_PHASES:
                 await self._execute_startup_phase(phase)
-                
+
                 # Transition state after each phase
                 if self._state == SystemState.BOOTING:
                     self._state = SystemState.INITIALIZING
-            
+
             # Run final readiness checks
             health_report = await self._run_readiness_checks()
-            
+
             # Set final state based on health
             self._state = health_report.overall_status
-            
+
             # Start background monitoring if we're in a usable state
             if self._state in (SystemState.READY, SystemState.DEGRADED):
                 await self._start_background_monitoring()
                 await self._start_background_workers()
-            
+
             _log.info(
                 "runtime.startup.completed",
                 state=self._state.value,
                 uptime_seconds=self.uptime_seconds,
                 degraded_count=len(health_report.degraded_components),
             )
-            
+
             return health_report
-            
+
         except Exception as exc:
             _log.error("runtime.startup.failed", error=str(exc), exc_info=True)
             self._state = SystemState.FAILED
@@ -204,27 +211,27 @@ class RuntimeSupervisor:
 
     async def _execute_startup_phase(self, phase: StartupPhase) -> None:
         """Execute a single startup phase with timeout and health checks.
-        
+
         Args:
             phase: The startup phase to execute
         """
         _log.info("runtime.phase.started", phase=phase.name, critical=phase.critical)
         phase_start = time.perf_counter()
-        
+
         try:
             # Execute phase-specific initialization
             await self._initialize_phase(phase)
-            
+
             # Verify phase success
             await self._verify_phase_health(phase)
-            
+
             duration_ms = (time.perf_counter() - phase_start) * 1000
             _log.info(
                 "runtime.phase.completed",
                 phase=phase.name,
                 duration_ms=duration_ms,
             )
-            
+
         except TimeoutError:
             _log.error(
                 "runtime.phase.timeout",
@@ -235,7 +242,7 @@ class RuntimeSupervisor:
                 raise RuntimeError(f"Critical phase {phase.name} timed out") from None
             else:
                 _log.warning("runtime.phase.degraded", phase=phase.name)
-                
+
         except Exception as exc:
             _log.error(
                 "runtime.phase.failed",
@@ -249,45 +256,45 @@ class RuntimeSupervisor:
 
     async def _initialize_phase(self, phase: StartupPhase) -> None:
         """Initialize components for a specific phase.
-        
+
         Args:
             phase: The startup phase to initialize
         """
         if phase.name == "bootstrap":
             # Configuration already loaded, just validate
             await self._validate_configuration()
-            
+
         elif phase.name == "infrastructure":
             # Infrastructure already initialized in app.py
             await self._verify_infrastructure()
-            
+
         elif phase.name == "safety":
             # Safety already initialized, verify it's working
             await self._verify_safety()
-            
+
         elif phase.name == "intelligence":
             # Intelligence already initialized, verify providers
             await self._verify_intelligence()
-            
+
         elif phase.name == "memory":
             # Memory already initialized, verify subsystems
             await self._verify_memory()
-            
+
         elif phase.name == "capabilities":
             # Capabilities already initialized, verify platforms
             await self._verify_capabilities()
-            
+
         elif phase.name == "orchestration":
             # Orchestration already initialized, verify it's ready
             await self._verify_orchestration()
-            
+
         elif phase.name == "readiness":
             # This is handled by _run_readiness_checks
             pass
 
     async def _verify_phase_health(self, phase: StartupPhase) -> None:
         """Verify health of components initialized in this phase.
-        
+
         Args:
             phase: The startup phase to verify
         """
@@ -313,7 +320,7 @@ class RuntimeSupervisor:
         # Database should be connected
         if not await self._atlas.db.health():
             raise RuntimeError("Database not healthy")
-        
+
         # Message bus should be operational
         if not self._atlas.bus:
             raise RuntimeError("Message bus not initialized")
@@ -323,7 +330,7 @@ class RuntimeSupervisor:
         # Kill switch should be operational
         if not self._atlas.killswitch:
             raise RuntimeError("Kill switch not initialized")
-        
+
         # Audit log should be writable
         if not self._atlas.audit:
             raise RuntimeError("Audit log not initialized")
@@ -333,7 +340,7 @@ class RuntimeSupervisor:
         # Model gateway should be initialized
         if not self._atlas.gateway:
             raise RuntimeError("Model gateway not initialized")
-        
+
         # At least one provider should be available
         health = await self._atlas.gateway.health()
         available = [p for p, h in health.items() if h]
@@ -350,7 +357,7 @@ class RuntimeSupervisor:
         if not self._atlas.vectors:
             _log.warning("memory.vectorstore.unavailable")
             self._set_component_health("vectorstore", ComponentStatus.DEGRADED, detail="Vector store not initialized")
-        
+
         # Episodic memory should be initialized
         if not self._atlas.episodic:
             _log.warning("memory.episodic.unavailable")
@@ -361,7 +368,7 @@ class RuntimeSupervisor:
         # Tool registry should be initialized
         if not self._atlas.tools:
             raise RuntimeError("Tool registry not initialized")
-        
+
         # Browser is optional
         if not self._atlas.browser_platform:
             _log.info("capabilities.browser.disabled")
@@ -375,31 +382,33 @@ class RuntimeSupervisor:
 
     async def _run_readiness_checks(self) -> HealthReport:
         """Run comprehensive readiness checks.
-        
+
         Returns:
             HealthReport showing system health
         """
         _log.info("runtime.readiness_check.started")
-        
+
         # Check all critical components
         await self._check_database_health()
         await self._check_safety_health()
         await self._check_intelligence_health()
         await self._check_orchestration_health()
-        
+
         # Check optional components
         await self._check_memory_health()
         await self._check_capability_health()
-        
+
         # Calculate overall state
         overall_state = self._calculate_system_state()
-        
+
         # Build health report
-        degraded = [name for name, health in self._component_health.items() 
-                   if health.status == ComponentStatus.DEGRADED]
-        unavailable = [name for name, health in self._component_health.items()
-                       if health.status == ComponentStatus.UNAVAILABLE]
-        
+        degraded = [
+            name for name, health in self._component_health.items() if health.status == ComponentStatus.DEGRADED
+        ]
+        unavailable = [
+            name for name, health in self._component_health.items() if health.status == ComponentStatus.UNAVAILABLE
+        ]
+
         report = HealthReport(
             overall_status=overall_state,
             timestamp=self._clock.now(),
@@ -408,46 +417,49 @@ class RuntimeSupervisor:
             unavailable_capabilities=unavailable,
             uptime_seconds=self.uptime_seconds,
         )
-        
+
         _log.info(
             "runtime.readiness_check.completed",
             state=overall_state.value,
             degraded_count=len(degraded),
             unavailable_count=len(unavailable),
         )
-        
+
         return report
 
     def _calculate_system_state(self) -> SystemState:
         """Calculate overall system state from component health.
-        
+
         Returns:
             SystemState based on component health
         """
         # Check for critical failures
         critical_failures = [
-            name for name, health in self._component_health.items()
+            name
+            for name, health in self._component_health.items()
             if name in CRITICAL_COMPONENTS and health.status == ComponentStatus.FAILED
         ]
         if critical_failures:
             return SystemState.FAILED
-        
+
         # Check if critical components are ready
         critical_not_ready = [
-            name for name, health in self._component_health.items()
+            name
+            for name, health in self._component_health.items()
             if name in CRITICAL_COMPONENTS and health.status != ComponentStatus.HEALTHY
         ]
         if critical_not_ready:
             return SystemState.FAILED
-        
+
         # Check for degraded components
         degraded = [
-            name for name, health in self._component_health.items()
+            name
+            for name, health in self._component_health.items()
             if health.status in (ComponentStatus.DEGRADED, ComponentStatus.UNAVAILABLE)
         ]
         if degraded:
             return SystemState.DEGRADED
-        
+
         return SystemState.READY
 
     async def _check_database_health(self) -> None:
@@ -456,82 +468,51 @@ class RuntimeSupervisor:
             start = time.perf_counter()
             healthy = await self._atlas.db.health()
             latency_ms = (time.perf_counter() - start) * 1000
-            
+
             if healthy:
                 self._set_component_health(
-                    "database",
-                    ComponentStatus.HEALTHY,
-                    latency_ms=latency_ms,
-                    detail="Connected and responsive"
+                    "database", ComponentStatus.HEALTHY, latency_ms=latency_ms, detail="Connected and responsive"
                 )
             else:
-                self._set_component_health(
-                    "database",
-                    ComponentStatus.FAILED,
-                    detail="Database health check failed"
-                )
+                self._set_component_health("database", ComponentStatus.FAILED, detail="Database health check failed")
         except Exception as exc:
-            self._set_component_health(
-                "database",
-                ComponentStatus.FAILED,
-                detail=f"Database check failed: {exc!s}"
-            )
+            self._set_component_health("database", ComponentStatus.FAILED, detail=f"Database check failed: {exc!s}")
 
     async def _check_safety_health(self) -> None:
         """Check safety system health."""
         try:
             # Check kill switch
             if self._atlas.killswitch.is_active():
-                self._set_component_health(
-                    "safety",
-                    ComponentStatus.DEGRADED,
-                    detail="Kill switch active"
-                )
+                self._set_component_health("safety", ComponentStatus.DEGRADED, detail="Kill switch active")
                 return
-            
+
             # Check audit log
             # (Assuming audit log has a health method)
-            self._set_component_health(
-                "safety",
-                ComponentStatus.HEALTHY,
-                detail="Safety systems operational"
-            )
+            self._set_component_health("safety", ComponentStatus.HEALTHY, detail="Safety systems operational")
         except Exception as exc:
-            self._set_component_health(
-                "safety",
-                ComponentStatus.FAILED,
-                detail=f"Safety check failed: {exc!s}"
-            )
+            self._set_component_health("safety", ComponentStatus.FAILED, detail=f"Safety check failed: {exc!s}")
 
     async def _check_intelligence_health(self) -> None:
         """Check intelligence system health."""
         try:
             health = await self._atlas.gateway.health()
             available = [p for p, h in health.items() if h]
-            
+
             if not available:
                 self._set_component_health(
-                    "intelligence_gateway",
-                    ComponentStatus.FAILED,
-                    detail="No model providers available"
+                    "intelligence_gateway", ComponentStatus.FAILED, detail="No model providers available"
                 )
             elif len(available) < len(health):
                 self._set_component_health(
-                    "intelligence_gateway",
-                    ComponentStatus.DEGRADED,
-                    detail=f"Partial providers: {available}"
+                    "intelligence_gateway", ComponentStatus.DEGRADED, detail=f"Partial providers: {available}"
                 )
             else:
                 self._set_component_health(
-                    "intelligence_gateway",
-                    ComponentStatus.HEALTHY,
-                    detail=f"All providers available: {available}"
+                    "intelligence_gateway", ComponentStatus.HEALTHY, detail=f"All providers available: {available}"
                 )
         except Exception as exc:
             self._set_component_health(
-                "intelligence_gateway",
-                ComponentStatus.FAILED,
-                detail=f"Intelligence check failed: {exc!s}"
+                "intelligence_gateway", ComponentStatus.FAILED, detail=f"Intelligence check failed: {exc!s}"
             )
 
     async def _check_memory_health(self) -> None:
@@ -542,19 +523,15 @@ class RuntimeSupervisor:
                 self._set_component_health("vectorstore", ComponentStatus.HEALTHY)
             else:
                 self._set_component_health("vectorstore", ComponentStatus.UNAVAILABLE)
-            
+
             # Check episodic memory
             if self._atlas.episodic:
                 self._set_component_health("episodic", ComponentStatus.HEALTHY)
             else:
                 self._set_component_health("episodic", ComponentStatus.UNAVAILABLE)
-                
+
         except Exception as exc:
-            self._set_component_health(
-                "memory",
-                ComponentStatus.DEGRADED,
-                detail=f"Memory check failed: {exc!s}"
-            )
+            self._set_component_health("memory", ComponentStatus.DEGRADED, detail=f"Memory check failed: {exc!s}")
 
     async def _check_capability_health(self) -> None:
         """Check capability platform health."""
@@ -564,12 +541,10 @@ class RuntimeSupervisor:
                 self._set_component_health("browser", ComponentStatus.HEALTHY)
             else:
                 self._set_component_health("browser", ComponentStatus.UNAVAILABLE)
-                
+
         except Exception as exc:
             self._set_component_health(
-                "capabilities",
-                ComponentStatus.DEGRADED,
-                detail=f"Capability check failed: {exc!s}"
+                "capabilities", ComponentStatus.DEGRADED, detail=f"Capability check failed: {exc!s}"
             )
 
     async def _check_orchestration_health(self) -> None:
@@ -581,9 +556,7 @@ class RuntimeSupervisor:
                 self._set_component_health("orchestrator", ComponentStatus.FAILED)
         except Exception as exc:
             self._set_component_health(
-                "orchestrator",
-                ComponentStatus.FAILED,
-                detail=f"Orchestration check failed: {exc!s}"
+                "orchestrator", ComponentStatus.FAILED, detail=f"Orchestration check failed: {exc!s}"
             )
 
     def _set_component_health(
@@ -594,7 +567,7 @@ class RuntimeSupervisor:
         detail: str = "",
     ) -> None:
         """Set health status for a component.
-        
+
         Args:
             name: Component name
             status: Health status
@@ -602,20 +575,20 @@ class RuntimeSupervisor:
             detail: Status detail message
         """
         now = self._clock.now()
-        
+
         if name not in self._component_health:
             self._component_health[name] = ComponentHealth(name=name, status=ComponentStatus.UNAVAILABLE)
-        
+
         health = self._component_health[name]
         health.status = status
         health.latency_ms = latency_ms
         health.detail = detail
-        
+
         if status == ComponentStatus.HEALTHY:
             health.last_success = now
         else:
             health.last_failure = now
-        
+
         _log.debug(
             "component.health.updated",
             component=name,
@@ -627,8 +600,10 @@ class RuntimeSupervisor:
         """Start background health monitoring."""
         if self._health_check_task is not None:
             return  # Already running
-        
+
         self._health_check_task = asyncio.create_task(self._health_monitor_loop())
+        self._background_tasks.add(self._health_check_task)
+        self._health_check_task.add_done_callback(self._background_tasks.discard)
         _log.info("runtime.monitoring.started", interval_seconds=self._health_check_interval)
 
     async def _health_monitor_loop(self) -> None:
@@ -642,10 +617,10 @@ class RuntimeSupervisor:
                 )
                 if self._shutdown_event.is_set():
                     break
-                    
+
                 # Run health checks
                 await self._run_readiness_checks()
-                
+
             except TimeoutError:
                 # Normal timeout, continue loop
                 continue
@@ -671,38 +646,31 @@ class RuntimeSupervisor:
 
     async def shutdown(self, timeout_seconds: float = 30.0) -> None:
         """Gracefully shutdown the runtime supervisor.
-        
+
         Args:
             timeout_seconds: Maximum time to wait for graceful shutdown
         """
         if self._state in (SystemState.SHUTTING_DOWN, SystemState.FAILED):
             return  # Already shutting down or failed
-        
+
         self._state = SystemState.SHUTTING_DOWN
         _log.info("runtime.shutdown.started", timeout_seconds=timeout_seconds)
-        
+
         try:
             # Signal shutdown
             self._shutdown_event.set()
-            
+
             # Stop accepting new tasks
             await self._stop_accepting_tasks()
-            
-            # Stop background monitoring
-            if self._health_check_task:
-                self._health_check_task.cancel()
-                try:
-                    await self._health_check_task
-                except asyncio.CancelledError:
-                    pass
-            
-            # Stop background workers
+
+            # Stop background monitoring and workers (tracked in _background_tasks)
             await self._stop_background_workers(timeout_seconds)
-            
+
             _log.info("runtime.shutdown.completed", uptime_seconds=self.uptime_seconds)
-            
+
         except Exception as exc:
             _log.error("runtime.shutdown.failed", error=str(exc), exc_info=True)
+            self._state = SystemState.FAILED
             raise
 
     async def _stop_accepting_tasks(self) -> None:
@@ -712,16 +680,16 @@ class RuntimeSupervisor:
 
     async def _stop_background_workers(self, timeout_seconds: float) -> None:
         """Stop all background workers gracefully.
-        
+
         Args:
             timeout_seconds: Maximum time to wait for workers to stop
         """
         _log.info("runtime.workers.stopping", count=len(self._background_tasks))
-        
+
         # Cancel all background tasks
         for task in self._background_tasks:
             task.cancel()
-        
+
         # Wait for tasks to complete with timeout
         if self._background_tasks:
             try:
@@ -731,7 +699,7 @@ class RuntimeSupervisor:
                 )
             except TimeoutError:
                 _log.warning("runtime.workers.timeout", some_workers_still_running=True)
-        
+
         self._background_tasks.clear()
         if self._atlas is not None:
             if self._atlas.embedding_worker is not None:
@@ -743,7 +711,7 @@ class RuntimeSupervisor:
 
     def get_health_report(self) -> HealthReport:
         """Get current health report.
-        
+
         Returns:
             Current system health report
         """
@@ -752,34 +720,26 @@ class RuntimeSupervisor:
             timestamp=self._clock.now(),
             components=self._component_health.copy(),
             degraded_components=[
-                name for name, health in self._component_health.items()
-                if health.status == ComponentStatus.DEGRADED
+                name for name, health in self._component_health.items() if health.status == ComponentStatus.DEGRADED
             ],
             unavailable_capabilities=[
-                name for name, health in self._component_health.items()
-                if health.status == ComponentStatus.UNAVAILABLE
+                name for name, health in self._component_health.items() if health.status == ComponentStatus.UNAVAILABLE
             ],
             uptime_seconds=self.uptime_seconds,
         )
 
     def get_degraded_components(self) -> list[str]:
         """Get list of degraded component names.
-        
+
         Returns:
             List of degraded component names
         """
-        return [
-            name for name, health in self._component_health.items()
-            if health.status == ComponentStatus.DEGRADED
-        ]
+        return [name for name, health in self._component_health.items() if health.status == ComponentStatus.DEGRADED]
 
     def get_unavailable_capabilities(self) -> list[str]:
         """Get list of unavailable capabilities.
-        
+
         Returns:
             List of unavailable capability names
         """
-        return [
-            name for name, health in self._component_health.items()
-            if health.status == ComponentStatus.UNAVAILABLE
-        ]
+        return [name for name, health in self._component_health.items() if health.status == ComponentStatus.UNAVAILABLE]

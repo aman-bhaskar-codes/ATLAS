@@ -21,6 +21,7 @@ Phase 2 additions:
 from __future__ import annotations
 
 import time
+import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +30,12 @@ from atlas.infra.ids import CorrelationId, TaskId
 from atlas.infra.logging import get_logger
 from atlas.infra.types import ModelCapability, ModelRequest, Tier
 from atlas.intelligence.gateway import ModelGateway
+from atlas.memory.trajectory import (
+    DecisionOutcome,
+    DecisionPoint,
+    DecisionTrace,
+    FailureCategory,
+)
 from atlas.memory.types import Episode, EpisodeKind
 from atlas.orchestration.context_engine import ContextCompactor
 from atlas.orchestration.dispatcher import ToolDispatcher
@@ -57,6 +64,7 @@ from atlas.orchestration.types import (
 from atlas.orchestration.validator import OutputValidator
 
 if TYPE_CHECKING:
+    from atlas.memory.trajectory import DecisionTrace
     from atlas.memory.trajectory_store import TrajectoryStore
     from atlas.memory.working import WorkingMemory
 
@@ -146,10 +154,15 @@ class ReasoningLoop:
 
         # Phase 2: Trajectory capture initialization
         from atlas.memory.trajectory import ActionRecord, ObservationRecord
+        from atlas.memory.trajectory import FailureRecord as FailureRecordModel
 
         trajectory_actions: list[ActionRecord] = []
         trajectory_observations: list[ObservationRecord] = []
         trajectory_start = time.perf_counter()
+
+        # Phase 3: Decision trace and failure record collections
+        decision_traces: list[DecisionTrace] = []
+        failure_records: list[FailureRecordModel] = []
 
         while True:
             try:
@@ -157,7 +170,7 @@ class ReasoningLoop:
                 counter.tick_step()
                 machine.transition(TaskState.REASONING)
 
-                thought, action = await self._reason_once(
+                thought, action, model_trace = await self._reason_once(
                     task_id,
                     correlation_id,
                     current_plan,
@@ -165,6 +178,8 @@ class ReasoningLoop:
                     history,
                     counter,
                 )
+                if model_trace is not None:
+                    decision_traces.append(model_trace)
                 await self._events.emit(
                     task_id=task_id,
                     correlation_id=correlation_id,
@@ -197,6 +212,27 @@ class ReasoningLoop:
                     )
                 )
 
+                # Phase 3: Record tool selection decision trace
+                if action.kind == "tool_call" and action.tool:
+                    decision_traces.append(
+                        DecisionTrace(
+                            id=str(uuid.uuid4()),
+                            task_id=task_id,
+                            correlation_id=correlation_id,
+                            ts=datetime.now(UTC),
+                            decision_point=DecisionPoint.TOOL_SELECTION,
+                            options_considered=(),
+                            chosen_option=action.tool,
+                            rationale="Model selected tool via OTAR reasoning",
+                            context={
+                                "step": action.step,
+                                "operation": action.operation or "",
+                            },
+                            outcome=DecisionOutcome.UNKNOWN,
+                            confidence=thought.confidence,
+                        )
+                    )
+
                 if action.kind in ("final_answer", "ask_user"):
                     # ── Phase 1: Verify the answer before returning ──────────
                     machine.transition(TaskState.VALIDATING)
@@ -206,6 +242,54 @@ class ReasoningLoop:
                     )
 
                     if not verification.passed and goal.can_replan() and self._replanner:
+                        # Phase 3: Record verification decision as failure (leading to replan)
+                        decision_traces.append(
+                            DecisionTrace(
+                                id=str(uuid.uuid4()),
+                                task_id=task_id,
+                                correlation_id=correlation_id,
+                                ts=datetime.now(UTC),
+                                decision_point=DecisionPoint.VERIFICATION,
+                                options_considered=("accept", "replan"),
+                                chosen_option="replan",
+                                rationale=f"Verification failed (score {verification.score:.2f}). "
+                                f"Reason: {verification.failure_reason or 'unspecified'}",
+                                context={
+                                    "score": verification.score if hasattr(verification, "score") else 0.0,
+                                    "passed": verification.passed,
+                                    "failure_reason": verification.failure_reason,
+                                },
+                                outcome=DecisionOutcome.FAILURE,
+                                outcome_detail=(
+                                    f"Score {verification.score:.2f}: "
+                                    f"{verification.failure_reason or 'verification failed'}"
+                                ),
+                            )
+                        )
+
+                        # Also record a failure record for the verification failure
+                        failure_records.append(
+                            FailureRecordModel(
+                                id=str(uuid.uuid4()),
+                                task_id=task_id,
+                                correlation_id=correlation_id,
+                                ts=datetime.now(UTC),
+                                category=FailureCategory.VERIFICATION_FAILED,
+                                step=counter.steps,
+                                component="verifier",
+                                error_message=(
+                                    f"Verification failed: {verification.failure_reason or 'verification failed'}"
+                                ),
+                                context={
+                                    "score": verification.score if hasattr(verification, "score") else 0.0,
+                                    "passed": verification.passed,
+                                },
+                                recovered=True,
+                                recovery_method="replanning",
+                                recovery_succeeded=True,
+                            )
+                        )
+
                         # Verification failed — try replanning
                         await self._events.emit(
                             task_id=task_id,
@@ -241,11 +325,58 @@ class ReasoningLoop:
                             replan_count=goal.replan_count,
                             new_goal=current_plan.goal,
                         )
+
+                        # Phase 3: Record replanning decision trace for verification failure
+                        decision_traces.append(
+                            DecisionTrace(
+                                id=str(uuid.uuid4()),
+                                task_id=task_id,
+                                correlation_id=correlation_id,
+                                ts=datetime.now(UTC),
+                                decision_point=DecisionPoint.REPLANNING,
+                                options_considered=("accept_answer", "replan"),
+                                chosen_option="replan",
+                                rationale=f"Verification failed (score {verification.score:.2f}). "
+                                f"Reason: {verification.failure_reason or 'unspecified'}",
+                                context={
+                                    "step": counter.steps,
+                                    "verification_score": verification.score,
+                                    "replan_count": goal.replan_count,
+                                },
+                                outcome=DecisionOutcome.SUBOPTIMAL,
+                                outcome_detail="Replanned due to verification failure",
+                            )
+                        )
+
                         machine.transition(TaskState.REASONING)
                         continue
 
                     machine.transition(TaskState.COMPLETED)
                     trajectory_latency_ms = int((time.perf_counter() - trajectory_start) * 1000)
+
+                    # Phase 3: Record verification decision
+                    decision_traces.append(
+                        DecisionTrace(
+                            id=str(uuid.uuid4()),
+                            task_id=task_id,
+                            correlation_id=correlation_id,
+                            ts=datetime.now(UTC),
+                            decision_point=DecisionPoint.VERIFICATION,
+                            options_considered=("verify", "replan"),
+                            chosen_option="verify" if verification.passed else "replan",
+                            rationale=verification.failure_reason or "No specific reason",
+                            context={
+                                "score": verification.score if hasattr(verification, "score") else 0.0,
+                                "passed": verification.passed,
+                            },
+                            outcome=DecisionOutcome.SUCCESS if verification.passed else DecisionOutcome.FAILURE,
+                            outcome_detail=(
+                                verification.failure_reason or "Verification passed"
+                                if verification.passed
+                                else f"Score: {verification.score:.2f}"
+                            ),
+                        )
+                    )
 
                     return TaskResult(
                         task_id=task_id,
@@ -258,6 +389,8 @@ class ReasoningLoop:
                         # Phase 2: Trajectory data
                         actions=tuple(trajectory_actions),
                         observations=tuple(trajectory_observations),
+                        decision_traces=tuple(decision_traces),
+                        failure_records=tuple(failure_records),
                         latency_ms=trajectory_latency_ms,
                         tokens_used=counter.tokens,
                         model_calls=counter.steps,  # Rough approximation
@@ -329,6 +462,51 @@ class ReasoningLoop:
                     )
                 )
 
+                # Phase 3: Record safety tier classification for tool execution
+                decision_traces.append(
+                    DecisionTrace(
+                        id=str(uuid.uuid4()),
+                        task_id=task_id,
+                        correlation_id=correlation_id,
+                        ts=datetime.now(UTC),
+                        decision_point=DecisionPoint.SAFETY_TIER,
+                        options_considered=("auto", "notify", "confirm", "dangerous", "block"),
+                        chosen_option="auto" if plan.risk.value == "low" else "confirm",
+                        rationale="Tier assigned based on plan risk assessment",
+                        context={
+                            "tool": action.tool or "",
+                            "operation": action.operation or "",
+                            "plan_risk": plan.risk.value,
+                            "obs_ok": obs.ok,
+                        },
+                        outcome=DecisionOutcome.SUCCESS if obs.ok else DecisionOutcome.FAILURE,
+                        outcome_detail=(
+                            "Tool executed successfully" if obs.ok else (obs.error or "Tool execution failed")
+                        ),
+                    )
+                )
+
+                # Phase 3: Record failure record if tool dispatch failed
+                if not obs.ok:
+                    failure_records.append(
+                        FailureRecordModel(
+                            id=str(uuid.uuid4()),
+                            task_id=task_id,
+                            correlation_id=correlation_id,
+                            ts=datetime.now(UTC),
+                            category=FailureCategory.TOOL_ERROR,
+                            step=counter.steps,
+                            component="tool_dispatcher",
+                            error_message=obs.error or "unknown tool error",
+                            context={
+                                "tool": action.tool or "",
+                                "operation": action.operation or "",
+                                "args_keys": list(action.args.keys()),
+                            },
+                            recovered=bool(self._replanner),
+                        )
+                    )
+
                 # Phase 0: Push observation into WorkingMemory
                 if self._working:
                     self._working.add(
@@ -381,6 +559,28 @@ class ReasoningLoop:
                         new_goal=current_plan.goal,
                     )
 
+                    # Phase 3: Record replanning decision trace
+                    decision_traces.append(
+                        DecisionTrace(
+                            id=str(uuid.uuid4()),
+                            task_id=task_id,
+                            correlation_id=correlation_id,
+                            ts=datetime.now(UTC),
+                            decision_point=DecisionPoint.REPLANNING,
+                            options_considered=("continue", "replan"),
+                            chosen_option="replan",
+                            rationale=f"Tool '{action.tool}' failed at step {counter.steps}, triggering replan",
+                            context={
+                                "step": counter.steps,
+                                "tool": action.tool or "",
+                                "operation": action.operation or "",
+                                "replan_count": goal.replan_count,
+                            },
+                            outcome=DecisionOutcome.SUBOPTIMAL,
+                            outcome_detail="Replanned due to tool failure",
+                        )
+                    )
+
                 # OTAR Reflect step
                 reflection = await self._reflection.reflect(action, obs, context)
                 if reflection.learnings:
@@ -398,15 +598,13 @@ class ReasoningLoop:
                 # Batch 7: durable progress — survive crashes mid-task.
                 if self._checkpoints is not None:
                     try:
-                        import dataclasses
-
                         from atlas.orchestration.checkpoint import ExecutionCheckpoint
 
                         await self._checkpoints.save(
                             ExecutionCheckpoint(
                                 task_id=str(task_id),
                                 step=counter.steps,
-                                goal=dataclasses.asdict(goal),
+                                goal=goal.model_dump(),
                                 plan=current_plan.model_dump(),
                                 history_summary=self._compactor.render(history[-4:])[:1500],
                                 created_ts=datetime.now(UTC),
@@ -423,6 +621,20 @@ class ReasoningLoop:
                 trajectory_latency_ms = int((time.perf_counter() - trajectory_start) * 1000)
                 if self._checkpoints is not None:
                     await self._checkpoints.prune(str(task_id))
+                failure_records.append(
+                    FailureRecordModel(
+                        id=str(uuid.uuid4()),
+                        task_id=task_id,
+                        correlation_id=correlation_id,
+                        ts=datetime.now(UTC),
+                        category=FailureCategory.CANCELLATION,
+                        step=counter.steps,
+                        component="reasoning_loop",
+                        error_message=str(exc),
+                        context={"final_step": counter.steps},
+                        recovered=False,
+                    )
+                )
                 return TaskResult(
                     task_id=task_id,
                     ok=False,
@@ -431,6 +643,8 @@ class ReasoningLoop:
                     replan_count=goal.replan_count,
                     actions=tuple(trajectory_actions),
                     observations=tuple(trajectory_observations),
+                    decision_traces=tuple(decision_traces),
+                    failure_records=tuple(failure_records),
                     latency_ms=trajectory_latency_ms,
                     tokens_used=counter.tokens,
                     model_calls=counter.steps,
@@ -448,6 +662,20 @@ class ReasoningLoop:
                 trajectory_latency_ms = int((time.perf_counter() - trajectory_start) * 1000)
                 if self._checkpoints is not None:
                     await self._checkpoints.prune(str(task_id))
+                failure_records.append(
+                    FailureRecordModel(
+                        id=str(uuid.uuid4()),
+                        task_id=task_id,
+                        correlation_id=correlation_id,
+                        ts=datetime.now(UTC),
+                        category=FailureCategory.UNKNOWN,
+                        step=counter.steps,
+                        component="reasoning_loop",
+                        error_message=str(exc),
+                        context={"error_type": type(exc).__name__, "final_step": counter.steps},
+                        recovered=False,
+                    )
+                )
                 return TaskResult(
                     task_id=task_id,
                     ok=False,
@@ -456,6 +684,8 @@ class ReasoningLoop:
                     replan_count=goal.replan_count,
                     actions=tuple(trajectory_actions),
                     observations=tuple(trajectory_observations),
+                    decision_traces=tuple(decision_traces),
+                    failure_records=tuple(failure_records),
                     latency_ms=trajectory_latency_ms,
                     tokens_used=counter.tokens,
                     model_calls=counter.steps,
@@ -470,7 +700,7 @@ class ReasoningLoop:
         context: str,
         history: list[tuple[Thought, Observation | None]],
         counter: LimitCounter,
-    ) -> tuple[Thought, Action]:
+    ) -> tuple[Thought, Action, DecisionTrace | None]:
         prompt = self._prompts.build_step_prompt(
             context=context,
             goal=plan.goal,
@@ -498,13 +728,42 @@ class ReasoningLoop:
             seconds=self._model_timeout_s,
             what="model.complete",
         )
+        model_latency_ms = int((time.perf_counter() - started) * 1000)
         counter.add_tokens(resp.cost.input_tokens + resp.cost.output_tokens)
+
+        # Phase 3: Record model selection decision
+        model_trace: DecisionTrace = DecisionTrace(
+            id=str(uuid.uuid4()),
+            task_id=task_id,
+            correlation_id=correlation_id,
+            ts=datetime.now(UTC),
+            decision_point=DecisionPoint.MODEL_SELECTION,
+            options_considered=(str(resp.model),),
+            chosen_option=str(resp.model),
+            rationale="Selected by ModelGateway under active profile constraints",
+            context={
+                "requires_deep_reasoning": plan.confidence < 0.6,
+                "stakes_tier": "CONFIRM" if plan.risk.value != "low" else "AUTO",
+                "required_capabilities": sorted(
+                    c.name
+                    for c in {
+                        ModelCapability.REASONING,
+                        ModelCapability.TOOL_CALLING,
+                        ModelCapability.JSON_GENERATION,
+                    }
+                ),
+            },
+            outcome=DecisionOutcome.UNKNOWN,
+            latency_ms=model_latency_ms,
+            cost_usd=resp.cost.usd,
+        )
+
         await self._events.emit(
             task_id=task_id,
             correlation_id=correlation_id,
             state="reasoning",
             kind="reasoning.step",
-            latency_ms=int((time.perf_counter() - started) * 1000),
+            latency_ms=model_latency_ms,
             step=counter.steps,
         )
         thought, action = self._parser.parse(resp.text, counter.steps)
@@ -517,4 +776,28 @@ class ReasoningLoop:
                 reasoning_details=resp.reasoning_details,
             )
         self._validator.validate(action)
-        return thought, action
+
+        # Update the model selection trace outcome based on parsed action
+        if action.kind == "final_answer":
+            model_trace = model_trace.model_copy(
+                update={
+                    "outcome": DecisionOutcome.SUCCESS,
+                    "outcome_detail": "Action resolved to final answer",
+                }
+            )
+        elif action.kind == "tool_call":
+            model_trace = model_trace.model_copy(
+                update={
+                    "outcome": DecisionOutcome.SUCCESS,
+                    "outcome_detail": f"Action selected tool: {action.tool}",
+                }
+            )
+        elif action.kind == "noop":
+            model_trace = model_trace.model_copy(
+                update={
+                    "outcome": DecisionOutcome.SUBOPTIMAL,
+                    "outcome_detail": "Model produced a noop action",
+                }
+            )
+
+        return thought, action, model_trace

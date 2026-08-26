@@ -13,11 +13,7 @@ async def test_frankfurter_convert_success() -> None:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.url = "https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR"
-        mock_resp.json.return_value = {
-            "base": "USD",
-            "date": "2026-08-19",
-            "rates": {"EUR": 0.85}
-        }
+        mock_resp.json.return_value = {"base": "USD", "date": "2026-08-19", "rates": {"EUR": 0.85}}
         mock_resp.raise_for_status.return_value = None
         mock_get.return_value = mock_resp
 

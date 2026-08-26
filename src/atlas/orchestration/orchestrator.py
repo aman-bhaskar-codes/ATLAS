@@ -273,7 +273,14 @@ class Orchestrator:
                 if fragment:
                     parts.append(fragment)
         except Exception as exc:
-            _log.warning("planner.prior_knowledge_failed", event_type="orchestration", error=repr(exc))
+            _log.warning(
+                "planner.prior_knowledge_failed",
+                event_type="orchestration",
+                error=repr(exc),
+                skill_store=bool(self._skill_store),
+                trajectory_store=bool(self._trajectory_store),
+                world_state=bool(self._world_state),
+            )
         return "\n\n".join(parts)[:4000]
 
     async def _save_trajectory(
@@ -314,8 +321,8 @@ class Orchestrator:
             plan_confidence=getattr(plan, "confidence", 0.5),
             actions=result.actions,
             observations=result.observations,
-            decision_traces=(),  # Phase 3+: requires instrumenting replanner/router/reasoning
-            failure_records=(),  # Phase 3+: requires error handler instrumentation
+            decision_traces=result.decision_traces,
+            failure_records=result.failure_records,
             replan_count=result.replan_count,
             verification_passed=result.verification_passed,
             verification_score=result.verification_score,

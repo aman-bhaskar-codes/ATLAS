@@ -43,9 +43,7 @@ def _archive_names(data_dir: Path) -> list[str]:
     return sorted(p.name for p in (data_dir / "backups").glob(_ARCHIVES))
 
 
-async def test_retention_keeps_only_the_configured_number(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_retention_keeps_only_the_configured_number(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Seven successive backups leave five archives."""
     data_dir = tmp_path / "data"
     monkeypatch.setenv("ATLAS_BACKUP_COOLDOWN_S", "0")
@@ -58,9 +56,7 @@ async def test_retention_keeps_only_the_configured_number(
     assert len(_archive_names(data_dir)) == 5
 
 
-async def test_retention_keeps_the_NEWEST_archives(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_retention_keeps_the_newest_archives(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Deleting the newest instead of the oldest would be worse than not pruning."""
     data_dir = tmp_path / "data"
     monkeypatch.setenv("ATLAS_BACKUP_COOLDOWN_S", "0")
@@ -75,9 +71,7 @@ async def test_retention_keeps_the_NEWEST_archives(
     assert Path(str(written[0])).name not in survivors, "the oldest backup survived"
 
 
-async def test_the_cooldown_skips_a_redundant_backup(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_the_cooldown_skips_a_redundant_backup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A restart loop must not produce one archive per restart."""
     data_dir = tmp_path / "data"
     monkeypatch.setenv("ATLAS_BACKUP_COOLDOWN_S", "3600")
@@ -106,9 +100,7 @@ async def test_a_malformed_keep_value_does_not_delete_everything(
     assert len(_archive_names(data_dir)) == 1, "the archive just written was deleted"
 
 
-async def test_keep_is_clamped_to_at_least_one(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_keep_is_clamped_to_at_least_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """KEEP=0 would mean pruning the backup that was just taken."""
     data_dir = tmp_path / "data"
     monkeypatch.setenv("ATLAS_BACKUP_COOLDOWN_S", "0")
@@ -121,9 +113,7 @@ async def test_keep_is_clamped_to_at_least_one(
     assert len(_archive_names(data_dir)) == 1
 
 
-async def test_the_archive_excludes_the_backup_directory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_the_archive_excludes_the_backup_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Otherwise each backup contains all the previous ones — exponential growth."""
     data_dir = tmp_path / "data"
     monkeypatch.setenv("ATLAS_BACKUP_COOLDOWN_S", "0")
@@ -142,9 +132,7 @@ async def test_the_archive_excludes_the_backup_directory(
     )
 
 
-async def test_a_missing_data_directory_is_a_skip_not_a_crash(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_a_missing_data_directory_is_a_skip_not_a_crash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Startup runs this fire-and-forget; a first boot must not log a failure."""
     data_dir = tmp_path / "data"
     monkeypatch.setenv("ATLAS_DATA_DIR", str(data_dir))

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from atlas.capabilities.browser.domain.content import Article, WebPage
@@ -25,8 +24,9 @@ from atlas.capabilities.browser.page.state_builder import StateBuilder
 from atlas.capabilities.browser.research.crawler import CrawlerEngine, ResearchResult
 from atlas.capabilities.browser.session.manager import SessionManager
 from atlas.infra.ids import CorrelationId
+from atlas.infra.logging import get_logger
 
-_log = logging.getLogger("atlas.browser.platform")
+_log = get_logger("atlas.browser.platform")
 
 
 class BrowserPlatform:
@@ -65,6 +65,7 @@ class BrowserPlatform:
         self._type = type_engine
         self._submit = submit_engine
         self._crawler = crawler_engine
+        self._shutdown = False
 
     # --- Sessions ---
 
@@ -160,7 +161,30 @@ class BrowserPlatform:
             raise RuntimeError("Crawler engine not initialized")
         return await self._crawler.crawl(session_id, seed_url, depth, budget, cid)
 
-
     async def shutdown(self) -> None:
-        """Shut down the browser platform."""
+        """Shut down the browser platform and all sub-components.
+
+        Cascades shutdown to all engines and closes any open sessions/pages
+        to prevent resource leaks.
+        """
+        if self._shutdown:
+            return
+        self._shutdown = True
+
+        # Close all active sessions through SessionManager
+        if hasattr(self._sessions, "shutdown"):
+            try:
+                await self._sessions.shutdown()
+            except Exception as exc:
+                _log.warning("browser.shutdown.sessions_failed", exc_info=exc)
+        elif hasattr(self._sessions, "_sessions"):
+            for session_id in list(self._sessions._sessions.keys()):
+                try:
+                    await self._sessions.release(session_id)
+                except Exception as exc:
+                    _log.warning("browser.shutdown.session_failed", extra={"session_id": session_id}, exc_info=exc)
+
+        # Shutdown navigation engine (which owns the browser provider)
         await self._nav.shutdown()
+
+        _log.info("browser.shutdown.complete")

@@ -37,6 +37,7 @@ class CapabilityRetriever:
             record = self._connectors.get(entry.api_id)
             status = record.status if record else ConnectorStatus.DISCOVERED
             candidates.append(Candidate(entry=entry, status=status, relevance=score))
+
         # validated/available first, then relevance; discovery-only sink to the bottom
         def rank(c: Candidate) -> tuple[int, float]:
             return (0 if c.executable else 1, -c.relevance)

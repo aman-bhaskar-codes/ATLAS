@@ -44,9 +44,7 @@ class OllamaEmbedder:
         # WHY explicit Timeout: bge-m3 needs ~50s to load on first request.
         # httpx.AsyncClient(timeout=N) sets ALL timeout phases to N seconds.
         # Using Timeout object makes it explicit and easier to tune per phase.
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=10.0, read=timeout_s, write=10.0, pool=10.0)
-        )
+        self._client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=timeout_s, write=10.0, pool=10.0))
 
     async def embed(self, text: str) -> list[float]:
         try:

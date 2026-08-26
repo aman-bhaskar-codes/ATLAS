@@ -82,9 +82,8 @@ class URLReputationChecker:
 
         # If every configured provider failed (returned None), fail-open to UNKNOWN
         # rather than silently treating the URL as safe.
-        providers_failed = (
-            (self._safe_browsing_api_key and safe_browsing_result is None)
-            and (not self._virustotal_api_key or virustotal_result is None)
+        providers_failed = (self._safe_browsing_api_key and safe_browsing_result is None) and (
+            not self._virustotal_api_key or virustotal_result is None
         )
         if providers_failed:
             return ReputationResult(
@@ -137,9 +136,7 @@ class URLReputationChecker:
             result = response.json()
 
             is_malicious = bool(result.get("matches"))
-            logger.debug(
-                f"Safe Browsing check for {url}: {'malicious' if is_malicious else 'safe'}"
-            )
+            logger.debug(f"Safe Browsing check for {url}: {'malicious' if is_malicious else 'safe'}")
             return is_malicious
 
         except Exception as e:
@@ -164,9 +161,7 @@ class URLReputationChecker:
                 logger.warning(f"VirusTotal rate limit exceeded for {url}")
                 return False
             elif response.status_code != 200:
-                logger.warning(
-                    f"VirusTotal API returned status {response.status_code} for {url}"
-                )
+                logger.warning(f"VirusTotal API returned status {response.status_code} for {url}")
                 return False
 
             result = response.json()

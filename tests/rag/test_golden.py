@@ -241,8 +241,10 @@ async def test_golden_large_document_finds_the_needle(
     f, _ = fabric
     filler = "This paragraph provides general background information about unrelated topics. " * 1200
     content = (
-        "# Rocket Compendium\n\n" + filler +
-        "\nThe falcon rocket uses nine merlin engines for liftoff thrust.\n" + filler
+        "# Rocket Compendium\n\n"
+        + filler
+        + "\nThe falcon rocket uses nine merlin engines for liftoff thrust.\n"
+        + filler
     )
     await pipeline.ingest(source_id="rockets.md", source_type=SourceType.LOCAL_FILE, content=content)
     answer = await f.query("falcon rocket merlin engines")

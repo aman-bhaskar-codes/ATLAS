@@ -152,9 +152,7 @@ class GoalVerifier:
                     correlation_id=correlation_id,
                     system=self._SYSTEM,
                     prompt=prompt,
-                    required_capabilities=frozenset(
-                        {ModelCapability.REASONING, ModelCapability.JSON_GENERATION}
-                    ),
+                    required_capabilities=frozenset({ModelCapability.REASONING, ModelCapability.JSON_GENERATION}),
                     max_tokens=2048,
                     temperature=0.0,
                     # Phase 4: judging evidence is DEEP-tier work.
@@ -185,9 +183,7 @@ class GoalVerifier:
                 criteria_results=results,
                 failure_reason=str(data["failure_reason"]) if data.get("failure_reason") else None,
                 suggested_next_action=(
-                    str(data["suggested_next_action"])
-                    if data.get("suggested_next_action")
-                    else None
+                    str(data["suggested_next_action"]) if data.get("suggested_next_action") else None
                 ),
                 evidence=tuple(f"{e.source}: {e.summary[:120]}" for e in evidence[:8]),
                 latency_ms=int((time.perf_counter() - started) * 1000),
@@ -222,14 +218,10 @@ def _criteria_results(raw: object, criteria: tuple[str, ...]) -> tuple[Criterion
         if out:
             return tuple(out)
     if isinstance(raw, dict):
-        return tuple(
-            CriterionResult(criterion=str(k), passed=bool(v)) for k, v in raw.items() if str(k)
-        )
+        return tuple(CriterionResult(criterion=str(k), passed=bool(v)) for k, v in raw.items() if str(k))
     # No parseable per-criterion detail: report every declared criterion as
     # unmet rather than silently dropping them.
-    return tuple(
-        CriterionResult(criterion=c, passed=False, detail="no result reported") for c in criteria
-    )
+    return tuple(CriterionResult(criterion=c, passed=False, detail="no result reported") for c in criteria)
 
 
 def _clamp(raw: object) -> float:

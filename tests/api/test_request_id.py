@@ -51,9 +51,7 @@ async def test_the_500_envelope_matches_its_own_header(tmp_path: Path) -> None:
     from atlas.interfaces.api.facade import DefaultAtlasControlPlane
 
     async with app_client(tmp_path) as (_app, client):
-        with patch.object(
-            DefaultAtlasControlPlane, "runtime_status", AsyncMock(side_effect=RuntimeError("boom"))
-        ):
+        with patch.object(DefaultAtlasControlPlane, "runtime_status", AsyncMock(side_effect=RuntimeError("boom"))):
             response = await client.get(_TARGET)
 
     assert response.status_code == 500

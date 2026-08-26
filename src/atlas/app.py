@@ -173,6 +173,10 @@ class Atlas:
         self.semantic.set_bus(self.bus)
         self.user_model.set_bus(self.bus)
         self.knowledge_store.set_bus(self.bus)
+        if self.working is not None:
+            self.working.set_bus(self.bus)
+        if self.trajectory_store is not None:
+            self.trajectory_store.set_bus(self.bus)
         await self.bus.start()
 
         # Initialize runtime supervisor if not already initialized
@@ -183,10 +187,10 @@ class Atlas:
                 clock=self.clock,
                 metrics=self.metrics,
             )
-        
+
         # Use runtime supervisor for managed startup
         health_report = await self.runtime_supervisor.start(self)
-        
+
         # Batch 7: fail-clean recovery for tasks orphaned by a previous crash.
         from atlas.orchestration.recovery import recover_interrupted_tasks
 
@@ -203,7 +207,7 @@ class Atlas:
         # Use runtime supervisor for managed shutdown if available
         if self.runtime_supervisor is not None:
             await self.runtime_supervisor.shutdown()
-        
+
         # Legacy shutdown for compatibility (will be phased out)
         await self.embedding_worker.stop()
         if self.scheduler is not None:
@@ -474,6 +478,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
             virustotal_api_key=settings.virustotal_api_key,
         )
         from atlas.tools.browser import BrowserTool
+
         tools["browser"] = BrowserTool(platform=browser_platform, ids=ids)
 
     # ── Computer use (universal perception/control across bodies) ──── #
@@ -540,7 +545,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     cron_scheduler.register_job(name="memory_consolidation", cron="0 2 * * *", fn=_consolidate_job)
 
     _log.info("core.ready", event_type="lifecycle", providers=str(type(gateway)))
-    
+
     # Initialize runtime supervisor (will be started in Atlas.start())
     runtime_supervisor = RuntimeSupervisor(
         settings=settings,
@@ -548,7 +553,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         clock=clock,
         metrics=metrics,
     )
-    
+
     return Atlas(
         settings=settings,
         config=config,

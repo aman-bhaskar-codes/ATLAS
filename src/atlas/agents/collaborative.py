@@ -33,19 +33,21 @@ _log = get_logger("atlas.agents.collaborative")
 
 class AgentRole(Enum):
     """Roles agents can play in collaborative reasoning."""
-    PROPOSER = "proposer"            # Generate initial solutions
-    CRITIC = "critic"                # Challenge assumptions and find flaws
-    SYNTHESIZER = "synthesizer"      # Combine ideas into coherent solution
-    VALIDATOR = "validator"          # Check correctness and completeness
-    RESEARCHER = "researcher"        # Gather information
-    PLANNER = "planner"             # Structure approach
-    EXECUTOR = "executor"           # Focus on practical implementation
-    EVALUATOR = "evaluator"         # Assess quality and trade-offs
+
+    PROPOSER = "proposer"  # Generate initial solutions
+    CRITIC = "critic"  # Challenge assumptions and find flaws
+    SYNTHESIZER = "synthesizer"  # Combine ideas into coherent solution
+    VALIDATOR = "validator"  # Check correctness and completeness
+    RESEARCHER = "researcher"  # Gather information
+    PLANNER = "planner"  # Structure approach
+    EXECUTOR = "executor"  # Focus on practical implementation
+    EVALUATOR = "evaluator"  # Assess quality and trade-offs
 
 
 @dataclass
 class AgentPerspective:
     """A perspective from one agent in the collaboration."""
+
     agent_id: str
     role: AgentRole
     proposal: str
@@ -59,6 +61,7 @@ class AgentPerspective:
 @dataclass
 class DebateRound:
     """One round of debate between agents."""
+
     round_number: int
     proposals: list[AgentPerspective]
     critiques: list[tuple[str, str]]  # (agent_id, critique)
@@ -69,6 +72,7 @@ class DebateRound:
 @dataclass
 class CollaborativeResult:
     """Result of collaborative reasoning."""
+
     final_solution: str
     confidence: float
     contributing_agents: list[str]
@@ -81,7 +85,7 @@ class CollaborativeResult:
 
 class CollaborativeReasoner:
     """Multi-agent collaborative reasoning engine."""
-    
+
     def __init__(
         self,
         *,
@@ -100,7 +104,7 @@ class CollaborativeReasoner:
         self._consensus_threshold = consensus_threshold
         self._min_agents = min_agents
         self._max_agents = max_agents
-        
+
         # Role prompts for different perspectives
         self._role_prompts = {
             AgentRole.PROPOSER: "You are a creative problem solver. Generate innovative solutions.",
@@ -120,7 +124,7 @@ class CollaborativeReasoner:
         required_roles: list[AgentRole] | None = None,
     ) -> CollaborativeResult:
         """Perform collaborative reasoning with multiple agents.
-        
+
         Process:
         1. Select agent roles based on task
         2. Each agent proposes initial solution
@@ -129,31 +133,31 @@ class CollaborativeReasoner:
         5. Build consensus or continue debate
         6. Synthesize final solution
         """
-        
+
         _log.info(
             "collaborative.started",
             event_type="reasoning",
             task=task[:100],
         )
-        
+
         # Step 1: Select roles
         roles = required_roles or await self._select_roles(task)
-        roles = roles[:self._max_agents]
-        
+        roles = roles[: self._max_agents]
+
         # Step 2: Initial proposals
         proposals = await self._generate_proposals(task, context, roles)
-        
+
         # Step 3: Debate and refinement
         debate_history = []
         current_proposals = proposals
-        
+
         for round_num in range(self._max_rounds):
             # Generate critiques
             critiques = await self._generate_critiques(task, current_proposals)
-            
+
             # Check for consensus
             consensus_score = self._calculate_consensus(current_proposals)
-            
+
             debate_round = DebateRound(
                 round_number=round_num + 1,
                 proposals=current_proposals,
@@ -162,7 +166,7 @@ class CollaborativeReasoner:
                 consensus_score=consensus_score,
             )
             debate_history.append(debate_round)
-            
+
             if consensus_score >= self._consensus_threshold:
                 _log.info(
                     "collaborative.consensus",
@@ -171,7 +175,7 @@ class CollaborativeReasoner:
                     score=consensus_score,
                 )
                 break
-            
+
             # Refine proposals based on critiques
             current_proposals = await self._refine_proposals(
                 task,
@@ -179,17 +183,17 @@ class CollaborativeReasoner:
                 critiques,
             )
             debate_round.refinements = current_proposals
-        
+
         # Step 4: Synthesize final solution
         final_solution = await self._synthesize_solution(
             task,
             current_proposals,
             debate_history,
         )
-        
+
         # Extract minority opinions
         minority = self._extract_minority_opinions(current_proposals, final_solution)
-        
+
         result = CollaborativeResult(
             final_solution=final_solution.proposal,
             confidence=final_solution.confidence,
@@ -204,7 +208,7 @@ class CollaborativeReasoner:
                 "final_consensus": consensus_score,
             },
         )
-        
+
         _log.info(
             "collaborative.completed",
             event_type="reasoning",
@@ -212,7 +216,7 @@ class CollaborativeReasoner:
             consensus=result.consensus_achieved,
             rounds=result.debate_rounds,
         )
-        
+
         return result
 
     async def _select_roles(
@@ -220,13 +224,13 @@ class CollaborativeReasoner:
         task: str,
     ) -> list[AgentRole]:
         """Select which agent roles are needed for this task."""
-        
+
         prompt = f"""Analyze this task and select 3-5 agent roles needed:
 
 TASK: {task}
 
 AVAILABLE ROLES:
-{chr(10).join(f'- {r.value}: {self._role_prompts[r][:50]}' for r in AgentRole)}
+{chr(10).join(f"- {r.value}: {self._role_prompts[r][:50]}" for r in AgentRole)}
 
 Select roles that provide diverse perspectives.
 Output JSON: {{"roles": ["role1", "role2", ...]}}"""
@@ -243,17 +247,17 @@ Output JSON: {{"roles": ["role1", "role2", ...]}}"""
                 temperature=0.3,
             )
         )
-        
+
         data = self._parse_json(resp.text)
         role_names = data.get("roles", ["proposer", "critic", "synthesizer"])
-        
+
         roles = []
         for name in role_names:
             try:
                 roles.append(AgentRole(name))
             except ValueError:
                 pass
-        
+
         # Ensure minimum diversity
         if len(roles) < self._min_agents:
             defaults = [AgentRole.PROPOSER, AgentRole.CRITIC, AgentRole.SYNTHESIZER]
@@ -262,7 +266,7 @@ Output JSON: {{"roles": ["role1", "role2", ...]}}"""
                     roles.append(default_role)
                 if len(roles) >= self._min_agents:
                     break
-        
+
         return roles
 
     async def _generate_proposals(
@@ -272,12 +276,9 @@ Output JSON: {{"roles": ["role1", "role2", ...]}}"""
         roles: list[AgentRole],
     ) -> list[AgentPerspective]:
         """Generate initial proposals from each agent role."""
-        
-        tasks = [
-            self._agent_propose(task, context, role, idx)
-            for idx, role in enumerate(roles)
-        ]
-        
+
+        tasks = [self._agent_propose(task, context, role, idx) for idx, role in enumerate(roles)]
+
         proposals = await asyncio.gather(*tasks)
         return proposals
 
@@ -289,9 +290,9 @@ Output JSON: {{"roles": ["role1", "role2", ...]}}"""
         agent_idx: int,
     ) -> AgentPerspective:
         """One agent proposes a solution from their perspective."""
-        
+
         role_context = self._role_prompts[role]
-        
+
         prompt = f"""As a {role.value}, propose a solution to this task:
 
 TASK: {task}
@@ -327,9 +328,9 @@ Output JSON:
                 temperature=0.7,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         return AgentPerspective(
             agent_id=f"agent_{role.value}_{agent_idx}",
             role=role,
@@ -346,20 +347,20 @@ Output JSON:
         proposals: list[AgentPerspective],
     ) -> list[tuple[str, str]]:
         """Generate critiques of proposals from critic agents."""
-        
+
         critiques = []
-        
+
         # Each proposal gets critiqued by others
         for proposal in proposals:
             # Skip self-critique from non-critic roles
             other_proposals = [p for p in proposals if p.agent_id != proposal.agent_id]
-            
+
             if not other_proposals:
                 continue
-            
+
             critique = await self._critique_proposal(task, proposal, other_proposals)
             critiques.append((proposal.agent_id, critique))
-        
+
         return critiques
 
     async def _critique_proposal(
@@ -369,12 +370,11 @@ Output JSON:
         other_proposals: list[AgentPerspective],
     ) -> str:
         """Generate a critique of one proposal."""
-        
+
         others_text = "\n\n".join(
-            f"Alternative from {p.agent_id} ({p.role.value}):\n{p.proposal[:300]}"
-            for p in other_proposals[:3]
+            f"Alternative from {p.agent_id} ({p.role.value}):\n{p.proposal[:300]}" for p in other_proposals[:3]
         )
-        
+
         prompt = f"""Critique this proposal:
 
 TASK: {task}
@@ -384,7 +384,7 @@ PROPOSAL from {proposal.agent_id} ({proposal.role.value}):
 
 REASONING: {proposal.reasoning}
 
-ASSUMPTIONS: {', '.join(proposal.assumptions)}
+ASSUMPTIONS: {", ".join(proposal.assumptions)}
 
 OTHER ALTERNATIVES:
 {others_text}
@@ -407,7 +407,7 @@ Provide constructive critique:
                 temperature=0.5,
             )
         )
-        
+
         return resp.text
 
     async def _refine_proposals(
@@ -417,16 +417,13 @@ Provide constructive critique:
         critiques: list[tuple[str, str]],
     ) -> list[AgentPerspective]:
         """Refine proposals based on critiques."""
-        
+
         # Create critique map
         critique_map = dict(critiques)
-        
+
         # Refine each proposal
-        tasks = [
-            self._refine_single_proposal(task, p, critique_map.get(p.agent_id, ""))
-            for p in proposals
-        ]
-        
+        tasks = [self._refine_single_proposal(task, p, critique_map.get(p.agent_id, "")) for p in proposals]
+
         refined = await asyncio.gather(*tasks)
         return refined
 
@@ -437,10 +434,10 @@ Provide constructive critique:
         critique: str,
     ) -> AgentPerspective:
         """Refine one proposal based on critique."""
-        
+
         if not critique:
             return proposal
-        
+
         prompt = f"""Refine your proposal based on this critique:
 
 TASK: {task}
@@ -473,9 +470,9 @@ Output JSON:
                 temperature=0.6,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         return AgentPerspective(
             agent_id=proposal.agent_id,
             role=proposal.role,
@@ -493,14 +490,14 @@ Output JSON:
         debate_history: list[DebateRound],
     ) -> AgentPerspective:
         """Synthesize final solution from all proposals."""
-        
+
         proposals_text = "\n\n".join(
             f"From {p.agent_id} ({p.role.value}) - Confidence: {p.confidence:.2f}\n"
             f"{p.proposal}\n"
             f"Reasoning: {p.reasoning[:200]}"
             for p in proposals
         )
-        
+
         prompt = f"""Synthesize a final solution from these agent proposals:
 
 TASK: {task}
@@ -537,9 +534,9 @@ Output JSON:
                 temperature=0.4,
             )
         )
-        
+
         data = self._parse_json(resp.text)
-        
+
         return AgentPerspective(
             agent_id="synthesizer_final",
             role=AgentRole.SYNTHESIZER,
@@ -553,27 +550,27 @@ Output JSON:
         proposals: list[AgentPerspective],
     ) -> float:
         """Calculate consensus score among proposals."""
-        
+
         if len(proposals) <= 1:
             return 1.0
-        
+
         # Simple consensus: average of pairwise agreement weighted by confidence
         total_score = 0.0
         comparisons = 0
-        
+
         for i, p1 in enumerate(proposals):
-            for p2 in proposals[i + 1:]:
+            for p2 in proposals[i + 1 :]:
                 # Similarity heuristic: length similarity and confidence
                 len_sim = 1.0 - abs(len(p1.proposal) - len(p2.proposal)) / max(len(p1.proposal), len(p2.proposal), 1)
                 confidence_product = p1.confidence * p2.confidence
-                
+
                 score = len_sim * confidence_product
                 total_score += score
                 comparisons += 1
-        
+
         if comparisons == 0:
             return 1.0
-        
+
         return total_score / comparisons
 
     def _extract_minority_opinions(
@@ -582,20 +579,18 @@ Output JSON:
         final_solution: AgentPerspective,
     ) -> list[str]:
         """Extract minority opinions that differ significantly from final solution."""
-        
+
         minority = []
-        
+
         for proposal in proposals:
             # Check if significantly different (heuristic)
             if proposal.confidence < 0.5:
                 continue
-            
+
             # If concerns weren't addressed
             if proposal.concerns and len(proposal.concerns) > 2:
-                minority.append(
-                    f"{proposal.agent_id}: {', '.join(proposal.concerns[:2])}"
-                )
-        
+                minority.append(f"{proposal.agent_id}: {', '.join(proposal.concerns[:2])}")
+
         return minority
 
     def _parse_json(
@@ -603,7 +598,7 @@ Output JSON:
         text: str,
     ) -> dict[str, Any]:
         """Parse JSON from text with error handling."""
-        
+
         try:
             start = text.find("{")
             end = text.rfind("}") + 1

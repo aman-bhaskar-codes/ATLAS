@@ -334,9 +334,11 @@ async def search_events(
         _log.error("events.search_failed", event_type="api", error=str(exc))
         return {"error": str(exc), "events": [], "total": 0, "limit": limit, "offset": offset}
 
+
 class EmitRequest(BaseModel):
     topic: str
     payload: dict[str, Any]
+
 
 @router.post("/api/v1/events/emit")
 async def emit_event(req: EmitRequest) -> dict[str, Any]:
@@ -356,6 +358,7 @@ async def emit_event(req: EmitRequest) -> dict[str, Any]:
         _log.error("events.emit_failed", event_type="api", error=str(exc))
         return {"error": str(exc)}
 
+
 @router.post("/api/v1/events/{event_id}/replay")
 async def replay_event(event_id: str) -> dict[str, Any]:
     """Replay an historical event onto the MessageBus."""
@@ -370,6 +373,7 @@ async def replay_event(event_id: str) -> dict[str, Any]:
 
         topic = row["type"]
         import json
+
         payload_dict = json.loads(row["payload"])
 
         class DynamicEvent(Event):
@@ -383,6 +387,7 @@ async def replay_event(event_id: str) -> dict[str, Any]:
         _log.error("events.replay_failed", event_type="api", error=str(exc))
         return {"error": str(exc)}
 
+
 @router.post("/api/v1/webhooks/{source}")
 async def receive_webhook(source: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Canonical event ingestion for external webhooks (e.g., GitHub, Stripe)."""
@@ -390,11 +395,11 @@ async def receive_webhook(source: str, payload: dict[str, Any]) -> dict[str, Any
         return {"error": "Server or bus not initialized"}
 
     topic = f"webhook.{source}"
-    
+
     class WebhookEvent(Event):
         model_config = ConfigDict(extra="allow", frozen=True)
         correlation_id: str = f"webhook-{source}"
-        
+
     try:
         event = WebhookEvent.model_validate(payload)
         await _deps.bus.publish(topic, event)

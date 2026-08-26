@@ -19,8 +19,25 @@ _log = get_logger("atlas.knowledge.codebase")
 
 _INDEXED_SUFFIXES = frozenset(
     {
-        ".py", ".md", ".rst", ".txt", ".yaml", ".yml", ".toml", ".json", ".ini", ".cfg",
-        ".ts", ".tsx", ".js", ".jsx", ".sh", ".sql", ".html", ".css", ".csv",
+        ".py",
+        ".md",
+        ".rst",
+        ".txt",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".json",
+        ".ini",
+        ".cfg",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".sh",
+        ".sql",
+        ".html",
+        ".css",
+        ".csv",
     }
 )
 _SKIP_DIRS = frozenset(
@@ -47,9 +64,7 @@ class CodebaseKnowledge:
                 _log.debug("codebase.ingested", event_type="knowledge", path=str(path), state=job.state.value)
             except Exception as exc:
                 _log.warning("codebase.ingest_failed", event_type="knowledge", path=str(path), error=repr(exc))
-        _log.info(
-            "codebase.indexed", event_type="knowledge", root=str(root), files=len(jobs), head=head or "no-git"
-        )
+        _log.info("codebase.indexed", event_type="knowledge", root=str(root), files=len(jobs), head=head or "no-git")
         return jobs
 
 
@@ -66,9 +81,7 @@ def _git_head(root: Path) -> str:
 def _list_files(root: Path) -> list[Path]:
     """git ls-files when available (respects .gitignore); rglob otherwise."""
     try:
-        out = subprocess.run(
-            ["git", "ls-files"], cwd=root, capture_output=True, text=True, timeout=15, check=False
-        )
+        out = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True, timeout=15, check=False)
         if out.returncode == 0 and out.stdout.strip():
             paths = [root / line for line in out.stdout.splitlines() if line.strip()]
             return [p for p in paths if p.suffix.lower() in _INDEXED_SUFFIXES and p.is_file()]

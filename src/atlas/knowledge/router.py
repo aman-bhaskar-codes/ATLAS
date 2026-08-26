@@ -14,19 +14,52 @@ from dataclasses import dataclass, field
 from atlas.knowledge.domain import QueryRoute
 
 _MEMORY_CUES = (
-    "my ", "i told you", "remember", "yesterday", "last week", "last time",
-    "we discussed", "earlier today", "my preference", "my project", "my email",
-    "my calendar", "what did i", "when did i",
+    "my ",
+    "i told you",
+    "remember",
+    "yesterday",
+    "last week",
+    "last time",
+    "we discussed",
+    "earlier today",
+    "my preference",
+    "my project",
+    "my email",
+    "my calendar",
+    "what did i",
+    "when did i",
 )
 _CODEBASE_CUES = (
-    "codebase", "source code", "in the code", "function", "class ", "module",
-    "repo", "repository", "file ", "import ", "def ", "src/", "tests/",
-    "architecture of atlas", "atlas source",
+    "codebase",
+    "source code",
+    "in the code",
+    "function",
+    "class ",
+    "module",
+    "repo",
+    "repository",
+    "file ",
+    "import ",
+    "def ",
+    "src/",
+    "tests/",
+    "architecture of atlas",
+    "atlas source",
 )
 _RESEARCH_CUES = ("research", "investigate", "deep dive", "survey", "compare sources", "find out everything")
 _LIVE_CUES = (
-    "today", "this week", "latest", "recent", "current", "now", "breaking",
-    "just announced", "this month", "price of", "weather", "news",
+    "today",
+    "this week",
+    "latest",
+    "recent",
+    "current",
+    "now",
+    "breaking",
+    "just announced",
+    "this month",
+    "price of",
+    "weather",
+    "news",
 )
 _MULTI_HOP_CUES = (" and then ", "depends on", "difference between", "compare", " vs ", "why does", "how does")
 _COMPUTE_RE = re.compile(r"^\s*[-+*/().\d\s]+\s*[?]?s*$")

@@ -165,9 +165,7 @@ async def test_contradictions_lower_confidence_and_are_carried() -> None:
     from atlas.knowledge.domain import Contradiction
 
     evidence = [_ev(1, "Output is 200 megawatts."), _ev(2, "Output is 900 megawatts.")]
-    conflict = Contradiction(
-        key="output", description="sources disagree", evidence_id_a="ev_1", evidence_id_b="ev_2"
-    )
+    conflict = Contradiction(key="output", description="sources disagree", evidence_id_a="ev_1", evidence_id_b="ev_2")
     synth = AnswerSynthesizer(CitationEngine(), model=None)
     plain = await synth.synthesize("q", _PLAN, evidence, [], [], mode=RAGMode.RAG)
     conflicted: FabricAnswer = await synth.synthesize("q", _PLAN, evidence, [conflict], [], mode=RAGMode.RAG)
