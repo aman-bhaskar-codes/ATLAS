@@ -88,7 +88,7 @@ Status legend — **✅ Stable** (wired into the runtime & covered by tests) · 
 | **Experience → skill/strategy learning** | 🧪 | Post-task experience extraction feeds skills that can inform future planning. |
 | **Computer use / browser** | ⚠️ | Registered and safety-gated, but **opt-in** — disabled by default (runtime boots `DEGRADED`). |
 | **Public-API connectors** | 🧪 | Discovered-only, safety-gated integrations. |
-| **Multi-agent specialists** | 🛠 | The `agents/` package exists in the codebase but is **not wired** into the runtime. |
+| **Multi-agent specialists** | ✅ | The `agents/` package is wired behind the single orchestrator: complex tasks are decomposed into a DAG of role-specialist subtasks that run concurrently, then synthesized — all through the same ReasoningLoop → dispatcher → SafetyEngine funnel. Off by default (`agents.enabled: false`); no separate tool path. |
 
 <p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
 
@@ -427,13 +427,12 @@ ATLAS is actively developed and honest about its maturity. The core runtime — 
 | Browser / computer use | ⚠️ Opt-in; off by default (runtime boots `DEGRADED`). |
 | Experience → skill learning | 🧪 Wired but experimental. |
 | Public-API connectors | 🧪 Discovered-only, safety-gated. |
-| Multi-agent specialists (`agents/`) | 🛠 Present in the codebase, **not integrated** into the runtime. |
+| Multi-agent specialists (`agents/`) | ✅ Integrated behind the single orchestrator; off by default (`agents.enabled: false`). |
 
-> **On the `agents/` package:** it contains scaffolding for a specialist/supervisor model that is **not** part of the running system today. ATLAS ships as a single-orchestrator runtime; treat multi-agent execution as planned, not delivered.
+> **On the `agents/` package:** it implements a decompose → delegate-concurrently → synthesize strategy *inside* the one task pipeline. When enabled, the orchestrator asks an `AgentSupervisor` whether a request is worth splitting before it pays for a plan; if so, role specialists run the subtask DAG on the **same** `ReasoningLoop` instance the serial path uses — so every delegated tool call still passes through the identical `ToolDispatcher → SafetyEngine.guard()` funnel. There is no second runtime and no second tool path. Any failure inside the layer (decomposition, a specialist, synthesis) degrades to the serial single-agent path rather than failing the task.
 
 ## Roadmap
 
-- Integrate the specialist layer behind the single orchestrator (with the same safety funnel).
 - Expand computer-use perception beyond opt-in browsing.
 - Broaden the evaluation corpus and publish reproducible benchmark baselines.
 - Harden and document the public-API connector framework.

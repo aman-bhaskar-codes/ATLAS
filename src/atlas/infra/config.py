@@ -163,6 +163,26 @@ class BrowserCfg(BaseModel):
     default_provider: str = "playwright"
 
 
+class AgentsCfg(BaseModel):
+    """Multi-agent specialist layer.
+
+    Disabled by default: delegation costs one decomposition call plus one
+    synthesis call on top of per-subtask reasoning, which is a bad trade for
+    simple requests. Turn it on when the workload is genuinely multi-branch.
+    """
+
+    model_config = {"frozen": True}
+    enabled: bool = False
+    max_subtasks: int = 4  # graph ceiling; the decomposer clamps to this
+    min_subtasks: int = 2  # below this, serial execution is cheaper
+    max_steps_per_subtask: int = 6
+    max_concurrency: int = 2  # concurrent specialists (one local GPU lane)
+    max_tokens_per_subtask: int = 20_000
+    subtask_runtime_s: float = 180.0  # per specialist
+    deadline_s: float = 600.0  # whole delegated run
+    synthesis_max_tokens: int = 2048
+
+
 class AppConfig(BaseModel):
     model_config = {"frozen": True}
     logging: LoggingCfg = Field(default_factory=LoggingCfg)
@@ -176,6 +196,7 @@ class AppConfig(BaseModel):
     critique: CritiqueCfg = Field(default_factory=CritiqueCfg)
     verification: VerificationCfg = Field(default_factory=VerificationCfg)
     browser: BrowserCfg = Field(default_factory=BrowserCfg)
+    agents: AgentsCfg = Field(default_factory=AgentsCfg)
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:

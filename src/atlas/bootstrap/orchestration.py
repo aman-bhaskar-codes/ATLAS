@@ -16,6 +16,12 @@ from atlas.intelligence.gateway import ModelGateway
 from atlas.memory.retrieval import Retriever
 from atlas.memory.semantic import SemanticMemory
 from atlas.memory.working import WorkingMemory
+from atlas.orchestration.agents import (
+    AgentSupervisor,
+    Specialist,
+    Synthesizer,
+    TaskDecomposer,
+)
 from atlas.orchestration.checkpoint import CheckpointStore, SQLiteCheckpointBackend
 from atlas.orchestration.context_builder import ContextBuilder
 from atlas.orchestration.context_engine import ContextCompactor
@@ -250,6 +256,7 @@ def build_orchestration(
         skill_store=skill_store,  # Batch 4
         world_state=world_state,  # Batch 4
         dag_executor=DagExecutor(dispatcher),  # Batch 5
+        supervisor=_build_supervisor(config, gateway, reasoning, events),
     )
 
     return OrchestrationComponents(
@@ -259,4 +266,42 @@ def build_orchestration(
         events=events,
         orchestrator=orchestrator,
         checkpoints=checkpoint_store,
+    )
+
+
+def _build_supervisor(
+    config: AppConfig,
+    gateway: ModelGateway,
+    reasoning: ReasoningLoop,
+    events: EventPublisher,
+) -> AgentSupervisor | None:
+    """Assemble the multi-agent layer, or return None when it is disabled.
+
+    Returning None (rather than a no-op supervisor) is deliberate: the
+    Orchestrator skips the delegation branch entirely, so a disabled agents
+    layer costs nothing at runtime — not even a config lookup per task.
+
+    The specialist reuses the SAME ReasoningLoop instance the serial path uses.
+    That is what guarantees delegated tool calls cannot skip the SafetyEngine:
+    there is only ever one loop, one dispatcher, one funnel.
+    """
+    cfg = config.agents
+    if not cfg.enabled:
+        return None
+    return AgentSupervisor(
+        decomposer=TaskDecomposer(
+            gateway,
+            max_subtasks=cfg.max_subtasks,
+            min_subtasks=cfg.min_subtasks,
+            max_steps_per_subtask=cfg.max_steps_per_subtask,
+        ),
+        specialist=Specialist(
+            reasoning,
+            max_tokens_per_subtask=cfg.max_tokens_per_subtask,
+            max_runtime_s=cfg.subtask_runtime_s,
+        ),
+        synthesizer=Synthesizer(gateway, max_tokens=cfg.synthesis_max_tokens),
+        events=events,
+        max_concurrency=cfg.max_concurrency,
+        deadline_s=cfg.deadline_s,
     )
