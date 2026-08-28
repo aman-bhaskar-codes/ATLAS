@@ -5,19 +5,24 @@ logging:
 # ── Operating Profile ──────────────────────────────────────────────────
 # Profiles: local_free | free_hybrid | free_demo | production
 # ATLAS_PROFILE env var overrides this.
-profile: local_free
+# free_hybrid: cloud allowed, cost_class {local, free, free_quota} — the
+# correct profile for the five OpenRouter free_quota models (no Ollama floor).
+profile: free_hybrid
 
 # ── Cost & Network Policy ─────────────────────────────────────────────
 # These can be overridden by the profile or set independently.
 # ATLAS_COST_POLICY and ATLAS_NETWORK_POLICY env vars override these.
-cost_policy: zero_cost       # zero_cost | free_only | free_preferred | balanced | unrestricted
-network_policy: local_only   # offline | local_only | free_cloud | unrestricted
+cost_policy: free_only       # zero_cost | free_only | free_preferred | balanced | unrestricted
+network_policy: free_cloud   # offline | local_only | free_cloud | unrestricted
 
 models:
   gpu_concurrency: 1
   local_timeout_s: 120
   cloud_timeout_s: 90
-  allow_cloud: false       # profile overrides this
+  allow_cloud: true        # the five free models are cloud (OpenRouter)
+  # Startup discovery of ALL free OpenRouter models is OFF: only the five
+  # curated ids in models.yaml exist. Flip to true to opt into auto-sync.
+  sync_openrouter_free: false
   daily_usd: 0.00
   weekly_usd: 0.00
   monthly_usd: 0.00
@@ -29,23 +34,21 @@ models:
   # profile, it simply has no eligible candidate. Change these to retune
   # tiers without touching code.
   # FAST: cheap, low-latency work that runs on every task (intent extraction,
-  #       routing, short summaries).
+  #       routing, short summaries). Coders + multimodal general agent lead.
   fast_models:
-    - qwen3-4b                       # local, ~100ms, always available
-    - groq-llama-3.1-8b              # free-quota, ~80ms
-    - openrouter-gemma-4-26b         # free-quota fallback
+    - north-mini-code-free           # fast agentic coder / tool work
+    - minimax-m3-free                # general, long-context
+    - laguna-s-2.1-free              # coding fallback
   # DEEP: quality reasoning worth a slower/stronger model (planning, recovery,
-  #       verification). Cloud models lead; qwen3-4b is the local floor so a
-  #       zero-cost profile still resolves a deep pick.
+  #       verification). GLM + Nemotron lead; MiniMax as the long-context floor.
   deep_models:
-    - openrouter-nemotron-3-nano
-    - groq-llama-3.3-70b
-    - gemini-2.0-flash
-    - qwen3-4b
+    - glm-5.2-free
+    - nemotron-3-ultra-free
+    - minimax-m3-free
   # Last-resort chain when a tier's picks are all unavailable.
   fallback_models:
-    - qwen3-4b
-    - openrouter-free-fallback
+    - minimax-m3-free
+    - glm-5.2-free
 safety:
   stop_flag_path: STOP.flag
   confirm_timeout_s: 300
@@ -101,3 +104,27 @@ agents:
   subtask_runtime_s: 180.0 # per specialist
   deadline_s: 600.0        # whole delegated run; remaining subtasks are skipped
   synthesis_max_tokens: 2048
+
+# Voice pipeline (speech-in / speech-out). Pure audio<->text engine lives in
+# capabilities/voice; the speech->task loop lives in interfaces. Deepgram Flux
+# is the low-latency/English primary; Fish Audio S2.1 Pro handles Hindi/
+# multilingual/expressive narration; each is the other's TTS fallback.
+#
+# OFF by default (mirrors browser/agents). PRIVACY: when enabled, microphone
+# audio and synthesis text are sent to third parties (Deepgram / Fish Audio) —
+# audio leaves the machine. Supply DEEPGRAM_API_KEY / FISH_AUDIO_API_KEY and
+# flip enabled=true for live use.
+voice:
+  enabled: false
+  default_language: en                # en -> tts_primary; other languages -> tts_fallback
+  tts_primary: openrouter             # openrouter | openrouter_multilingual | deepgram | fish_audio
+  tts_fallback: openrouter_multilingual  # non-English + used when the primary errors
+  stt_provider: openrouter            # openrouter (whisper) | deepgram (Flux, true partials)
+  sample_rate: 16000                  # PCM sample rate for mic capture / STT
+  # Speech rides OPENROUTER_API_KEY — no extra vendor key required.
+  # Slugs churn; verify on openrouter.ai/models and correct them here.
+  openrouter_tts_model: openai/gpt-4o-mini-tts
+  openrouter_tts_model_multilingual: fish-audio/s2.1-pro
+  openrouter_tts_voice: alloy
+  openrouter_tts_voice_multilingual: ""
+  openrouter_stt_model: openai/whisper-large-v3

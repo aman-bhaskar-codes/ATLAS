@@ -2,8 +2,15 @@
 
 WHY local Protocol definitions: atlas.intelligence must not import atlas.memory
 (layer boundary: intelligence < memory in the stack). We define minimal Embedder
-and VectorHit/VectorStore protocols here; the real implementations (OllamaEmbedder,
+and VectorHit/VectorStore protocols here; the real implementations (CloudEmbedder,
 ChromaVectorStore) satisfy them structurally.
+
+WHY the embedding calls are wrapped: the cache is a pure optimisation on the hot
+path of *every* non-streaming completion. Embeddings now come from a cloud API
+(see atlas.memory.embedder.CloudEmbedder), so a missing key, an exhausted free
+quota, or a transient 5xx is an ordinary condition — and it must degrade to a
+cache miss, never fail the model call that the cache was only trying to save.
+The exact-hash fast path above it keeps working regardless.
 """
 
 from __future__ import annotations
@@ -62,6 +69,18 @@ class SemanticCache:
         prompt_text = "\n".join(f"{m.role}: {m.content}" for m in req.messages)
         return hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
 
+    async def _embed(self, text: str, *, phase: str) -> list[float] | None:
+        """Embed for cache purposes, or None if the embedder is unavailable.
+
+        Returning None (instead of raising) is what makes the semantic leg
+        optional: the caller skips it and the completion proceeds uncached.
+        """
+        try:
+            return await self._embedder.embed(text)
+        except Exception as exc:
+            _log.warning("cache.embed_unavailable", event_type="cache", phase=phase, error=repr(exc))
+            return None
+
     async def get(self, req: InferenceRequest) -> InferenceResponse | None:
         # Avoid caching streaming responses
         if req.stream:
@@ -85,8 +104,14 @@ class SemanticCache:
 
         # 2. Semantic similarity match (threshold 0.97 to avoid false positives)
         prompt_text = "\n".join(f"{m.role}: {m.content}" for m in req.messages)
-        embedding = await self._embedder.embed(prompt_text)
-        hits = await self._vectors.query(embedding, k=1)
+        embedding = await self._embed(prompt_text, phase="get")
+        if embedding is None:
+            return None  # no vector leg — treat as a miss
+        try:
+            hits = await self._vectors.query(embedding, k=1)
+        except Exception as exc:
+            _log.warning("cache.query_failed", event_type="cache", error=repr(exc))
+            return None
 
         if hits and hits[0].score > 0.97:
             ref = hits[0].ref
@@ -118,9 +143,15 @@ class SemanticCache:
         prompt_text = "\n".join(f"{m.role}: {m.content}" for m in req.messages)
 
         ref = str(uuid.uuid4())
-        embedding = await self._embedder.embed(prompt_text)
+        embedding = await self._embed(prompt_text, phase="put")
 
-        await self._vectors.upsert(ref, prompt_text, embedding)
+        # No embedding -> store the row anyway so the exact-hash fast path still
+        # hits; only the semantic leg is lost (the ref simply has no vector).
+        if embedding is not None:
+            try:
+                await self._vectors.upsert(ref, prompt_text, embedding)
+            except Exception as exc:
+                _log.warning("cache.upsert_failed", event_type="cache", error=repr(exc))
 
         resp_json = resp.model_dump_json()
         now_iso = datetime.now(UTC).isoformat()

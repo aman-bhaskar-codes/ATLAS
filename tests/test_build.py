@@ -2,7 +2,7 @@
 
 WHY: Phase 0 fixed multiple gaps (EmbeddingWorker, bus wiring, LLMCallTracker,
 etc.). This test verifies the whole object graph assembles without errors and
-the key integration points are wired — without requiring Ollama or Docker.
+the key integration points are wired — without requiring network access or Docker.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import pytest
 
 
 def _dummy_embedding() -> list[float]:
-    """A 1024-dim zero vector — matches the OllamaEmbedder fallback."""
+    """A 1024-dim zero vector — matches the CloudEmbedder (jina-embeddings-v3) width."""
     return [0.0] * 1024
 
 
@@ -41,15 +41,17 @@ async def test_build_and_start_wires_correctly(tmp_path: Path) -> None:
 
     config_dir = Path(__file__).resolve().parents[1] / "config"
 
-    # Patch Ollama HTTP calls so we don't need a running server
+    # Patch the external calls (cloud embeddings + OpenRouter chat) so the build
+    # needs no network. A dummy key guarantees the OpenRouter provider registers.
     with (
+        patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}),
         patch(
-            "atlas.memory.embedder.OllamaEmbedder.embed",
+            "atlas.memory.embedder.CloudEmbedder.embed",
             new_callable=AsyncMock,
             return_value=_dummy_embedding(),
         ),
         patch(
-            "atlas.intelligence.providers.ollama.OllamaProvider.complete",
+            "atlas.intelligence.providers.openai_compatible.OpenAICompatibleProvider.complete",
             new_callable=AsyncMock,
             return_value=MagicMock(
                 text="ok",
@@ -142,9 +144,10 @@ async def test_bus_not_double_wired_on_restart(tmp_path: Path) -> None:
     config_dir = Path(__file__).resolve().parents[1] / "config"
 
     with (
-        patch("atlas.memory.embedder.OllamaEmbedder.embed", new_callable=AsyncMock, return_value=_dummy_embedding()),
+        patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}),
+        patch("atlas.memory.embedder.CloudEmbedder.embed", new_callable=AsyncMock, return_value=_dummy_embedding()),
         patch(
-            "atlas.intelligence.providers.ollama.OllamaProvider.complete",
+            "atlas.intelligence.providers.openai_compatible.OpenAICompatibleProvider.complete",
             new_callable=AsyncMock,
             return_value=MagicMock(text="ok", usage=MagicMock(input_tokens=1, output_tokens=1, usd=0.0)),
         ),
@@ -176,9 +179,10 @@ async def test_memory_bus_event_on_episode_record(tmp_path: Path) -> None:
     config_dir = Path(__file__).resolve().parents[1] / "config"
 
     with (
-        patch("atlas.memory.embedder.OllamaEmbedder.embed", new_callable=AsyncMock, return_value=_dummy_embedding()),
+        patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}),
+        patch("atlas.memory.embedder.CloudEmbedder.embed", new_callable=AsyncMock, return_value=_dummy_embedding()),
         patch(
-            "atlas.intelligence.providers.ollama.OllamaProvider.complete",
+            "atlas.intelligence.providers.openai_compatible.OpenAICompatibleProvider.complete",
             new_callable=AsyncMock,
             return_value=MagicMock(text="ok", usage=MagicMock(input_tokens=1, output_tokens=1, usd=0.0)),
         ),

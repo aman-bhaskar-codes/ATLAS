@@ -999,6 +999,134 @@ def knowledge(
 # Task 3.9 — Live Memory Commands
 # ---------------------------------------------------------------------------
 
+voice_app = typer.Typer(help="Voice pipeline — speak text or hold a spoken conversation")
+app.add_typer(voice_app, name="voice")
+
+
+def _voice_or_exit(atlas: Atlas) -> Any:
+    """Return the live VoiceService or print guidance and abort."""
+    service = getattr(atlas, "voice_service", None)
+    if service is None:
+        console.print(
+            "[red]Voice is disabled or unconfigured.[/] Set [cyan]voice.enabled: true[/] in "
+            "config/settings.yaml. Speech uses the same OPENROUTER_API_KEY as chat; "
+            "DEEPGRAM_API_KEY / FISH_AUDIO_API_KEY are optional extra fallbacks."
+        )
+        raise typer.Exit(code=1)
+    return service
+
+
+async def _collect_audio(service: Any, text: str, language: str | None) -> bytes:
+    """Drive a TTS synthesis to completion, returning the concatenated bytes."""
+    parts: list[bytes] = []
+    async for chunk in service.speak(text, language):
+        if chunk.error:
+            console.print(f"[red]TTS error:[/] {chunk.error}")
+        if chunk.data:
+            parts.append(chunk.data)
+    return b"".join(parts)
+
+
+def _play_or_save(audio: bytes) -> None:
+    """Best-effort playback; always save the file so nothing is lost.
+
+    PRIVACY: the audio was synthesized by a third-party API (audio left the
+    machine). Playback uses the optional `voice` extra (sounddevice/soundfile).
+    """
+    if not audio:
+        console.print("[yellow]No audio produced.[/]")
+        return
+    from pathlib import Path
+
+    out = Path("atlas_voice_output.mp3")
+    out.write_bytes(audio)
+    console.print(f"[green]Saved[/] {out} ({len(audio)} bytes)")
+    try:
+        import io
+
+        # Optional deps (voice extra): the `unused-ignore` code keeps mypy quiet
+        # whether or not the extra is installed in the checking environment.
+        import sounddevice as sd  # type: ignore[import-not-found, unused-ignore]
+        import soundfile as sf  # type: ignore[import-not-found, unused-ignore]
+
+        data, sr = sf.read(io.BytesIO(audio), dtype="float32")
+        sd.play(data, sr)
+        sd.wait()
+    except Exception as exc:
+        console.print(f"[dim]Playback unavailable ({exc}); open {out} manually.[/]")
+
+
+@voice_app.command("speak")
+def voice_speak(
+    text: str,
+    lang: str = typer.Option(None, "--lang", "-l", help="Language hint, e.g. en, hi"),
+) -> None:
+    """Synthesize TEXT to speech and play it (--lang picks the voice: en vs hi/other)."""
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            service = _voice_or_exit(atlas)
+            audio = await _collect_audio(service, text, lang)
+            _play_or_save(audio)
+
+    _run(go())
+
+
+@voice_app.command("chat")
+def voice_chat(
+    seconds: float = typer.Option(6.0, "--seconds", "-s", help="Seconds of audio to capture per turn"),
+) -> None:
+    """Full loop: mic -> STT -> orchestrator -> answer -> TTS -> speaker.
+
+    Records a fixed window of microphone audio each turn (requires the `voice`
+    extra: `uv sync --extra voice`), transcribes it, runs the request through the
+    orchestrator/SafetyEngine funnel as an InboundEvent(source="voice"), then
+    speaks the answer. Ctrl-C to stop.
+    """
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            service = _voice_or_exit(atlas)
+            sample_rate = atlas.config.voice.sample_rate
+            try:
+                # Optional deps (voice extra): tolerate both "installed" and
+                # "absent" type-check environments without a mypy error.
+                import numpy as np  # type: ignore[import-not-found, unused-ignore]
+                import sounddevice as sd  # type: ignore[import-not-found, unused-ignore]
+            except Exception as exc:
+                console.print(f"[red]Mic capture needs the voice extra:[/] {exc}\n  uv sync --extra voice")
+                raise typer.Exit(code=1) from exc
+
+            console.print("[cyan]Voice chat ready. Speak after each prompt; Ctrl-C to quit.[/]")
+            while True:
+                console.print(f"[dim]Listening for {seconds:.0f}s…[/]")
+                recording = sd.rec(int(seconds * sample_rate), samplerate=sample_rate, channels=1, dtype="int16")
+                sd.wait()
+                pcm = np.asarray(recording, dtype="int16").tobytes()
+
+                result = await service.transcribe(pcm)
+                transcript = result.text.strip()
+                if not transcript:
+                    console.print("[yellow]…didn't catch that.[/]")
+                    continue
+                console.print(f"[bold]You:[/] {transcript}")
+
+                event = InboundEvent(
+                    correlation_id=atlas.ids.correlation_id(),
+                    source="voice",
+                    content=transcript,
+                )
+                task = await atlas.orchestrator.run(event)
+                answer = task.answer if (task.ok and task.answer) else (task.error or "I could not do that.")
+                console.print(f"[bold green]ATLAS:[/] {answer}")
+                audio = await _collect_audio(service, answer, None)
+                _play_or_save(audio)
+
+    _run(go())
+
+
+# ---------------------------------------------------------------------------
+
 memory_app = typer.Typer(help="Inspect and monitor live memory (Phase 3)")
 app.add_typer(memory_app, name="memory")
 

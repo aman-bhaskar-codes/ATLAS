@@ -129,10 +129,20 @@ async def run_doctor(atlas: Atlas, *, verify_manifest_only: bool = False) -> lis
     )
 
     # model availability
+    #
+    # WHY not a named provider: the fleet is config-driven (five free OpenRouter
+    # models today), so doctor asserts the property that matters — at least one
+    # registered provider is usable — instead of pinning a vendor. Checking for
+    # "ollama" here used to hard-fail every install after the fleet moved to
+    # OpenRouter.
     health = await atlas.gateway.health()
-    ollama_ok = health.get("ollama", False)
+    available = sorted(name for name, ok in health.items() if ok)
     results.append(
-        CheckResult("models.ollama", "pass" if ollama_ok else "fail", "reachable" if ollama_ok else "UNREACHABLE")
+        CheckResult(
+            "models.providers",
+            "pass" if available else "fail",
+            f"available: {', '.join(available)}" if available else f"NONE available (registered: {len(health)})",
+        )
     )
 
     # database + migrations

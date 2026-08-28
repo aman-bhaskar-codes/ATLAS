@@ -30,7 +30,6 @@ from atlas.intelligence.governance.cost_governor import CostGovernor
 from atlas.intelligence.governance.quota_governor import FreeQuotaGovernor, ProviderQuota
 from atlas.intelligence.health.health_monitor import HealthMonitor
 from atlas.intelligence.observability.telemetry import Telemetry
-from atlas.intelligence.providers.ollama import OllamaProvider
 from atlas.intelligence.providers.openai_compatible import OpenAICompatibleProvider
 from atlas.intelligence.registry.capability_index import CapabilityIndex
 from atlas.intelligence.registry.model_registry import ModelRegistry
@@ -39,7 +38,7 @@ from atlas.intelligence.runtime.fallback import FallbackEngine
 from atlas.intelligence.runtime.inference import InferenceRuntime
 from atlas.intelligence.selection.router import CapabilityRouter
 from atlas.intelligence.selection.selector import ModelSelector
-from atlas.memory.embedder import OllamaEmbedder
+from atlas.memory.embedder import CloudEmbedder
 from atlas.memory.vectorstore import ChromaVectorStore
 from atlas.safety.audit import AuditLog
 
@@ -52,7 +51,7 @@ _log = get_logger("atlas.bootstrap.intelligence")
 @dataclass
 class IntelligenceComponents:
     gateway: ModelGateway
-    embedder: OllamaEmbedder
+    embedder: CloudEmbedder
     llm_tracker: LLMCallTracker
     quota_governor: FreeQuotaGovernor
     profile: ProfileConfig
@@ -133,8 +132,8 @@ async def build_intelligence(
     # ── Provider registration (profile-filtered) ──────────────────────
     provider_registry = ProviderRegistry()
 
-    # Ollama is always registered (local, $0)
-    provider_registry.register(OllamaProvider(settings.ollama_host, config.models.local_timeout_s))
+    # No local Ollama provider: the fleet is five OpenRouter free models.
+    # OpenRouter registration below is the sole chat provider.
 
     if profile.allow_cloud:
         # ── Groq (free-tier) ──────────────────────────────────────────
@@ -205,7 +204,10 @@ async def build_intelligence(
     # ── Model registry + selection ────────────────────────────────────
     model_registry = ModelRegistry.from_yaml(config_dir / "models.yaml")
 
-    if settings.openrouter_api_key:
+    # Startup discovery of ALL free OpenRouter models is gated OFF by default so
+    # only the five curated models.yaml ids exist. Opt in via
+    # models.sync_openrouter_free=true (leaves openrouter_sync.py available).
+    if config.models.sync_openrouter_free and settings.openrouter_api_key:
         try:
             from atlas.intelligence.registry.openrouter_sync import sync_openrouter_free_models
 
@@ -235,7 +237,12 @@ async def build_intelligence(
     cap_router = CapabilityRouter()
     selector = ModelSelector(capability_index, health)
 
-    embedder = OllamaEmbedder(settings)
+    embedder = CloudEmbedder(
+        base_url=settings.embed_base_url,
+        api_key=settings.effective_embed_api_key(),
+        model=settings.embed_model,
+        timeout_s=config.models.cloud_timeout_s,
+    )
     cache_vectors = ChromaVectorStore(str(settings.data_dir / "chroma"), collection="atlas_cache")
     semantic_cache = SemanticCache(db, cache_vectors, embedder)
 

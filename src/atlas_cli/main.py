@@ -1,6 +1,7 @@
 """ATLAS CLI — The AI Operating System Canonical Interface."""
 
 import asyncio
+import contextlib
 from typing import Any
 
 import typer
@@ -129,7 +130,7 @@ def task_cmd(action: str = typer.Argument("list"), task_id: str = "") -> None:
 
             async with httpx.AsyncClient() as c:
                 resp = await c.get(f"{client.base_url}/api/v1/tasks")
-                
+
                 data = resp.json()
                 tasks = data.get("items", []) if isinstance(data, dict) else data
 
@@ -369,9 +370,10 @@ def events_cmd(
                 console.print("\n[yellow]⏸ Stopped streaming[/]")
             except Exception as exc:
                 console.print(f"[red]✗ Error:[/] {exc}")
-                
+
         elif action == "emit":
             import json
+
             if not event_type or not payload:
                 console.print("[red]--event-type and --payload are required for emit[/]")
                 return
@@ -386,7 +388,7 @@ def events_cmd(
                     console.print_json(data=resp)
             except Exception as exc:
                 console.print(f"[red]Error emitting event:[/] {exc}")
-                
+
         elif action == "replay":
             if not event_id:
                 console.print("[red]--event-id is required for replay[/]")
@@ -401,7 +403,7 @@ def events_cmd(
                     console.print_json(data=resp)
             except Exception as exc:
                 console.print(f"[red]Error replaying event:[/] {exc}")
-                
+
         else:
             console.print(f"[red]Unknown action:[/] {action}")
             console.print("[dim]Available actions: stream, search, emit, replay[/]")
@@ -414,6 +416,7 @@ def events_cmd(
 # ═══════════════════════════════════════════════════════════════════════════
 
 # ── atlas doctor ──────────────────────────────────────────────────────────
+
 
 @app.command("doctor")
 def doctor_cmd() -> None:
@@ -443,6 +446,7 @@ def doctor_cmd() -> None:
 
         # Ollama
         import httpx
+
         try:
             async with httpx.AsyncClient(timeout=3) as c:
                 r = await c.get("http://localhost:11434/api/tags")
@@ -458,6 +462,7 @@ def doctor_cmd() -> None:
         # Playwright
         try:
             import playwright  # noqa: F401
+
             table.add_row("Browser", "[green]✓[/]", "Playwright installed")
         except ImportError:
             table.add_row("Browser", "[yellow]○[/] optional", "pip install playwright")
@@ -480,15 +485,17 @@ def doctor_cmd() -> None:
             settings = load_settings()
             profile = resolve_profile(settings.profile)
             console.print()
-            console.print(Panel(
-                f"[bold]Profile:[/] {profile.profile.value}\n"
-                f"[bold]Cost Policy:[/] {profile.cost_policy.value}\n"
-                f"[bold]Network Policy:[/] {profile.network_policy.value}\n"
-                f"[bold]Cloud Allowed:[/] {profile.allow_cloud}\n"
-                f"[bold]Quota Governor:[/] {profile.enable_quota_governor}",
-                title="[bold cyan]Active Profile[/]",
-                border_style="cyan",
-            ))
+            console.print(
+                Panel(
+                    f"[bold]Profile:[/] {profile.profile.value}\n"
+                    f"[bold]Cost Policy:[/] {profile.cost_policy.value}\n"
+                    f"[bold]Network Policy:[/] {profile.network_policy.value}\n"
+                    f"[bold]Cloud Allowed:[/] {profile.allow_cloud}\n"
+                    f"[bold]Quota Governor:[/] {profile.enable_quota_governor}",
+                    title="[bold cyan]Active Profile[/]",
+                    border_style="cyan",
+                )
+            )
         except Exception:
             pass
 
@@ -630,6 +637,7 @@ def providers_verify() -> None:
 
         # Ollama local check
         import httpx
+
         try:
             async with httpx.AsyncClient(timeout=3) as c:
                 r = await c.get("http://localhost:11434/api/tags")
@@ -640,6 +648,7 @@ def providers_verify() -> None:
 
         # OpenRouter free-model discovery
         from atlas.intelligence.providers.openrouter_free import discover_free_models
+
         discovery = await discover_free_models()
         if discovery.ok:
             table.add_row(
@@ -666,6 +675,7 @@ def providers_verify() -> None:
 @providers_app.command("sync-openrouter")
 def providers_sync_openrouter() -> None:
     """Sync dynamic free models from OpenRouter."""
+
     async def go() -> None:
         try:
             from pathlib import Path
@@ -674,31 +684,32 @@ def providers_sync_openrouter() -> None:
 
             from atlas.intelligence.registry.model_registry import ModelRegistry
             from atlas.intelligence.registry.openrouter_sync import sync_openrouter_free_models
-            
+
             config_dir = Path(__file__).resolve().parents[2] / "config"
             registry = ModelRegistry.from_yaml(config_dir / "models.yaml")
-            
+
             console.print("[dim]Fetching live free models from OpenRouter...[/]")
             synced = await sync_openrouter_free_models(registry)
-            
+
             if synced > 0:
                 console.print(f"[green]✓ Successfully synced {synced} free OpenRouter models.[/]")
-                
+
                 table = Table(title="Dynamic Free Models")
                 table.add_column("Model ID", style="cyan")
                 table.add_column("Provider Model", style="bold")
                 table.add_column("Context Length", justify="right")
-                
+
                 for spec in registry.all():
                     if spec.id.startswith("openrouter-dynamic-"):
                         table.add_row(spec.id, spec.provider_model, str(spec.context_length))
                 console.print(table)
             else:
                 console.print("[yellow]⚠ Sync completed but 0 models were returned (check network/API key).[/]")
-                
+
         except Exception as exc:
             console.print(f"[red]Error during OpenRouter sync:[/] {exc}")
             import traceback
+
             console.print("[dim]" + traceback.format_exc() + "[/]")
 
     _run(go())
@@ -708,6 +719,7 @@ def providers_sync_openrouter() -> None:
 
 automations_app = typer.Typer(help="Manage automations")
 app.add_typer(automations_app, name="automations")
+
 
 @automations_app.command("list")
 def automations_list(enabled_only: bool = False) -> None:
@@ -721,7 +733,7 @@ def automations_list(enabled_only: bool = False) -> None:
             if resp.is_error:
                 console.print(f"[red]Error:[/] {resp.text}")
                 return
-            
+
             data = resp.json()
             table = Table(title="Automations Registry")
             table.add_column("ID", style="cyan")
@@ -729,7 +741,7 @@ def automations_list(enabled_only: bool = False) -> None:
             table.add_column("Event Type")
             table.add_column("Action")
             table.add_column("Enabled")
-            
+
             for auto in data:
                 trigger = auto.get("trigger_config", {})
                 action = auto.get("action_config", {})
@@ -738,10 +750,12 @@ def automations_list(enabled_only: bool = False) -> None:
                     auto.get("name"),
                     trigger.get("event_type", ""),
                     action.get("type", ""),
-                    "[green]✓[/]" if auto.get("enabled") else "[red]✗[/]"
+                    "[green]✓[/]" if auto.get("enabled") else "[red]✗[/]",
                 )
             console.print(table)
+
     _run(go())
+
 
 @automations_app.command("create")
 def automations_create(
@@ -753,12 +767,13 @@ def automations_create(
 ) -> None:
     """Create a new automation."""
     import httpx
+
     async def go() -> None:
         payload = {
             "name": name,
             "description": description,
             "trigger_config": {"event_type": event_type, "filters": {}},
-            "action_config": {"type": action_type, "request_template": request_template}
+            "action_config": {"type": action_type, "request_template": request_template},
         }
         async with httpx.AsyncClient() as c:
             resp = await c.post(f"{client.base_url}/api/v1/automations", json=payload)
@@ -766,12 +781,15 @@ def automations_create(
                 console.print(f"[red]Error:[/] {resp.text}")
             else:
                 console.print(f"[green]✓ Created automation:[/] {resp.json().get('id')}")
+
     _run(go())
-    
+
+
 @automations_app.command("toggle")
 def automations_toggle(auto_id: str) -> None:
     """Toggle an automation enabled state."""
     import httpx
+
     async def go() -> None:
         async with httpx.AsyncClient() as c:
             resp = await c.get(f"{client.base_url}/api/v1/automations/{auto_id}")
@@ -786,6 +804,7 @@ def automations_toggle(auto_id: str) -> None:
             else:
                 state = "enabled" if auto["enabled"] else "disabled"
                 console.print(f"[green]✓ Automation {auto_id} is now {state}.[/]")
+
     _run(go())
 
 
@@ -852,6 +871,7 @@ app.add_typer(memory_app, name="memory")
 @memory_app.command("consolidate")
 def memory_consolidate() -> None:
     """Trigger memory consolidation (episodic -> semantic/proposals)."""
+
     async def go() -> None:
         console.print("[dim]Triggering memory consolidation...[/]")
         try:
@@ -865,12 +885,14 @@ def memory_consolidate() -> None:
             console.print(f"Proposed for review: {proposed}")
         except Exception as exc:
             console.print(f"[red]Error during consolidation:[/] {exc}")
+
     _run(go())
 
 
 @memory_app.command("promote")
 def memory_promote(limit: int = typer.Option(20, help="Max experiences to check")) -> None:
     """Trigger experience-to-skill promotion."""
+
     async def go() -> None:
         console.print("[dim]Checking for promotable experiences...[/]")
         try:
@@ -886,6 +908,7 @@ def memory_promote(limit: int = typer.Option(20, help="Max experiences to check"
                 console.print("No experiences met promotion thresholds yet.")
         except Exception as exc:
             console.print(f"[red]Error during promotion:[/] {exc}")
+
     _run(go())
 
 
@@ -914,6 +937,7 @@ def models_doctor() -> None:
         local_models = [m for m in raw.get("models", []) if m.get("cost_class") == "local"]
 
         import httpx
+
         try:
             async with httpx.AsyncClient(timeout=3) as c:
                 r = await c.get("http://localhost:11434/api/tags")
@@ -943,6 +967,7 @@ def models_doctor() -> None:
 
 
 # ── atlas profile ─────────────────────────────────────────────────────────
+
 
 @app.command("profile")
 def profile_cmd(
@@ -984,7 +1009,130 @@ def profile_cmd(
         console.print(f"\n[dim]Activate: export ATLAS_PROFILE={name}[/]")
 
 
+# ── atlas voice ───────────────────────────────────────────────────────────
+#
+# These drive the gateway's voice routes, so the runtime must be up
+# (`atlas runtime start`) and `voice.enabled` must be true in settings.yaml.
+# Mic/speaker I/O needs the optional extra: `uv sync --extra voice`.
+#
+# PRIVACY: microphone audio and synthesis text leave the machine — the gateway
+# forwards them to the configured speech API (OpenRouter by default).
+
+voice_app = typer.Typer(help="Voice pipeline: speak text, or hold a spoken conversation")
+app.add_typer(voice_app, name="voice")
+
+
+def _play(audio: bytes) -> None:
+    """Play synthesized audio, falling back to a saved file when playback is unavailable."""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as handle:
+        handle.write(audio)
+        path = handle.name
+    try:
+        import subprocess
+
+        subprocess.run(["afplay", path], check=True, capture_output=True)
+    except Exception:
+        console.print(f"[yellow]Could not play audio; saved to[/] {path}")
+        return
+    console.print(f"[dim]Played {len(audio)} bytes[/]")
+
+
+@voice_app.command("speak")
+def voice_speak(
+    text: str,
+    lang: str = typer.Option("", "--lang", help="Language hint, e.g. en, hi (routes the TTS provider)"),
+) -> None:
+    """Synthesize TEXT to speech and play it."""
+
+    async def go() -> None:
+        console.print("[dim]Synthesizing...[/]")
+        buffer = bytearray()
+        try:
+            async for chunk in client.speak(text, lang or None):
+                buffer.extend(chunk)
+        except Exception as exc:
+            console.print(f"[red]Voice unavailable:[/] {exc}")
+            raise typer.Exit(1) from exc
+        if not buffer:
+            console.print("[yellow]No audio was produced.[/]")
+            raise typer.Exit(1)
+        _play(bytes(buffer))
+
+    _run(go())
+
+
+@voice_app.command("chat")
+def voice_chat(
+    seconds: float = typer.Option(5.0, "--seconds", help="How long to record each utterance"),
+    sample_rate: int = typer.Option(16000, "--sample-rate", help="Mic sample rate in Hz"),
+) -> None:
+    """Full loop: mic -> STT -> orchestrator -> answer -> TTS -> speaker.
+
+    Press Ctrl-C to stop. Each turn records for --seconds, sends the audio to
+    the gateway, and plays back the spoken answer.
+    """
+    import asyncio
+    import json
+
+    async def go() -> None:
+        try:
+            # Optional deps (voice extra): the `unused-ignore` code keeps mypy
+            # quiet whether or not the extra is installed in this environment.
+            import numpy as np  # type: ignore[import-not-found, unused-ignore]
+            import sounddevice as sd  # type: ignore[import-not-found, unused-ignore]
+        except ImportError as exc:
+            console.print("[red]Voice extra not installed.[/] Run: [bold]uv sync --extra voice[/]")
+            raise typer.Exit(1) from exc
+
+        import websockets
+
+        uri = client.voice_ws_url()
+        console.print(f"[dim]Connecting to {uri}...[/]")
+        try:
+            connection = await websockets.connect(uri)
+        except Exception as exc:
+            console.print(f"[red]Could not open the voice channel:[/] {exc}")
+            console.print("[dim]Is the runtime up, and is voice.enabled true?[/]")
+            raise typer.Exit(1) from exc
+
+        async with connection as ws:
+            console.print("[green]Connected.[/] Ctrl-C to stop.\n")
+            while True:
+                console.print(f"[bold cyan]Listening[/] for {seconds:g}s...")
+                frames = sd.rec(int(seconds * sample_rate), samplerate=sample_rate, channels=1, dtype="int16")
+                sd.wait()
+                await ws.send(np.asarray(frames).tobytes())
+                await ws.send("__end__")
+
+                console.print("[dim]Thinking...[/]")
+                buffer = bytearray()
+                while True:
+                    message = await ws.recv()
+                    if isinstance(message, str):
+                        if message == "__done__":
+                            break
+                        # Forward-compatible: ignore any other control frame.
+                        with contextlib.suppress(json.JSONDecodeError):
+                            json.loads(message)
+                        continue
+                    buffer.extend(message)
+
+                if buffer:
+                    _play(bytes(buffer))
+                else:
+                    console.print("[yellow]Nothing was said back — heard no speech?[/]")
+                console.print()
+
+    try:
+        asyncio.run(go())
+    except KeyboardInterrupt:
+        console.print("\n[dim]Stopped.[/]")
+
+
 # ── atlas smoke-test ─────────────────────────────────────────────────────
+
 
 @app.command("smoke-test")
 def smoke_test_cmd() -> None:
@@ -1064,4 +1212,3 @@ def smoke_test_cmd() -> None:
 
 if __name__ == "__main__":
     app()
-

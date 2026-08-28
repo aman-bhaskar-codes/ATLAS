@@ -375,6 +375,7 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.routes_tasks import router as tasks_router
     from atlas.interfaces.api.routes_trajectory import router as trajectory_router  # Phase 2
     from atlas.interfaces.api.routes_trust import router as trust_router
+    from atlas.interfaces.api.routes_voice import router as voice_router  # Voice pipeline (optional)
 
     # Each API path now has exactly one owning router — see routes_tasks.py
     # and routes_trust.py module docstrings/comments for the split:
@@ -416,5 +417,12 @@ def create_app() -> FastAPI:
     app.include_router(ops_router, prefix="/api/v1", dependencies=auth_required)  # Batch 6
     app.include_router(providers_router, prefix="", dependencies=auth_required)  # already has /api/v1 prefix
     app.include_router(automations_router, prefix="", dependencies=auth_required)  # has /api/v1/automations prefix
+    # Voice router carries a WebSocket route (/ws/voice), so — like memory_router
+    # and events_ws_router — it is mounted WITHOUT the require_principal Request
+    # dependency (which cannot resolve a WebSocket scope). Its HTTP endpoints
+    # (/voice/speak, /voice/transcribe) are therefore not key-gated; WebSocket +
+    # voice-HTTP auth is tracked as the same debt as the other WS routers. The
+    # subsystem is off by default, so no live surface exists until enabled.
+    app.include_router(voice_router, prefix="/api/v1")
 
     return app

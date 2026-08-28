@@ -43,7 +43,7 @@ Checks currently run, in order:
 | `secrets.ntfy` | **warn** if no push topic — presence only, never the value |
 | `permissions` | hard blocks **or** confirmation rules missing |
 | `environment.python` | `< 3.13` |
-| `models.ollama` | gateway health says unreachable |
+| `models.providers` | no registered provider is available — lists the ones that are |
 | `database` | `db.health()` false |
 | `audit.chain` | `audit.verify_chain()` false — reports the record it broke at |
 | `identity.encryption` | vault verification failed — reports only the exception **type** |

@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from atlas.infra.ids import CorrelationId
 
 Decision = Literal["allow", "deny", "require_confirm"]
-Source = Literal["cli", "file", "whatsapp", "api", "scheduler", "system"]
+Source = Literal["cli", "file", "whatsapp", "api", "scheduler", "system", "voice"]
 
 
 class Tier(IntEnum):

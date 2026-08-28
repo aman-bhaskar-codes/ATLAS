@@ -4,9 +4,9 @@ These tests exercise the REAL FastAPI app over real HTTP paths (via
 ``httpx.ASGITransport``) with the app's REAL lifespan running — Atlas is built
 and started exactly as in production — but with the four external dependencies
 the startup/execution path would otherwise reach patched to deterministic local
-values: the Ollama chat provider, the Ollama embedder, the Docker-sandbox probe,
-and the semantic cache. This mirrors ``tests/e2e/test_first_light.py`` so the
-mocking surface stays consistent across the suite.
+values: the OpenRouter chat provider, the cloud embedder, the Docker-sandbox
+probe, and the semantic cache. This mirrors ``tests/e2e/test_first_light.py`` so
+the mocking surface stays consistent across the suite.
 
 WHY run the real lifespan: every route reads ``app.state.atlas`` /
 ``app.state.event_store`` (see ``dependencies.py``), which only exist after the
@@ -50,16 +50,19 @@ def _external_mocks(data_dir: Path) -> Iterator[None]:
     os.environ["ATLAS_DATA_DIR"] = str(data_dir)
     os.environ["ATLAS_ENV"] = "dev"
     with contextlib.ExitStack() as stack:
+        # A dummy key guarantees the OpenRouter provider registers on any machine;
+        # `complete` is patched below, so no request ever leaves the box.
+        stack.enter_context(patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"}))
         stack.enter_context(
             patch(
-                "atlas.memory.embedder.OllamaEmbedder.embed",
+                "atlas.memory.embedder.CloudEmbedder.embed",
                 new_callable=AsyncMock,
                 return_value=[0.0] * 1024,
             )
         )
         stack.enter_context(
             patch(
-                "atlas.intelligence.providers.ollama.OllamaProvider.complete",
+                "atlas.intelligence.providers.openai_compatible.OpenAICompatibleProvider.complete",
                 new_callable=AsyncMock,
                 return_value=ProviderCompletion(
                     text=_FINAL_ANSWER_JSON,

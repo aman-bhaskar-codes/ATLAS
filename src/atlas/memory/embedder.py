@@ -1,9 +1,13 @@
-"""Embedder — bge-m3 via the model gateway + async embedding worker for Phase 3.
+"""Embedder — cloud embed API (default OpenRouter) + async embedding worker.
 
-WHY through the gateway: one metered, auditable path for ALL model calls,
-embeddings included. $0 (local Ollama).
+Embeddings go through ``CloudEmbedder``, an OpenAI-shaped ``POST
+{base_url}/embeddings`` client. It defaults to OpenRouter, which authenticates
+with the same ``OPENROUTER_API_KEY`` as the chat fleet, so the whole system needs
+exactly one key; pointing ``ATLAS_EMBED_BASE_URL``/``ATLAS_EMBED_MODEL`` at Jina,
+Cohere, Voyage, ... needs no code change. ``OllamaEmbedder`` is retained for
+local/offline use but is no longer wired by the composition root.
 
-Phase 3: Async embedding worker
+Async embedding worker:
 - Non-blocking: embeddings happen in background
 - Queue-based: handles bursts gracefully
 - Batching: processes multiple items efficiently
@@ -60,6 +64,53 @@ class OllamaEmbedder:
         except Exception as exc:
             raise EmbeddingError(
                 f"Ollama embedding failed (host={self._host}, model={self._model}): {type(exc).__name__}({exc})"
+            ) from exc
+
+    async def close(self) -> None:
+        await self._client.aclose()
+
+
+class CloudEmbedder:
+    """Embeddings via a cloud embed API with an OpenAI-shaped endpoint.
+
+    Default target: OpenRouter ``qwen/qwen3-embedding-0.6b`` (``POST
+    {base_url}/embeddings``, ``Authorization: Bearer <key>``, 1024-dim —
+    dimension-compatible with the former bge-m3 collections), authenticated with
+    the same ``OPENROUTER_API_KEY`` as chat. Base URL + model are config-driven,
+    so switching to Jina/Cohere/Voyage/etc. needs no code change.
+
+    Contract mirrors ``OllamaEmbedder``: never returns a silent zero vector —
+    any empty/all-zero response or transport failure raises ``EmbeddingError``.
+    """
+
+    def __init__(self, base_url: str, api_key: str, model: str, timeout_s: float = 90.0) -> None:
+        self._base = base_url.rstrip("/")
+        self._api_key = api_key
+        self._model = model
+        # First cloud call can be slow (cold model); split phases explicitly.
+        self._client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=timeout_s, write=10.0, pool=10.0))
+
+    async def embed(self, text: str) -> list[float]:
+        if not self._api_key:
+            raise EmbeddingError(f"CloudEmbedder has no API key (provider base={self._base}, model={self._model})")
+        try:
+            resp = await self._client.post(
+                f"{self._base}/embeddings",
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                json={"model": self._model, "input": text},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            items = data.get("data", [])
+            vec = items[0].get("embedding", []) if items else []
+            if not vec or all(x == 0.0 for x in vec[:10]):
+                raise EmbeddingError(f"Cloud embed API returned empty/zero embedding for model {self._model}")
+            return [float(x) for x in vec]
+        except EmbeddingError:
+            raise
+        except Exception as exc:
+            raise EmbeddingError(
+                f"Cloud embedding failed (base={self._base}, model={self._model}): {type(exc).__name__}({exc})"
             ) from exc
 
     async def close(self) -> None:

@@ -48,7 +48,7 @@ from atlas.infra.workflows import WorkflowStore
 from atlas.intelligence.gateway import ModelGateway
 from atlas.interfaces.notify import CliConfirmer, CompositeConfirmer
 from atlas.memory.consolidation import Consolidator
-from atlas.memory.embedder import EmbeddingWorker, OllamaEmbedder
+from atlas.memory.embedder import CloudEmbedder, EmbeddingWorker
 from atlas.memory.episodic import EpisodicMemory
 from atlas.memory.knowledge_store import KnowledgeStore
 from atlas.memory.pruning import Pruner
@@ -108,7 +108,7 @@ class Atlas:
     gateway: ModelGateway
     notification_platform: NotificationPlatform
     vectors: ChromaVectorStore
-    embedder: OllamaEmbedder
+    embedder: CloudEmbedder
     embedding_worker: EmbeddingWorker
     episodic: EpisodicMemory
     semantic: SemanticMemory
@@ -154,6 +154,7 @@ class Atlas:
     computer_use: Any = None  # Prompt 2: ComputerUseComponents (engine + tool + env report)
     public_api: Any = None  # Prompt 2: PublicAPIPlatform (catalog → validation → execution)
     knowledge_fabric: Any = None  # Prompt 3: KnowledgeFabricComponents (fabric + bridges + research)
+    voice_service: Any = None  # Optional voice pipeline (VoiceService or None when disabled)
 
     async def start(self) -> Any:
         if self.runtime_supervisor is not None and self.runtime_supervisor.state in {
@@ -216,6 +217,8 @@ class Atlas:
             await self.browser_platform.shutdown()
         if self.computer_use is not None:
             await self.computer_use.engine.shutdown()
+        if self.voice_service is not None:
+            await self.voice_service.close()
         # Close bus first so background queue-processor exits before DB closes
         await self.bus.close()
         await self.embedder.close()
@@ -488,6 +491,11 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     tools["computer_use"] = computer_use.tool
     public_api = computer_use.public_api
 
+    # ── Voice pipeline (optional; off by default) ─────────────────── #
+    from atlas.bootstrap.voice import build_voice
+
+    voice = build_voice(settings, config)
+
     notifier_adapter = NotificationPlatformAdapter(notification_platform, clock, ids)
     active_notifier = notifier_adapter if settings.ntfy_topic else None
     safety.set_confirmer(CompositeConfirmer(active_notifier, CliConfirmer(), config.notify.confirm_timeout_s))
@@ -606,6 +614,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         computer_use=computer_use,
         public_api=public_api,
         knowledge_fabric=knowledge_fabric,
+        voice_service=voice.service,
         feedback=feedback_store,
         scheduler=cron_scheduler,
         llm_tracker=llm_tracker,

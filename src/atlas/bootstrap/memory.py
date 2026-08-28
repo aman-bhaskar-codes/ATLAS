@@ -10,7 +10,7 @@ from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
 from atlas.intelligence.gateway import ModelGateway
 from atlas.memory.consolidation import Consolidator
-from atlas.memory.embedder import EmbeddingWorker, OllamaEmbedder
+from atlas.memory.embedder import Embedder, EmbeddingWorker
 from atlas.memory.episodic import EpisodicMemory
 from atlas.memory.experience_extractor import ExperienceExtractor  # Phase 2
 from atlas.memory.knowledge_store import KnowledgeStore
@@ -53,7 +53,7 @@ def build_memory(
     db: Database,
     ids: IdGenerator,
     clock: Clock,
-    embedder: OllamaEmbedder,
+    embedder: Embedder,
     gateway: ModelGateway,
 ) -> MemoryComponents:
     """Build memory subsystems. Bus wiring is done later in Atlas.start()."""
