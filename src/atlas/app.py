@@ -155,6 +155,9 @@ class Atlas:
     public_api: Any = None  # Prompt 2: PublicAPIPlatform (catalog → validation → execution)
     knowledge_fabric: Any = None  # Prompt 3: KnowledgeFabricComponents (fabric + bridges + research)
     voice_service: Any = None  # Optional voice pipeline (VoiceService or None when disabled)
+    curated: Any = None  # CuratedMemory — the always-loaded MEMORY/USER tier
+    lane_one: Any = None  # LaneOneRecall — default read path (SQL, no embeddings)
+    intents: Any = None  # IntentStore — prospective memory ("remember to X when Y")
 
     async def start(self) -> Any:
         if self.runtime_supervisor is not None and self.runtime_supervisor.state in {
@@ -167,6 +170,16 @@ class Atlas:
         # The supervisor verifies infrastructure during its startup phases. The
         # lifecycle owns the database connection, so it must run first.
         await self.lifecycle.start()
+
+        # Ensure both curated surfaces exist before anything reads or swaps them.
+        # Consolidation compare-and-swaps on a content hash, so it needs a row to
+        # swap against; creating them here means the very first sweep on a fresh
+        # install behaves like every later one instead of taking a special path.
+        if self.curated is not None:
+            from atlas.memory.curated import MEMORY_KEY, USER_KEY
+
+            for key in (MEMORY_KEY, USER_KEY):
+                await self.curated.create_if_absent(key)
 
         # These subscriptions and the durable event processor are runtime-wide,
         # not API-only. Establish them before readiness is reported.
@@ -310,6 +323,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     user_model, working = mem.user_model, mem.working
     knowledge_store = mem.knowledge_store
     retriever, consolidator, pruner = mem.retriever, mem.consolidator, mem.pruner
+    curated, lane_one, intents = mem.curated, mem.lane_one, mem.intents
     trajectory_store, experience_extractor = mem.trajectory_store, mem.experience_extractor  # Phase 2
     skill_store, strategy_store = mem.skill_store, mem.strategy_store  # Batch 4
     world_state, skill_promoter = mem.world_state, mem.skill_promoter  # Batch 4
@@ -615,6 +629,9 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         public_api=public_api,
         knowledge_fabric=knowledge_fabric,
         voice_service=voice.service,
+        curated=curated,
+        lane_one=lane_one,
+        intents=intents,
         feedback=feedback_store,
         scheduler=cron_scheduler,
         llm_tracker=llm_tracker,

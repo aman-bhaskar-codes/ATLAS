@@ -1543,6 +1543,83 @@ _MIGRATIONS: tuple[str, ...] = (
     );
     CREATE INDEX IF NOT EXISTS idx_kfp_fingerprint ON known_failure_patterns(fingerprint);
     """,
+    # 029 — memory provenance, write-time recall signals, curated tier,
+    # prospective memory. Together these make Lane-1 recall (the default read
+    # path) pure SQL: no embedding call, no vector round-trip, no model call.
+    #
+    # WHY provenance is a CHECK and not just a Python enum: `origin_class` is a
+    # security boundary, not a hint. Content that arrived from a web page or a
+    # non-owner sender must be structurally incapable of reaching the curated
+    # tier, so an invalid value has to be a hard write error at the storage
+    # layer — not something a prose-following model can talk its way around.
+    #
+    # WHY the defaults are 'agent'/'interactive': existing rows predate the
+    # column and their real origin is unknowable. 'agent' is the conservative
+    # choice — it is trusted enough to be recalled but is NOT 'owner', so
+    # backfilled history can never be mistaken for something you said.
+    """
+    ALTER TABLE episodes ADD COLUMN origin_class TEXT NOT NULL DEFAULT 'agent'
+        CHECK (origin_class IN ('owner','agent','untrusted','system'));
+    ALTER TABLE episodes ADD COLUMN session_kind TEXT NOT NULL DEFAULT 'interactive'
+        CHECK (session_kind IN ('interactive','cron','heartbeat','subagent'));
+
+    -- Scored ONCE at write time, while a model is already in the loop for the
+    -- turn, so ranked recall at read time is an ORDER BY and never an inference
+    -- call. NULL importance = neutral, not a trigger candidate.
+    ALTER TABLE episodes ADD COLUMN importance INTEGER;
+    ALTER TABLE episodes ADD COLUMN trigger_hint TEXT;
+
+    -- Promotion candidates: unconsolidated, and provenance-eligible. The
+    -- WHERE clause encodes the promotion gate itself, so a query that forgets
+    -- to filter provenance simply cannot use this index.
+    CREATE INDEX IF NOT EXISTS idx_ep_promotion_candidates
+        ON episodes(consolidated, salience DESC)
+        WHERE consolidated = 0 AND origin_class IN ('owner','agent');
+
+    -- Lane-1 trigger lookup. SQLite has no tsvector; matching is done with
+    -- normalised LIKE terms in Python-built SQL, and this partial index keeps
+    -- the scan to rows that actually carry a hint.
+    CREATE INDEX IF NOT EXISTS idx_ep_trigger_hint
+        ON episodes(trigger_hint) WHERE trigger_hint IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_ep_importance
+        ON episodes(importance DESC, ts DESC) WHERE importance IS NOT NULL;
+
+    -- The MEMORY.md / USER.md equivalent: small, always loaded at session
+    -- start, written ONLY by consolidation and never by a live turn.
+    -- `content_hash` is the compare-and-swap token; `pre_image` is a one-step
+    -- revert so a bad sweep is recoverable without a backup.
+    CREATE TABLE IF NOT EXISTS curated_memory (
+        file_key TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        pre_image TEXT,
+        pre_image_hash TEXT,
+        version INTEGER NOT NULL DEFAULT 1,
+        updated_ts TEXT NOT NULL
+    );
+
+    -- Prospective memory ("remember to do X when Y comes up"). Deliberately a
+    -- table and not prose in a memory file: matching runs deterministically
+    -- against every inbound message, with a fire budget and cooldown so a
+    -- single standing intent can never spam every turn.
+    CREATE TABLE IF NOT EXISTS standing_intents (
+        id TEXT PRIMARY KEY,
+        description TEXT NOT NULL DEFAULT '',
+        keywords TEXT NOT NULL DEFAULT '[]',
+        channel_scope TEXT,
+        sender_scope TEXT,
+        status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending','armed','fired','done','cancelled','expired')),
+        fire_budget INTEGER NOT NULL DEFAULT 3,
+        fire_count INTEGER NOT NULL DEFAULT 0,
+        cooldown_until TEXT,
+        expires_at TEXT,
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_intents_active
+        ON standing_intents(status) WHERE status IN ('pending','armed');
+    """,
 )
 
 
