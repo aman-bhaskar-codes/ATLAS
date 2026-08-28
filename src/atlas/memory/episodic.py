@@ -21,6 +21,7 @@ from atlas.infra.clock import Clock
 from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
 from atlas.infra.tasks import spawn
+from atlas.memory.lanes import hint_of, importance_of
 from atlas.memory.types import Episode, EpisodeKind, OriginClass, SessionKind
 
 if TYPE_CHECKING:
@@ -67,6 +68,7 @@ class EpisodicMemory:
             event_kind: str = getattr(event, "kind", "unknown")
 
             # Extract episode data
+            content = self._extract_content(event)
             episode = Episode(
                 correlation_id=event.correlation_id,
                 task_id=event_task_id,
@@ -74,13 +76,18 @@ class EpisodicMemory:
                 ts=self._clock.now(),
                 kind=self._map_event_kind(event_kind),
                 role="agent",
-                content=self._extract_content(event),
+                content=content,
                 tool=str(event_metadata.get("tool")) if event_metadata.get("tool") else None,
                 outcome=str(event_metadata.get("outcome")) if event_metadata.get("outcome") else None,
                 salience=salience,
                 tokens=int(str(event_metadata.get("tokens", 0) or 0)),
                 origin_class=self._classify_origin(event_kind, event_metadata),
                 session_kind=self._coerce_session_kind(event_metadata.get("session_kind")),
+                # Lane 1 can only find episodes that were hinted at write time, so
+                # the hint is produced here, deterministically, from the salience
+                # this handler already computed. No model call, no extra query.
+                importance=importance_of(salience),
+                trigger_hint=hint_of(content, salience=salience, extra=event_kind),
             )
 
             # CRITICAL: Instant write to DB (< 10ms)
@@ -258,6 +265,8 @@ class EpisodicMemory:
         Also the one write path that is unambiguously ``OWNER``: a correction is
         the human overriding ATLAS, so it is both the highest-signal episode we
         own and the only kind we can attribute to the user without inferring it.
+        Which makes it the episode most worth hinting: if Lane 1 recalls one thing
+        about a topic, it should be the time you told ATLAS it was wrong.
         """
         return await self.record(
             Episode(
@@ -269,6 +278,7 @@ class EpisodicMemory:
                 salience=1.0,
                 origin_class=OriginClass.OWNER,
                 importance=9,
+                trigger_hint=hint_of(content, salience=1.0),
             )
         )
 

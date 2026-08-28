@@ -53,6 +53,18 @@ _DEFAULT_LIMIT = 3
 #: Terms this short or this common carry no retrieval signal and would match
 #: every row, defeating the index.
 _MIN_TERM_LEN = 3
+
+#: Most terms a single hint may carry. A hint is an index key, not a summary —
+#: past a handful of terms it stops narrowing anything and starts matching
+#: everything.
+_MAX_HINT_TERMS = 8
+
+#: Salience floor for writing a hint at all. WHY there is a floor: the read
+#: query's selectivity comes from the *partial* index (``WHERE trigger_hint IS
+#: NOT NULL``). Hinting every episode would make that index the whole table and
+#: turn Lane 1 back into a scan — the fast lane has to stay narrow to stay fast.
+_MIN_HINT_SALIENCE = 0.5
+
 _STOPWORDS = frozenset(
     """
     the a an and or but for nor yet so of to in on at by with from into over
@@ -109,6 +121,44 @@ def has_recall_intent(message: str) -> bool:
     costs a vector query nobody asked for.
     """
     return bool(_RECALL_INTENT.search(message))
+
+
+def hint_of(content: str, *, salience: float = 1.0, extra: str = "") -> str | None:
+    """The write-time trigger hint for an episode, or ``None`` to skip indexing.
+
+    WHY this lives beside :func:`terms_of` rather than in the write path: the hint
+    is only findable if it is written in the *same normalised vocabulary* the
+    reader searches with. Lowercasing on one side and not the other, or a
+    different stopword list, produces an index that silently never matches. Both
+    halves share one function so they cannot drift.
+
+    WHY proper nouns are ranked first: the hint is truncated, so the ranking
+    decides what survives. "we picked Postgres over MySQL" should be findable by
+    "postgres", not by "picked" — capitalisation in the original is the cheapest
+    available signal for which terms are the ones a person would search for, and
+    it costs no model call.
+    """
+    if salience < _MIN_HINT_SALIENCE:
+        return None
+    terms = terms_of(f"{extra} {content}")
+    if not terms:
+        return None
+    proper = {m.lower() for m in re.findall(r"\b[A-Z][A-Za-z0-9']+", content)}
+    # Stable sort, so terms of equal rank keep their first-seen order.
+    ranked = sorted(terms, key=lambda t: (t not in proper, -len(t)))
+    return " ".join(ranked[:_MAX_HINT_TERMS])
+
+
+def importance_of(salience: float) -> int:
+    """Map a 0-1 salience onto the 1-10 importance the ranking multiplies by.
+
+    Derived rather than separately judged: salience is already computed at write
+    time by a rule table, and having two independently-assigned "how much does
+    this matter" numbers is how they end up contradicting each other. The floor is
+    1, not 0, for the same reason :func:`decayed_score` treats ``None`` as 1 — a
+    zero would make the episode unrankable rather than merely unimportant.
+    """
+    return max(1, min(10, round(salience * 10)))
 
 
 def decayed_score(*, importance: int | None, age_seconds: float, half_life_days: float) -> float:
