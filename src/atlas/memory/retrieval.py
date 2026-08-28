@@ -7,6 +7,16 @@ highest fused-score items until the budget is spent, never 'everything'.
 
 Phase 3: Enhanced with vector-based semantic search for facts, episodes, and knowledge store.
 Phase 3.8: RetrievalCache for sub-1ms repeated queries; invalidation on any memory write.
+
+Two-lane read path: when a ``LaneOneRecall`` is injected, the expensive half of
+this module becomes *conditional*. WHY that matters here specifically: both
+``SemanticMemory.semantic_search`` and ``EpisodicMemory.semantic_search`` embed
+the query, so the unconditional version of ``retrieve()`` paid two embedding
+round-trips on every single call — cheap when the embedder was local, a
+per-turn network tax once it moved to a cloud provider. Lane 1 answers the
+common case from SQL, and the vector path runs only when Lane 1 comes back empty
+*and* the message actually asked about the past. When no ``LaneOneRecall`` is
+wired in, behaviour is byte-for-byte the old always-escalate path.
 """
 
 from __future__ import annotations
@@ -17,8 +27,9 @@ from typing import TYPE_CHECKING, Any
 from atlas.infra.logging import get_logger
 from atlas.memory.cache import RetrievalCache
 from atlas.memory.episodic import EpisodicMemory
+from atlas.memory.lanes import LaneOneRecall
 from atlas.memory.semantic import SemanticMemory
-from atlas.memory.types import Episode, RetrievedContext, SemanticFact
+from atlas.memory.types import Episode, RecallHit, RetrievedContext, SemanticFact
 from atlas.memory.user_model import UserModel
 
 if TYPE_CHECKING:
@@ -39,6 +50,7 @@ class Retriever:
         token_budget: int = 1500,
         events: Any | None = None,  # EventPublisher - Any to avoid circular import
         cache_ttl: float = 30.0,  # seconds; 0 disables caching
+        lane_one: LaneOneRecall | None = None,
     ) -> None:
         self._sem = semantic
         self._epi = episodic
@@ -47,6 +59,7 @@ class Retriever:
         self._budget = token_budget
         self._events = events
         self._cache: RetrievalCache | None = RetrievalCache(ttl=cache_ttl) if cache_ttl > 0 else None
+        self._lane1 = lane_one
 
     def set_events(self, events: Any) -> None:
         """Set EventPublisher after construction."""
@@ -55,6 +68,15 @@ class Retriever:
     def set_knowledge_store(self, knowledge_store: KnowledgeStore) -> None:
         """Set KnowledgeStore after construction (avoids circular import)."""
         self._knowledge = knowledge_store
+
+    def set_lane_one(self, lane_one: LaneOneRecall) -> None:
+        """Enable the two-lane read path after construction.
+
+        Separate from the constructor because the composition root builds the
+        curated tier and the retriever in either order, and requiring one to come
+        first would make the wiring fragile for no benefit.
+        """
+        self._lane1 = lane_one
 
     async def invalidate_cache(self) -> None:
         """Flush the retrieval cache — call after any memory write."""
@@ -74,12 +96,14 @@ class Retriever:
 
         Performance targets:
           CACHE HIT:  < 1 ms   (in-memory dict lookup)
-          CACHE MISS: < 200 ms (5 parallel async queries + RRF fusion)
+          LANE 1:     < 5 ms   (curated read + one indexed SQL query, no network)
+          LANE 2:     < 200 ms (adds the embedding + vector round-trips)
         Token budget: 1500 tokens total, max 500 for knowledge chunks.
         """
         import asyncio
 
         # ── Cache check ──────────────────────────────────────────────────
+        cache_key: str | None = None
         if self._cache:
             cache_key = self._cache.make_key(query, task_id)
             cached = await self._cache.get(cache_key)
@@ -88,22 +112,48 @@ class Retriever:
                 return cached
 
         t0 = time.monotonic()
-        dense_task = asyncio.create_task(self._sem.semantic_search(query, k=15))
+
+        # ── Lane 1 ───────────────────────────────────────────────────────
+        # Sequential rather than gathered: both are sub-millisecond indexed
+        # reads on the same single SQLite connection, so concurrency buys
+        # nothing and only makes the ordering harder to reason about.
+        curated = ""
+        lane1_hits: list[RecallHit] = []
+        escalate = True
+        if self._lane1 is not None:
+            curated = await self._lane1.bootstrap()
+            lane1_hits = await self._lane1.recall(query)
+            escalate = self._lane1.should_escalate(query, lane1_hits)
+
         sparse_task = asyncio.create_task(self._epi.keyword_search(terms or query.split(), limit=15))
-        semantic_episodes_task = asyncio.create_task(self._epi.semantic_search(query, limit=10, min_salience=0.3))
         user_model_task = asyncio.create_task(self._um.render())
 
-        # Phase 3: Query knowledge store if available
-        if self._knowledge:
-            knowledge_task = asyncio.create_task(self._knowledge.search(query, limit=5))
-            dense, sparse, semantic_episodes, user_model, knowledge_results = await asyncio.gather(
-                dense_task, sparse_task, semantic_episodes_task, user_model_task, knowledge_task
-            )
+        dense: list[SemanticFact] = []
+        semantic_episodes: list[Episode] = []
+        knowledge_results: list[dict[str, Any]] = []
+
+        if escalate:
+            # ── Lane 2: the embedding-backed path ────────────────────────
+            dense_task = asyncio.create_task(self._sem.semantic_search(query, k=15))
+            semantic_episodes_task = asyncio.create_task(self._epi.semantic_search(query, limit=10, min_salience=0.3))
+
+            # Phase 3: Query knowledge store if available
+            if self._knowledge:
+                knowledge_task = asyncio.create_task(self._knowledge.search(query, limit=5))
+                dense, sparse, semantic_episodes, user_model, knowledge_results = await asyncio.gather(
+                    dense_task, sparse_task, semantic_episodes_task, user_model_task, knowledge_task
+                )
+            else:
+                dense, sparse, semantic_episodes, user_model = await asyncio.gather(
+                    dense_task, sparse_task, semantic_episodes_task, user_model_task
+                )
         else:
-            dense, sparse, semantic_episodes, user_model = await asyncio.gather(
-                dense_task, sparse_task, semantic_episodes_task, user_model_task
-            )
-            knowledge_results = []
+            # Lane 1 answered. The episodes it found stand in for the vector
+            # ranking; facts and knowledge are simply absent this turn rather
+            # than approximated, because a wrong fact costs more than a missing
+            # one.
+            sparse, user_model = await asyncio.gather(sparse_task, user_model_task)
+            semantic_episodes = [h.episode for h in lane1_hits]
 
         # 3. fuse facts by RRF rank (dense list) + salience boost
         ranked_facts = self._rrf_facts(dense)
@@ -121,6 +171,12 @@ class Retriever:
         # 6. pack knowledge chunks within their budget
         knowledge_chunks, knowledge_tokens = self._pack_knowledge(knowledge_results, budget=knowledge_budget)
         used += knowledge_tokens
+
+        # The curated tier is not budgeted (it is always injected) but it IS
+        # counted, so the reported estimate matches what the planner actually
+        # receives rather than understating it.
+        if curated.strip():
+            used += self._tokens(curated)
 
         # Emit memory retrieval event
         if self._events and task_id and correlation_id:
@@ -143,12 +199,14 @@ class Retriever:
             recent_episodes=tuple(epis),
             knowledge_chunks=tuple(knowledge_chunks),
             token_estimate=used,
+            curated=curated,
         )
 
         latency_ms = int((time.monotonic() - t0) * 1000)
         _log.debug(
             "retrieval.complete",
             event_type="memory",
+            lane=2 if escalate else 1,
             facts_count=len(facts),
             episodes_count=len(epis),
             knowledge_count=len(knowledge_chunks),

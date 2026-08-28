@@ -1080,8 +1080,8 @@ def voice_chat(
         try:
             # Optional deps (voice extra): the `unused-ignore` code keeps mypy
             # quiet whether or not the extra is installed in this environment.
-            import numpy as np  # type: ignore[import-not-found, unused-ignore]
-            import sounddevice as sd  # type: ignore[import-not-found, unused-ignore]
+            import numpy as np  # type: ignore[import-not-found, import-untyped, unused-ignore]
+            import sounddevice as sd  # type: ignore[import-not-found, import-untyped, unused-ignore]
         except ImportError as exc:
             console.print("[red]Voice extra not installed.[/] Run: [bold]uv sync --extra voice[/]")
             raise typer.Exit(1) from exc

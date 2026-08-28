@@ -1044,10 +1044,12 @@ def _play_or_save(audio: bytes) -> None:
     try:
         import io
 
-        # Optional deps (voice extra): the `unused-ignore` code keeps mypy quiet
-        # whether or not the extra is installed in the checking environment.
-        import sounddevice as sd  # type: ignore[import-not-found, unused-ignore]
-        import soundfile as sf  # type: ignore[import-not-found, unused-ignore]
+        # Optional deps (voice extra). Both ignore codes are needed: mypy reports
+        # `import-not-found` when the extra is absent and `import-untyped` when it
+        # is installed but ships no stubs, and `unused-ignore` covers the case
+        # where neither fires.
+        import sounddevice as sd  # type: ignore[import-not-found, import-untyped, unused-ignore]
+        import soundfile as sf  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
         data, sr = sf.read(io.BytesIO(audio), dtype="float32")
         sd.play(data, sr)
@@ -1091,8 +1093,8 @@ def voice_chat(
             try:
                 # Optional deps (voice extra): tolerate both "installed" and
                 # "absent" type-check environments without a mypy error.
-                import numpy as np  # type: ignore[import-not-found, unused-ignore]
-                import sounddevice as sd  # type: ignore[import-not-found, unused-ignore]
+                import numpy as np  # type: ignore[import-not-found, import-untyped, unused-ignore]
+                import sounddevice as sd  # type: ignore[import-not-found, import-untyped, unused-ignore]
             except Exception as exc:
                 console.print(f"[red]Mic capture needs the voice extra:[/] {exc}\n  uv sync --extra voice")
                 raise typer.Exit(code=1) from exc

@@ -10,10 +10,13 @@ from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
 from atlas.intelligence.gateway import ModelGateway
 from atlas.memory.consolidation import Consolidator
+from atlas.memory.curated import CuratedMemory
 from atlas.memory.embedder import Embedder, EmbeddingWorker
 from atlas.memory.episodic import EpisodicMemory
 from atlas.memory.experience_extractor import ExperienceExtractor  # Phase 2
+from atlas.memory.intents import IntentStore
 from atlas.memory.knowledge_store import KnowledgeStore
+from atlas.memory.lanes import LaneOneRecall
 from atlas.memory.pruning import Pruner
 from atlas.memory.retrieval import Retriever
 from atlas.memory.semantic import SemanticMemory
@@ -39,6 +42,9 @@ class MemoryComponents:
     retriever: Retriever
     consolidator: Consolidator
     pruner: Pruner
+    curated: CuratedMemory
+    lane_one: LaneOneRecall
+    intents: IntentStore
     trajectory_store: TrajectoryStore  # Phase 2
     experience_extractor: ExperienceExtractor  # Phase 2
     skill_store: SkillStore  # Batch 4
@@ -79,11 +85,19 @@ def build_memory(
         ids=ids,
         clock=clock,
     )
+    # Two-lane recall. Lane 1 is the default read path (curated tier + one
+    # indexed SQL query, no embeddings); the vector path in Retriever becomes
+    # escalation-only. See atlas.memory.lanes for why.
+    curated = CuratedMemory(db, clock)
+    lane_one = LaneOneRecall(db, clock, curated)
+    intents = IntentStore(db, clock)
+
     retriever = Retriever(
         semantic=semantic,
         episodic=episodic,
         user_model=user_model,
         knowledge_store=knowledge_store,
+        lane_one=lane_one,
     )
     consolidator = Consolidator(
         episodic=episodic,
@@ -92,6 +106,7 @@ def build_memory(
         db=db,
         ids=ids,
         clock=clock,
+        curated=curated,
     )
     pruner = Pruner(db=db, gateway=gateway, ids=ids, clock=clock)
 
@@ -125,6 +140,9 @@ def build_memory(
         retriever=retriever,
         consolidator=consolidator,
         pruner=pruner,
+        curated=curated,
+        lane_one=lane_one,
+        intents=intents,
         trajectory_store=trajectory_store,
         experience_extractor=experience_extractor,
         skill_store=skill_store,
