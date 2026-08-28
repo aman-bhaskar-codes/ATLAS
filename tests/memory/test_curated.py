@@ -37,7 +37,7 @@ async def db(tmp_path: Path):  # type: ignore[no-untyped-def]
 
 
 async def test_schema_version_matches_migration_count(db: Database) -> None:
-    cur = await db.conn.execute("PRAGMA user_version")
+    cur = await db.conn.execute("SELECT version FROM schema_version LIMIT 1")
     row = await cur.fetchone()
     assert row is not None
     assert row[0] == len(_MIGRATIONS)

@@ -52,11 +52,19 @@ def keyword_matches(keyword: str, message: str) -> bool:
     Word-bounded rather than plain substring so a keyword like ``"art"`` does not
     fire on ``"start"``. Multi-word keywords work unchanged because the boundary
     anchors sit at the ends of the whole phrase.
+
+    WHY the anchors are conditional: ``\\b`` asserts a word/non-word transition,
+    so pinning one after a keyword that *ends* in punctuation ("c++", "3.5") can
+    never match — the character before the boundary is already a non-word
+    character. Anchoring only the ends that are alphanumeric keeps the
+    "art"/"start" protection while letting punctuated keywords work at all.
     """
     kw = keyword.strip()
     if not kw:
         return False
-    return bool(re.search(rf"\b{re.escape(kw)}\b", message, re.IGNORECASE))
+    left = r"\b" if kw[0].isalnum() or kw[0] == "_" else ""
+    right = r"\b" if kw[-1].isalnum() or kw[-1] == "_" else ""
+    return bool(re.search(rf"{left}{re.escape(kw)}{right}", message, re.IGNORECASE))
 
 
 class IntentStore:
