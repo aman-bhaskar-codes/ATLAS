@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from atlas.infra.clock import Clock
@@ -46,6 +47,21 @@ _SAFETY_CONSTRAINTS = (
 )
 
 
+@dataclass(frozen=True)
+class _DelegatedPlan:
+    """Stand-in plan for a delegated run.
+
+    A multi-agent run never produces a `Plan` — the supervisor's DAG replaces it.
+    `_save_trajectory` reads plan attributes by name, so this satisfies that
+    contract without pretending a plan existed.
+    """
+
+    goal: str
+    risk: str = "low"
+    confidence: float = 0.5
+    steps: tuple[object, ...] = ()
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -66,6 +82,7 @@ class Orchestrator:
         skill_store: Any = None,  # Batch 4: experience-informed planning
         world_state: Any = None,  # Batch 4: environment facts
         dag_executor: Any = None,  # Batch 5: parallel plan execution
+        supervisor: Any = None,  # Multi-agent: AgentSupervisor | None
     ) -> None:
         self._ids = ids
         self._clock = clock
@@ -83,6 +100,7 @@ class Orchestrator:
         self._skill_store = skill_store
         self._world_state = world_state
         self._dag_executor = dag_executor
+        self._supervisor = supervisor
         self._cancels: dict[str, CancellationToken] = {}
 
     def cancel(self, task_id: str) -> None:
@@ -153,6 +171,23 @@ class Orchestrator:
             await self._events.emit(
                 task_id=task.id, correlation_id=task.correlation_id, state=machine.state.value, kind="planning.started"
             )
+
+            # Multi-agent: ask the supervisor whether this request is worth
+            # splitting BEFORE paying for a plan. It declines for anything a
+            # single agent can do serially, and any failure inside it also
+            # returns "declined" — so the serial path below stays the default.
+            if self._supervisor is not None:
+                delegated = await self._try_delegate(
+                    task=task,
+                    machine=machine,
+                    context=context,
+                    intent=intent,
+                    token=token,
+                    started=started,
+                )
+                if delegated is not None:
+                    return delegated
+
             prior_knowledge = await self._build_prior_knowledge()
             plan = await self._planner.plan(
                 task.request,
@@ -245,6 +280,99 @@ class Orchestrator:
                 state=machine.state.value,
                 updated_ts=self._clock.now(),
             )
+
+    async def _try_delegate(
+        self,
+        *,
+        task: Task,
+        machine: TaskStateMachine,
+        context: str,
+        intent: Any,
+        token: CancellationToken,
+        started: float,
+    ) -> TaskResult | None:
+        """Attempt multi-agent execution.
+
+        Returns a TaskResult when the supervisor delegated, or None to tell the
+        caller to continue down the serial plan-then-reason path. NEVER raises:
+        an exception here must not cost the user their task when a perfectly good
+        single-agent path exists.
+        """
+        try:
+            supervision = await self._supervisor.maybe_run(
+                task_id=task.id,
+                correlation_id=task.correlation_id,
+                request=task.request,
+                context=context,
+                intent=intent,
+                token=token,
+            )
+        except Exception as exc:
+            _log.warning(
+                "agents.supervision_failed",
+                event_type="orchestration",
+                task_id=task.id,
+                error=repr(exc),
+            )
+            return None
+
+        if not supervision.delegated:
+            _log.debug(
+                "agents.declined",
+                event_type="orchestration",
+                task_id=task.id,
+                reason=supervision.reason[:200],
+            )
+            return None
+
+        ok = supervision.ok
+        machine.transition(TaskState.REASONING)
+        machine.transition(TaskState.VALIDATING)
+        machine.transition(TaskState.COMPLETED if ok else TaskState.FAILED)
+
+        result = TaskResult(
+            task_id=task.id,
+            ok=ok,
+            answer=supervision.answer if ok else None,
+            steps_taken=supervision.steps_taken,
+            error=None if ok else f"all delegated subtasks failed ({supervision.summary()})",
+            actions=supervision.actions,
+            observations=supervision.observations,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            tokens_used=supervision.tokens_used,
+            model_calls=supervision.model_calls,
+            tool_calls=supervision.tool_calls,
+        )
+
+        # Same durability guarantees as the serial path: the parent trajectory
+        # carries the flattened specialist actions, so experience extraction
+        # still runs over delegated work.
+        if self._trajectory_store and result.actions:
+            try:
+                await self._save_trajectory(
+                    task=task,
+                    plan=_DelegatedPlan(goal=supervision.dag.goal if supervision.dag else task.request),
+                    result=result,
+                    goal=GoalState(objective=task.request, current_state="delegated"),
+                )
+            except Exception as exc:
+                _log.warning(
+                    "trajectory.save_failed",
+                    event_type="orchestration",
+                    task_id=task.id,
+                    error=repr(exc),
+                )
+
+        await self._events.emit(
+            task_id=task.id,
+            correlation_id=task.correlation_id,
+            state=machine.state.value,
+            kind="task.completed" if ok else "task.failed",
+            latency_ms=result.latency_ms,
+            strategy="multi_agent",
+            subtasks=len(supervision.results),
+        )
+        return result
 
     async def _build_prior_knowledge(self) -> str:
         """Retrieve proven lessons, active skills, and environment facts.

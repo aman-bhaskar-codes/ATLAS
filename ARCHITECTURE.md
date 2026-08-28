@@ -58,7 +58,7 @@ anything above it. `safety`/`tools` may not import provider SDKs.
 | `events.py` | Typed bus events (Orchestrator/Safety/Planning/Memory/Tool/Feedback) + `EventPublisher`. | `Event` subclasses |
 | `dispatcher.py` | Routes `Action` → `SafetyEngine.guard()` → tool. The only path to tool execution. | — |
 | `self_critique.py`, `reflection.py` | Pre-action critique (revise/abort), post-action reflection. | `Critique`, `ReflectionResult` |
-| `agents/` | Supervisor decomposition → `TaskDAG` → topological-batch parallel dispatch to specialists (researcher/writer/coder/analyst/general) → synthesis. | `SubTask`, `TaskDAG` |
+| `agents/` | `AgentSupervisor` runs *inside* the orchestrator (gated on `agents.enabled`, off by default): decomposition → `TaskDAG` → topological-batch concurrent dispatch to role specialists (researcher/writer/coder/analyst/general) on the **shared** `ReasoningLoop` → synthesis. No second runtime and no second tool path — delegated tool calls use the same `dispatcher → SafetyEngine.guard()` funnel. Every failure path degrades to the serial single-agent pipeline. | `SubTask`, `TaskDAG`, `SubTaskResult` |
 
 ### safety/
 | Module | Responsibility |

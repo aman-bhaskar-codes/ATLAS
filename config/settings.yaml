@@ -82,3 +82,22 @@ verification:
   # supplied (a model-chosen command would be arbitrary code execution).
   command: ""            # e.g. "uv run pytest -q" or "uv run ruff check"
   command_timeout_s: 120
+
+# Multi-agent specialist layer. A supervisor splits a MODERATE/COMPLEX request
+# into a dependency graph of subtasks, runs independent ones concurrently on the
+# SAME reasoning loop (so every tool call still passes SafetyEngine.guard), then
+# synthesizes one answer. It declines and falls back to serial execution for
+# anything a single agent can do in a few steps.
+#
+# Off by default: delegation adds a decomposition call plus a synthesis call on
+# top of per-subtask reasoning. Enable it when your workload is multi-branch.
+agents:
+  enabled: false
+  max_subtasks: 4          # hard ceiling on graph size
+  min_subtasks: 2          # below this, serial execution is cheaper
+  max_steps_per_subtask: 6
+  max_concurrency: 2       # concurrent specialists; local models have 1 GPU lane
+  max_tokens_per_subtask: 20000
+  subtask_runtime_s: 180.0 # per specialist
+  deadline_s: 600.0        # whole delegated run; remaining subtasks are skipped
+  synthesis_max_tokens: 2048

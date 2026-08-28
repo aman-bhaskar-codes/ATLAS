@@ -125,6 +125,7 @@ class ReasoningLoop:
         goal: GoalState | None = None,
         caps: Capabilities | None = None,
         intent: TaskIntent | None = None,
+        limits: ExecutionLimits | None = None,
     ) -> TaskResult:
         """Execute the OTAR loop.
 
@@ -138,13 +139,20 @@ class ReasoningLoop:
           - intent: selects the domain-appropriate verifier (Phase 12). Without
             it every task falls back to model judgement, which is the weakest
             available check.
+
+        Multi-agent addition:
+          - limits: per-run budget override. A delegated subtask must be bounded
+            more tightly than a whole task, and several run concurrently — so the
+            budget belongs to the RUN, not to the shared loop instance. Omitted
+            means the instance default, i.e. unchanged behaviour for every
+            existing caller.
         """
         # Build a GoalState from the plan when none is provided (backward compat)
         if goal is None:
             goal = GoalState(objective=plan.goal)
         domain = intent.domain if intent is not None else TaskDomain.UNKNOWN
 
-        counter = LimitCounter(self._limits)
+        counter = LimitCounter(limits if limits is not None else self._limits)
         history: list[tuple[Thought, Observation | None]] = []
         current_plan = plan
         verification: VerificationResult | None = None
