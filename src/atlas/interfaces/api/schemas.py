@@ -41,7 +41,7 @@ class TaskResponse(BaseModel):
     schema_version: int = 1
     id: str
     correlation_id: str
-    source: Literal["cli", "file", "whatsapp", "api", "scheduler", "system"]
+    source: Literal["cli", "file", "whatsapp", "api", "scheduler", "system", "voice"]
     request: str
     state: Literal[
         "created",

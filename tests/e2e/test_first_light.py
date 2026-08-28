@@ -47,20 +47,23 @@ async def test_first_light_simple_task(tmp_path: Path) -> None:
     os.environ["ATLAS_DATA_DIR"] = str(tmp_path)
     os.environ["ATLAS_ENV"] = "dev"
 
-    # Mock Ollama and other external dependencies
+    # Mock the two external dependencies the fleet now uses: the cloud embed API
+    # and the OpenRouter chat provider. OPENROUTER_API_KEY is forced to a dummy so
+    # the provider registers deterministically without a real key being needed.
     from unittest.mock import AsyncMock, patch
 
     def _dummy_embedding() -> list[float]:
         return [0.0] * 1024
 
     with (
+        patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"}),
         patch(
-            "atlas.memory.embedder.OllamaEmbedder.embed",
+            "atlas.memory.embedder.CloudEmbedder.embed",
             new_callable=AsyncMock,
             return_value=_dummy_embedding(),
         ),
         patch(
-            "atlas.intelligence.providers.ollama.OllamaProvider.complete",
+            "atlas.intelligence.providers.openai_compatible.OpenAICompatibleProvider.complete",
             new_callable=AsyncMock,
             return_value=ProviderCompletion(
                 text=(
@@ -142,13 +145,14 @@ async def test_runtime_health_endpoints(tmp_path: Path) -> None:
         return [0.0] * 1024
 
     with (
+        patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"}),
         patch(
-            "atlas.memory.embedder.OllamaEmbedder.embed",
+            "atlas.memory.embedder.CloudEmbedder.embed",
             new_callable=AsyncMock,
             return_value=_dummy_embedding(),
         ),
         patch(
-            "atlas.intelligence.providers.ollama.OllamaProvider.complete",
+            "atlas.intelligence.providers.openai_compatible.OpenAICompatibleProvider.complete",
             new_callable=AsyncMock,
             return_value=MagicMock(
                 text="ok",
@@ -201,13 +205,14 @@ async def test_graceful_shutdown(tmp_path: Path) -> None:
         return [0.0] * 1024
 
     with (
+        patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"}),
         patch(
-            "atlas.memory.embedder.OllamaEmbedder.embed",
+            "atlas.memory.embedder.CloudEmbedder.embed",
             new_callable=AsyncMock,
             return_value=_dummy_embedding(),
         ),
         patch(
-            "atlas.intelligence.providers.ollama.OllamaProvider.complete",
+            "atlas.intelligence.providers.openai_compatible.OpenAICompatibleProvider.complete",
             new_callable=AsyncMock,
             return_value=MagicMock(
                 text="ok",
@@ -252,13 +257,14 @@ async def test_task_state_transitions(tmp_path: Path) -> None:
         return [0.0] * 1024
 
     with (
+        patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"}),
         patch(
-            "atlas.memory.embedder.OllamaEmbedder.embed",
+            "atlas.memory.embedder.CloudEmbedder.embed",
             new_callable=AsyncMock,
             return_value=_dummy_embedding(),
         ),
         patch(
-            "atlas.intelligence.providers.ollama.OllamaProvider.complete",
+            "atlas.intelligence.providers.openai_compatible.OpenAICompatibleProvider.complete",
             new_callable=AsyncMock,
             return_value=ProviderCompletion(
                 text=(
@@ -359,16 +365,19 @@ def _atlas_mocks(
         complete_kwargs["return_value"] = provider_return or _completion(_FINAL_ANSWER_JSON)
 
     with contextlib.ExitStack() as stack:
+        # A dummy key guarantees the OpenRouter provider registers even on a
+        # machine without one; `complete` is patched, so nothing leaves the box.
+        stack.enter_context(patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"}))
         stack.enter_context(
             patch(
-                "atlas.memory.embedder.OllamaEmbedder.embed",
+                "atlas.memory.embedder.CloudEmbedder.embed",
                 new_callable=AsyncMock,
                 return_value=[0.0] * 1024,
             )
         )
         stack.enter_context(
             patch(
-                "atlas.intelligence.providers.ollama.OllamaProvider.complete",
+                "atlas.intelligence.providers.openai_compatible.OpenAICompatibleProvider.complete",
                 new_callable=AsyncMock,
                 **complete_kwargs,
             )
@@ -475,14 +484,13 @@ async def test_result_reports_execution_telemetry(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_local_free_profile_costs_zero_and_uses_no_paid_provider(tmp_path: Path) -> None:
-    """Phase 4/5: under the default local_free / zero_cost profile every inference
-    call is recorded against the LOCAL provider at exactly $0.00.
+async def test_free_profile_costs_zero_and_uses_no_paid_provider(tmp_path: Path) -> None:
+    """Phase 4/5: under the free_hybrid / free_only profile every inference call is
+    recorded against the free_quota OpenRouter provider at exactly $0.00.
 
     This is the zero-cost-first guarantee on the production path: the selector's
-    hard policy filter leaves only the local provider eligible, so no paid or
-    cloud provider is ever invoked. The DB row — not a mock assertion — is the
-    evidence.
+    hard policy filter leaves only free/free_quota models eligible, so no paid
+    provider is ever invoked. The DB row — not a mock assertion — is the evidence.
     """
     with _atlas_mocks(tmp_path):
         atlas = await build()
@@ -493,8 +501,8 @@ async def test_local_free_profile_costs_zero_and_uses_no_paid_provider(tmp_path:
             rows = await SQLiteConnection(atlas.db.conn).fetchall("SELECT provider, cost_usd FROM llm_calls", ())
             assert rows, "the run must have recorded at least one inference call"
             providers = {r["provider"] for r in rows}
-            assert providers == {"ollama"}, f"local_free must only use the local provider, saw: {sorted(providers)}"
-            assert all(float(r["cost_usd"]) == 0.0 for r in rows), "a zero_cost profile must never spend"
+            assert providers == {"openrouter"}, f"the free fleet must only use OpenRouter, saw: {sorted(providers)}"
+            assert all(float(r["cost_usd"]) == 0.0 for r in rows), "a free_only profile must never spend"
         finally:
             await atlas.close()
 

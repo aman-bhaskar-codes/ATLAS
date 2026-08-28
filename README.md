@@ -48,7 +48,7 @@ ATLAS is an **autonomous agent runtime** that runs on your own machine. You give
 
 Three properties define it:
 
-- **Local-first.** The default profile runs entirely on a local model (Ollama · `qwen3:4b`) with **$0** budgets and no network egress. Cloud models are strictly opt-in.
+- **Zero-cost by construction.** The default profile runs on a curated fleet of **five free OpenRouter models** with **$0** budgets; paid model classes are physically unreachable under the default cost policy.
 - **Safety-governed.** No tool ever executes except through a reference-monitor **Safety Engine**: every action is classified into a risk tier, checked against policy, and written to a tamper-evident audit log *before* it runs.
 - **Auditable & single-user.** One person, one runtime. Every decision, cost, and side-effect is recorded in an append-only, hash-chained ledger you can verify at any time.
 
@@ -221,12 +221,30 @@ ATLAS treats model choice as a policy decision. The gateway filters candidates b
 
 | Profile | Cost policy | Network | Model classes | Budget |
 | :-- | :-- | :-- | :-- | :-- |
-| **`local_free`** *(default)* | `zero_cost` | `local_only` | local | **$0** |
-| `free_hybrid` | `free_only` | `free_cloud` | local · free · free-quota | $0 |
+| **`free_hybrid`** *(default)* | `free_only` | `free_cloud` | free · free-quota · local | **$0** |
+| `local_free` | `zero_cost` | `local_only` | local | $0 |
 | `free_demo` | `free_preferred` | `free_cloud` | + small paid ceiling | $0.50 / day |
 | `production` | `balanced` | `unrestricted` | + paid | $5 / day |
 
-Select a profile with `ATLAS_PROFILE`, or tune tiers (`fast_models` / `deep_models` / `fallback_models`) in `config/settings.yaml` without touching code. Out of the box, the default local model is **`qwen3:4b`** via Ollama; several free-tier OpenRouter models are pre-registered and used only when a profile permits cloud access.
+Select a profile with `ATLAS_PROFILE`, or tune tiers (`fast_models` / `deep_models` / `fallback_models`) in `config/settings.yaml` without touching code.
+
+### The model fleet
+
+`config/models.yaml` ships exactly five entries — all OpenRouter `:free` slugs, all `cost_class: free_quota`, all $0 in and out:
+
+| Model id | Role |
+| :-- | :-- |
+| `glm-5.2-free` | primary reasoning + agentic work (deep tier, default model) |
+| `nemotron-3-ultra-free` | deep reasoning, orchestration, research (heavy model) |
+| `minimax-m3-free` | general agent, long context, vision |
+| `north-mini-code-free` | agentic coding + terminal/tool work (fast tier) |
+| `laguna-s-2.1-free` | software engineering / coding |
+
+Only `OPENROUTER_API_KEY` is needed — for chat, embeddings **and** speech. The startup step that used to auto-register *every* free OpenRouter model is now opt-in (`models.sync_openrouter_free`, default `false`), so the fleet stays exactly this curated set. If a `:free` slug is renamed upstream, correct it in `config/models.yaml` — no code change.
+
+**Embeddings** ride the same key and base URL: OpenRouter serves an OpenAI-shaped `POST /api/v1/embeddings`, and the default model is `qwen/qwen3-embedding-0.6b` (1024-dim). Leave `ATLAS_EMBED_API_KEY` empty and the OpenRouter key is used; set `ATLAS_EMBED_BASE_URL` / `ATLAS_EMBED_MODEL` / `ATLAS_EMBED_API_KEY` to point at any other OpenAI-compatible embedder (Jina, Cohere, Voyage) without touching code. Embeddings never silently degrade to zero vectors — a failure raises `EmbeddingError`, and the semantic cache treats an unavailable embedder as a cache miss rather than an error.
+
+> **Upgrading from a bge-m3 install:** old and new vectors are not comparable. Wipe `./.atlas/chroma` once before the first run so collections are rebuilt with the new embedder.
 
 <p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
 
@@ -281,9 +299,35 @@ A `computer_use` tool is registered and fully safety-gated. Browser-driven perce
 
 <p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
 
+## Voice ⚠️
+
+ATLAS can take a task by speech and answer out loud. The pipeline is **built and tested but disabled by default** (`voice.enabled: false` in `config/settings.yaml`) — flip the flag and install the optional `voice` extra. **No extra API key:** OpenRouter serves speech on the same base URL and the same `OPENROUTER_API_KEY` as chat.
+
+- **STT** — `POST /api/v1/audio/transcriptions` (default `openai/whisper-large-v3`). Request/response, so a spoken turn produces one final transcript rather than interim hypotheses.
+- **TTS** — `POST /api/v1/audio/speech`, registered twice from the one key: `openrouter` (`openai/gpt-4o-mini-tts`) for English/low-latency and `openrouter_multilingual` (**Fish Audio S2.1 Pro**) for Hindi and other expressive multilingual output. Each is the other's fallback — if the chosen voice fails before any audio is produced, the other one speaks instead.
+- **Optional vendor keys** — `DEEPGRAM_API_KEY` adds Deepgram (Flux STT over a WebSocket, the only path here with true streaming partials, plus Aura TTS); `FISH_AUDIO_API_KEY` adds Fish Audio direct. Both are extra fallbacks, never required.
+- **Model slugs are config** — OpenRouter ids churn, so `voice.openrouter_*_model` in `config/settings.yaml` is the only place to correct one.
+- **Layering** — the audio↔text engine lives in `capabilities/voice/` and cannot import orchestration. The speech→task loop lives in `interfaces/` (CLI + API) and creates a normal `InboundEvent(source="voice")`, so **a spoken request goes through the same Safety Engine funnel as a typed one** — approval-gated tools still prompt.
+
+```bash
+uv sync --extra voice                  # sounddevice + soundfile + numpy
+# .env: OPENROUTER_API_KEY=…           (the key you already have)
+# config/settings.yaml: voice.enabled: true
+
+uv run atlas runtime start                                     # the CLI drives the gateway
+uv run atlas voice speak "नमस्ते, यह एक परीक्षण है" --lang hi   # TTS only
+uv run atlas voice chat                                        # mic → task → speaker
+```
+
+HTTP surface: `POST /api/v1/voice/speak` (text → streamed audio), `POST /api/v1/voice/transcribe` (audio → text), and `WS /api/v1/ws/voice` for a full duplex turn.
+
+> **Privacy:** voice is the one subsystem that always leaves the machine. Microphone audio and synthesis text are sent to the configured speech API (OpenRouter by default). Nothing is sent while `voice.enabled` is `false`, and no other part of the zero-cost path depends on it.
+
+<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
+
 ## Quick Start
 
-**Prerequisites:** Python 3.13 · [uv](https://docs.astral.sh/uv/) · [Ollama](https://ollama.com) (local model) · Node 20+ (optional, for the Web UI) · Docker (optional, for the container sandbox).
+**Prerequisites:** Python 3.13 · [uv](https://docs.astral.sh/uv/) · an [OpenRouter](https://openrouter.ai) API key (free tier) · Node 20+ (optional, for the Web UI) · Docker (optional, for the container sandbox).
 
 ```bash
 # 1 · Clone
@@ -291,16 +335,15 @@ git clone https://github.com/aman-bhaskar-codes/ATLAS.git
 cd ATLAS
 
 # 2 · Install dependencies (creates the virtualenv)
-uv sync
+uv sync                   # add --extra voice for speech in/out
 
-# 3 · Pull the default local models (zero-cost, offline)
-ollama pull qwen3:4b      # default reasoning model
-ollama pull bge-m3        # embeddings
+# 3 · Configure — one free-tier key
+cp .env.example .env
+#   OPENROUTER_API_KEY=…    (the only required key: chat + embeddings + speech)
+#   DEEPGRAM_API_KEY=…      (optional: adds streaming STT partials)
+#   FISH_AUDIO_API_KEY=…    (optional: adds a direct multilingual TTS fallback)
 
-# 4 · Configure
-cp .env.example .env      # defaults are local-first + $0
-
-# 5 · Verify the install
+# 4 · Verify the install
 uv run atlas doctor
 ```
 
@@ -339,21 +382,26 @@ ATLAS reads layered configuration from `config/` with environment overrides. All
 
 | Variable | Purpose | Default |
 | :-- | :-- | :-- |
-| `ATLAS_PROFILE` | Operating profile | `local_free` |
-| `ATLAS_COST_POLICY` | `zero_cost` … `unrestricted` | `zero_cost` |
-| `ATLAS_NETWORK_POLICY` | `offline` … `unrestricted` | `local_only` |
-| `ATLAS_DEFAULT_MODEL` | Local reasoning model | `qwen3:4b` |
-| `ATLAS_EMBED_MODEL` | Embedding model | `bge-m3` |
-| `ATLAS_OLLAMA_HOST` | Ollama endpoint | `http://localhost:11434` |
+| `ATLAS_PROFILE` | Operating profile | `free_hybrid` |
+| `ATLAS_COST_POLICY` | `zero_cost` … `unrestricted` | `free_only` |
+| `ATLAS_NETWORK_POLICY` | `offline` … `unrestricted` | `free_cloud` |
+| `ATLAS_DEFAULT_MODEL` | Default reasoning model | `glm-5.2-free` |
+| `ATLAS_HEAVY_MODEL` | Deep-reasoning model | `nemotron-3-ultra-free` |
+| `OPENROUTER_API_KEY` | Chat (all five) + embeddings + speech | — |
+| `ATLAS_EMBED_MODEL` | Embedding model | `qwen/qwen3-embedding-0.6b` |
+| `ATLAS_EMBED_BASE_URL` | Embedding endpoint | `https://openrouter.ai/api/v1` |
+| `ATLAS_EMBED_API_KEY` | Embedding key — empty falls back to `OPENROUTER_API_KEY` | — |
+| `DEEPGRAM_API_KEY` | Optional: streaming STT partials + Aura TTS fallback | — |
+| `FISH_AUDIO_API_KEY` | Optional: direct multilingual TTS fallback | — |
 | `ATLAS_MASTER_KEY` | Secrets key (OS keychain `atlas-master`) | — |
 
 <details>
 <summary><strong>Config files</strong></summary>
 
 - **`config/models.yaml`** — the model registry. Every entry declares a `cost_class`; the selector enforces cost/network policy against it.
-- **`config/settings.yaml`** — profiles, inference tiers, budgets, sandbox limits, critique/verification switches.
+- **`config/settings.yaml`** — profiles, inference tiers, budgets, sandbox limits, voice, critique/verification switches.
 - **`config/permissions.yaml`** — the five-tier permission model, per-tool rules, hard-block categories, and thresholds.
-- Cloud provider keys (e.g. `ATLAS_GROQ_API_KEY`, `ATLAS_GEMINI_API_KEY`, `ATLAS_OPENROUTER_API_KEY`) are only consulted when a profile permits cloud access.
+- `OPENROUTER_API_KEY` is the only required key — it powers all five chat models, embeddings, and speech. The optional vendor voice keys are read only when `voice.enabled` is true.
 </details>
 
 ## Command-Line Interface
@@ -363,6 +411,7 @@ ATLAS reads layered configuration from `config/` with environment overrides. All
 | Command | Purpose |
 | :-- | :-- |
 | `atlas run "<task>"` | Execute a task through the full pipeline. |
+| `atlas voice speak "<text>" \| chat` | Speak text, or run a full mic → task → speaker loop (needs the `voice` extra). |
 | `atlas doctor` | Health & manifest verification (`--verify-manifest`). |
 | `atlas events` | Stream live runtime events. |
 | `atlas providers list \| free \| health \| verify` | Inspect model providers. |
@@ -376,7 +425,7 @@ ATLAS reads layered configuration from `config/` with environment overrides. All
 <details>
 <summary><strong>HTTP API surface</strong></summary>
 
-The FastAPI app (factory `atlas.interfaces.api.app:create_app`) mounts routers mostly under `/api/v1`, with interactive docs at `/api/docs` and OpenAPI at `/api/openapi.json`. Routers include: **health, runtime, tasks, approvals, capabilities, feedback, knowledge, memory, trajectory, attachments, trust, events, learning, ops, providers, automations**, plus a WebSocket endpoint under `/ws`. CORS is restricted to the local dev origin and requests are rate-limited (120 burst / 60 per minute).
+The FastAPI app (factory `atlas.interfaces.api.app:create_app`) mounts routers mostly under `/api/v1`, with interactive docs at `/api/docs` and OpenAPI at `/api/openapi.json`. Routers include: **health, runtime, tasks, approvals, capabilities, feedback, knowledge, memory, trajectory, attachments, trust, events, learning, ops, providers, automations, voice**, plus WebSocket endpoints under `/ws`. CORS is restricted to the local dev origin and requests are rate-limited (120 burst / 60 per minute).
 </details>
 
 <p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>

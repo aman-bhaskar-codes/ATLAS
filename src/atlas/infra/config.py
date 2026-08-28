@@ -28,10 +28,20 @@ class Settings(BaseSettings):
 
     env: str = "dev"
     data_dir: Path = Path("./.atlas")
-    ollama_host: str = "http://localhost:11434"
-    default_model: str = "qwen3:4b"
-    heavy_model: str = "qwen3:8b"
-    embed_model: str = "bge-m3"
+    ollama_host: str = "http://localhost:11434"  # retained for compat; no longer used for models
+    default_model: str = "glm-5.2-free"
+    heavy_model: str = "nemotron-3-ultra-free"
+    # ── Embeddings (same key + base URL as the chat fleet) ────────────
+    # OpenRouter serves an OpenAI-shaped POST /embeddings, so embeddings ride
+    # OPENROUTER_API_KEY like everything else — one key for the whole system.
+    # qwen3-embedding-0.6b is 1024-dim (as bge-m3 was), so existing Chroma
+    # collections stay dimension-compatible. Swap provider by changing
+    # base_url/model + ATLAS_EMBED_API_KEY — no code change required.
+    embed_provider: str = "openrouter"
+    embed_base_url: str = "https://openrouter.ai/api/v1"
+    embed_model: str = "qwen/qwen3-embedding-0.6b"
+    # Empty -> falls back to openrouter_api_key (see effective_embed_api_key).
+    embed_api_key: str = Field(default="", validation_alias="ATLAS_EMBED_API_KEY")
     ntfy_topic: str = ""
     ntfy_callback_base: str = "http://localhost:8730"
     # ── API keys ──────────────────────────────────────────────────────
@@ -43,14 +53,30 @@ class Settings(BaseSettings):
     api_keys: str = ""  # comma-separated; 'ro:' prefix = readonly key (Batch 7)
     safe_browsing_api_key: str = ""
     virustotal_api_key: str = ""
+    # ── Optional direct-vendor voice keys ─────────────────────────────
+    # Not required: voice runs on OPENROUTER_API_KEY. Setting either of these
+    # registers that vendor as an extra TTS/STT fallback (Deepgram also brings
+    # true streaming partials, which OpenRouter's request/response STT lacks).
+    deepgram_api_key: str = Field(default="", validation_alias="DEEPGRAM_API_KEY")
+    fish_audio_api_key: str = Field(default="", validation_alias="FISH_AUDIO_API_KEY")
     # ── Zero-cost-first policy ────────────────────────────────────────
-    profile: str = "local_free"  # local_free | free_hybrid | free_demo | production
-    cost_policy: str = "zero_cost"  # zero_cost | free_only | free_preferred | balanced | unrestricted
-    network_policy: str = "local_only"  # offline | local_only | free_cloud | unrestricted
+    profile: str = "free_hybrid"  # local_free | free_hybrid | free_demo | production
+    cost_policy: str = "free_only"  # zero_cost | free_only | free_preferred | balanced | unrestricted
+    network_policy: str = "free_cloud"  # offline | local_only | free_cloud | unrestricted
 
     def db_path(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         return self.data_dir / "atlas.db"
+
+    def effective_embed_api_key(self) -> str:
+        """The key the embedder should use.
+
+        Embeddings default to OpenRouter, which authenticates with the same key
+        as chat — so an unset ``ATLAS_EMBED_API_KEY`` means "use the OpenRouter
+        key", not "no embeddings". Setting it explicitly (for Jina, Cohere, ...)
+        wins.
+        """
+        return self.embed_api_key or self.openrouter_api_key
 
 
 class LoggingCfg(BaseModel):
@@ -65,6 +91,9 @@ class ModelCfg(BaseModel):
     local_timeout_s: float = 120.0
     cloud_timeout_s: float = 90.0
     allow_cloud: bool = False
+    # Startup discovery of ALL free OpenRouter models. OFF keeps only the
+    # curated ids in models.yaml; ON re-enables openrouter_sync auto-registration.
+    sync_openrouter_free: bool = False
     daily_usd: float = 1.0
     weekly_usd: float = 5.0
     monthly_usd: float = 15.0
@@ -183,6 +212,44 @@ class AgentsCfg(BaseModel):
     synthesis_max_tokens: int = 2048
 
 
+class VoiceCfg(BaseModel):
+    """Optional voice pipeline (speech-in / speech-out).
+
+    Disabled by default (mirrors ``BrowserCfg``/``AgentsCfg``). The pure
+    audio<->text engine lives in ``capabilities/voice``; the speech->task loop
+    lives in ``interfaces``.
+
+    Speech rides the same ``OPENROUTER_API_KEY`` as the chat fleet: OpenRouter
+    serves ``/audio/speech`` and ``/audio/transcriptions`` on the same base URL,
+    so no extra vendor account is needed. Two provider instances are registered
+    from one key — ``openrouter`` (English, low-latency voice) and
+    ``openrouter_multilingual`` (Fish Audio S2.1 Pro for Hindi/expressive) — and
+    each is the other's TTS fallback. Setting ``DEEPGRAM_API_KEY`` /
+    ``FISH_AUDIO_API_KEY`` adds those vendors as *extra* fallbacks; both are
+    optional.
+
+    Model slugs are config, not code: OpenRouter ids churn, so correcting one is
+    a ``settings.yaml`` edit. Verify against openrouter.ai/models.
+
+    PRIVACY: when enabled, microphone audio and synthesis text are sent to a
+    third-party API — audio leaves the machine.
+    """
+
+    model_config = {"frozen": True}
+    enabled: bool = False
+    default_language: str = "en"  # en -> tts_primary; other languages -> tts_fallback
+    tts_primary: str = "openrouter"  # openrouter | openrouter_multilingual | deepgram | fish_audio
+    tts_fallback: str = "openrouter_multilingual"  # used for non-English and when the primary errors
+    stt_provider: str = "openrouter"  # openrouter (whisper) | deepgram (Flux, true partials)
+    sample_rate: int = 16000  # PCM sample rate for mic capture / STT
+    # ── OpenRouter speech model slugs (verify on openrouter.ai/models) ──
+    openrouter_tts_model: str = "openai/gpt-4o-mini-tts"
+    openrouter_tts_model_multilingual: str = "fish-audio/s2.1-pro"
+    openrouter_tts_voice: str = "alloy"  # provider-specific voice id for tts_primary
+    openrouter_tts_voice_multilingual: str = ""  # "" = provider default
+    openrouter_stt_model: str = "openai/whisper-large-v3"
+
+
 class AppConfig(BaseModel):
     model_config = {"frozen": True}
     logging: LoggingCfg = Field(default_factory=LoggingCfg)
@@ -197,6 +264,7 @@ class AppConfig(BaseModel):
     verification: VerificationCfg = Field(default_factory=VerificationCfg)
     browser: BrowserCfg = Field(default_factory=BrowserCfg)
     agents: AgentsCfg = Field(default_factory=AgentsCfg)
+    voice: VoiceCfg = Field(default_factory=VoiceCfg)
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:

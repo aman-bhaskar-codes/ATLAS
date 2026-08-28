@@ -32,6 +32,13 @@ macos = [
     "pyobjc-framework-ApplicationServices>=10.3; sys_platform == 'darwin'",
     "pyobjc-framework-Quartz>=10.3; sys_platform == 'darwin'",
 ]
+# Voice pipeline mic/speaker + PCM handling. httpx and websockets are already
+# core deps; this extra only adds local audio I/O. Install: uv sync --extra voice
+voice = [
+    "sounddevice>=0.4",
+    "soundfile>=0.12",
+    "numpy>=1.26",
+]
 
 [project.scripts]
 atlas = "atlas_cli.main:app"
