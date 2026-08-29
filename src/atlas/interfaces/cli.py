@@ -19,6 +19,7 @@ from rich.console import Console
 from rich.table import Table
 
 from atlas.app import Atlas, build
+from atlas.capabilities.ide.contracts import EditOperation, EditOpKind, FileChange
 from atlas.diagnostics.doctor import exit_code, run_doctor
 from atlas.infra.ids import CorrelationId
 from atlas.infra.types import InboundEvent, ModelCapability, ModelRequest, SideEffect, ToolRequest, ToolResult
@@ -1123,6 +1124,193 @@ def voice_chat(
                 console.print(f"[bold green]ATLAS:[/] {answer}")
                 audio = await _collect_audio(service, answer, None)
                 _play_or_save(audio)
+
+    _run(go())
+
+
+# ---------------------------------------------------------------------------
+
+ide_app = typer.Typer(help="ADE / IDE — inspect a workspace tree, read a file, apply a governed edit")
+app.add_typer(ide_app, name="ide")
+
+
+def _ide_or_exit(atlas: Atlas) -> Any:
+    """Return the live IDEService or print guidance and abort."""
+    service = getattr(atlas, "ide_service", None)
+    if service is None:
+        console.print(
+            "[red]ADE (IDE) is disabled.[/] Set [cyan]ide.enabled: true[/] in config/settings.yaml. "
+            "Every edit still routes through the SafetyEngine funnel + filesystem tool."
+        )
+        raise typer.Exit(code=1)
+    return service
+
+
+# NOTE: the workspace registry is in-memory and per-process, so each command
+# opens the workspace fresh and operates in the same invocation. Cross-invocation
+# workspace ids require DB-backed persistence (a later slice); until then a
+# stored id from one `atlas ide` call is not addressable from the next.
+@ide_app.command("tree")
+def ide_tree(
+    root_path: str,
+    name: str = typer.Option("workspace", "--name", "-n", help="Workspace display name"),
+) -> None:
+    """Open the workspace at ROOT_PATH and print its file tree."""
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            service = _ide_or_exit(atlas)
+            try:
+                session = await service.open_workspace(root_path, name)
+            except Exception as exc:
+                console.print(f"[red]{type(exc).__name__}[/] {exc}")
+                raise typer.Exit(code=1) from exc
+            nodes = await service.tree(session.workspace.id)
+            table = Table(title=f"{name}  ({len(nodes)} entries)")
+            table.add_column("path")
+            table.add_column("kind")
+            table.add_column("version", style="dim")
+            for node in nodes:
+                table.add_row(node.path, "dir" if node.is_dir else "file", (node.version or "")[:12])
+            console.print(table)
+
+    _run(go())
+
+
+@ide_app.command("read")
+def ide_read(root_path: str, rel_path: str) -> None:
+    """Open the workspace at ROOT_PATH and print REL_PATH with its content hash."""
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            service = _ide_or_exit(atlas)
+            try:
+                session = await service.open_workspace(root_path, "workspace")
+                snap, content = await service.read_document(session.workspace.id, rel_path)
+            except Exception as exc:
+                console.print(f"[red]{type(exc).__name__}[/] {exc}")
+                raise typer.Exit(code=1) from exc
+            console.print(
+                f"[cyan]{snap.path}[/]  lang={snap.language}  lines={snap.line_count}  version={snap.version[:12]}"
+            )
+            console.print(content)
+
+    _run(go())
+
+
+@ide_app.command("project")
+def ide_project(root_path: str) -> None:
+    """Analyze the workspace at ROOT_PATH into a project model (languages, package
+    managers, frameworks, and candidate test/build/run commands)."""
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            service = _ide_or_exit(atlas)
+            try:
+                session = await service.open_workspace(root_path, "workspace")
+                pm = await service.project_model(session.workspace.id)
+            except Exception as exc:
+                console.print(f"[red]{type(exc).__name__}[/] {exc}")
+                raise typer.Exit(code=1) from exc
+
+            def _row(label: str, value: str) -> None:
+                table.add_row(label, value or "[dim]—[/]")
+
+            table = Table(title=f"project  ({pm.file_count} files)")
+            table.add_column("field", style="cyan")
+            table.add_column("value")
+            _row("languages", ", ".join(pm.languages))
+            _row("package managers", ", ".join(pm.package_managers))
+            _row("frameworks", ", ".join(pm.frameworks))
+            _row("entrypoints", ", ".join(pm.entrypoints))
+            _row("test", " | ".join(pm.test_commands))
+            _row("build", " | ".join(pm.build_commands))
+            _row("run", " | ".join(pm.run_commands))
+            _row("dependencies", str(len(pm.dependencies)))
+            _row("fingerprint", pm.fingerprint[:12])
+            console.print(table)
+
+    _run(go())
+
+
+@ide_app.command("run")
+def ide_run(
+    root_path: str,
+    command: str,
+    timeout_s: float = typer.Option(120.0, "--timeout", help="Max seconds before the command is killed"),
+) -> None:
+    """Run COMMAND in the workspace at ROOT_PATH through the SafetyEngine funnel.
+
+    The command is classified/allowlisted/audited exactly like any other tool
+    dispatch — a policy refusal prints as `denied`, a non-zero exit as `failed`.
+    This is the primitive the agentic loop uses to run a project's test/build/run
+    candidate; the IDE never spawns a subprocess of its own.
+    """
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            service = _ide_or_exit(atlas)
+            try:
+                session = await service.open_workspace(root_path, "workspace")
+                result = await service.run_command(session.workspace.id, command, timeout_s=timeout_s)
+            except Exception as exc:
+                console.print(f"[red]{type(exc).__name__}[/] {exc}")
+                raise typer.Exit(code=1) from exc
+            if result.denied:
+                console.print(f"[red]denied[/] {result.error}")
+                raise typer.Exit(code=1)
+            if result.stdout:
+                console.print(result.stdout)
+            if result.stderr:
+                console.print(f"[dim]{result.stderr}[/]")
+            if result.ok:
+                console.print(f"[green]ok[/] exit={result.exit_code}  {result.duration_ms}ms")
+            else:
+                console.print(f"[red]failed[/] exit={result.exit_code}  {result.error or ''}")
+                raise typer.Exit(code=1)
+
+    _run(go())
+
+
+@ide_app.command("edit")
+def ide_edit(
+    root_path: str,
+    rel_path: str,
+    start: int = typer.Option(..., "--start", help="First line to replace (0-based, inclusive)"),
+    end: int = typer.Option(..., "--end", help="Line past the last replaced line (0-based, exclusive)"),
+    text: str = typer.Option("", "--text", help="Replacement text (include a trailing newline as needed)"),
+) -> None:
+    """Replace lines [START, END) of REL_PATH with TEXT — through the SafetyEngine funnel.
+
+    The current on-disk version is read first and passed as expected_version, so a
+    concurrent human edit makes this refuse (stale) rather than clobber.
+    """
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            service = _ide_or_exit(atlas)
+            try:
+                session = await service.open_workspace(root_path, "workspace")
+                wid = session.workspace.id
+                snap, _ = await service.read_document(wid, rel_path)
+                change = FileChange(
+                    path=rel_path,
+                    expected_version=snap.version,
+                    operations=(EditOperation(kind=EditOpKind.REPLACE, start_line=start, end_line=end, text=text),),
+                    rationale="atlas ide edit",
+                )
+                result = await service.apply_change(wid, change)
+            except Exception as exc:
+                console.print(f"[red]{type(exc).__name__}[/] {exc}")
+                raise typer.Exit(code=1) from exc
+            if result.applied:
+                console.print(f"[green]applied[/] {result.path}  new_version={(result.new_version or '')[:12]}")
+            elif result.stale:
+                console.print(f"[yellow]stale[/] {result.path} — file changed on disk; re-read and retry")
+                raise typer.Exit(code=1)
+            else:
+                console.print(f"[red]not applied[/] {result.error}")
+                raise typer.Exit(code=1)
 
     _run(go())
 

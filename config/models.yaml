@@ -77,8 +77,8 @@ models:
   # ── 3. NVIDIA Nemotron 3 Ultra (free) — deep reasoning + orchestration ──
   - id: nemotron-3-ultra-free
     provider: openrouter
-    provider_model: nvidia/nemotron-3-ultra:free
-    context_length: 131072
+    provider_model: nvidia/nemotron-3-ultra-550b-a55b:free
+    context_length: 1048576
     usd_per_1m_input: 0.0
     usd_per_1m_output: 0.0
     cost_class: free_quota
@@ -106,7 +106,7 @@ models:
   - id: north-mini-code-free
     provider: openrouter
     provider_model: cohere/north-mini-code:free
-    context_length: 131072
+    context_length: 1048576
     usd_per_1m_input: 0.0
     usd_per_1m_output: 0.0
     cost_class: free_quota
@@ -136,7 +136,7 @@ models:
   - id: laguna-s-2.1-free
     provider: openrouter
     provider_model: poolside/laguna-s-2.1:free
-    context_length: 131072
+    context_length: 1048576
     usd_per_1m_input: 0.0
     usd_per_1m_output: 0.0
     cost_class: free_quota

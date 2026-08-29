@@ -366,6 +366,7 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.routes_capabilities import router as capabilities_router
     from atlas.interfaces.api.routes_events import router as events_ws_router
     from atlas.interfaces.api.routes_feedback import router as feedback_router
+    from atlas.interfaces.api.routes_ide import router as ide_router  # ADE / IDE (optional)
     from atlas.interfaces.api.routes_knowledge import router as knowledge_router
     from atlas.interfaces.api.routes_learning import router as learning_router  # Batch 6
     from atlas.interfaces.api.routes_memory import router as memory_router
@@ -424,5 +425,11 @@ def create_app() -> FastAPI:
     # voice-HTTP auth is tracked as the same debt as the other WS routers. The
     # subsystem is off by default, so no live surface exists until enabled.
     app.include_router(voice_router, prefix="/api/v1")
+
+    # ADE / IDE: all HTTP endpoints (no WebSocket yet), so it is key-gated like
+    # the other HTTP routers. Router declares its own /api/v1/ide prefix, so it
+    # is mounted with an empty prefix to avoid doubling. Off by default: the
+    # routes return 503 until config.ide.enabled and the service is built.
+    app.include_router(ide_router, prefix="", dependencies=auth_required)
 
     return app

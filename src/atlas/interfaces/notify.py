@@ -9,10 +9,13 @@ Tier-2 action. Timeout resolves to DENY (fail-closed).
 from __future__ import annotations
 
 import asyncio
+import secrets
+import sys
 from typing import Protocol
 
 import httpx
 
+from atlas.infra.errors import AtlasError
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
 from atlas.infra.types import SafetyDecision, ToolRequest
@@ -72,14 +75,63 @@ class NtfyNotifier:
         await self._client.aclose()
 
 
+class ConfirmationRequiredError(AtlasError):
+    """Raised by a confirmer when an action needs explicit human approval and
+    there is no interactive channel available (HTTP request, headless process,
+    non-TTY stdin). Carries everything the route layer needs to render a 4xx
+    challenge the caller can later resolve and re-submit."""
+
+    def __init__(
+        self,
+        prompt: str,
+        decision: SafetyDecision,
+        req: ToolRequest,
+        approval_id: str | None = None,
+    ) -> None:
+        super().__init__(prompt)
+        self.prompt = prompt
+        self.decision = decision
+        self.request = req
+        self.approval_id = approval_id or f"apr_{secrets.token_urlsafe(12)}"
+        self.tier = decision.tier
+        self.matched_rule = decision.matched_rule
+        self.reason = decision.reason
+
+
 class CliConfirmer:
-    """Dev-mode confirmer: prompts on stdin. WHY kept: fast local dev loop
-    without a phone in hand."""
+    """Dev-mode confirmer. WHY kept: fast local dev loop without a phone in hand.
+
+    In an interactive TTY it prompts on stdin. In a non-interactive context
+    (HTTP server, piped input, headless) it does NOT call input() — that would
+    raise EOFError and 500 the request. Instead it raises
+    ``ConfirmationRequiredError`` so the route layer can return a 4xx challenge
+    the caller can resolve out-of-band and retry."""
+
+    def __init__(self, *, allow_stdin: bool | None = None) -> None:
+        # Auto-detect: True when stdin is a real TTY, False otherwise.
+        # Tests / callers can override explicitly.
+        if allow_stdin is None:
+            try:
+                allow_stdin = sys.stdin.isatty()
+            except Exception:
+                allow_stdin = False
+        self._allow_stdin = allow_stdin
 
     async def confirm(self, prompt: str, decision: SafetyDecision, req: ToolRequest) -> bool:
-        print(prompt)
-        answer = await asyncio.to_thread(input, "approve? [y/N] ")
-        return answer.strip().lower() in {"y", "yes"}
+        if self._allow_stdin:
+            print(prompt)
+            answer = await asyncio.to_thread(input, "approve? [y/N] ")
+            return answer.strip().lower() in {"y", "yes"}
+        _log.warning(
+            "notify.confirm_required_no_tty",
+            event_type="notify",
+            correlation_id=req.correlation_id,
+            tool=req.tool,
+            operation=req.operation,
+            tier=str(decision.tier.name),
+            detail="non-interactive context; raising ConfirmationRequiredError",
+        )
+        raise ConfirmationRequiredError(prompt, decision, req)
 
 
 class CompositeConfirmer:

@@ -34,3 +34,4 @@ STOP.flag
 *.swp
 *~
 
+.env.real

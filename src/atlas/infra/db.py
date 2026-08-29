@@ -1620,6 +1620,44 @@ _MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_intents_active
         ON standing_intents(status) WHERE status IN ('pending','armed');
     """,
+    # ── ADE / IDE session persistence (resumable workspaces) ──────────────
+    # A workspace id survives process restarts: `open_workspace` writes the
+    # workspace + its session here, and the service resumes them on demand so a
+    # stored id is addressable from a later invocation (CLI, API, frontend).
+    #
+    # WHY a JSON `payload` column rather than one column per field: `IDESession`
+    # grows over the ADE phases (terminals, processes, debug/browser sessions,
+    # editor groups). Persisting the pydantic model as JSON means those additions
+    # need no migration — the indexed scalar columns below are only what we query
+    # or list on. `payload` is always the source of truth for reconstruction.
+    #
+    # SUPABASE/NEON-READY (future, not wired now): this DDL is deliberately
+    # dialect-neutral — TEXT + TIMESTAMP-as-TEXT, no SQLite-only types — so the
+    # same two tables port to Postgres by swapping the driver behind the
+    # `IDESessionStore` protocol (capabilities/ide/persistence.py). Nothing here
+    # depends on the storage engine; the protocol is the seam.
+    """
+    CREATE TABLE IF NOT EXISTS ide_workspaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL DEFAULT 'workspace',
+        root_paths TEXT NOT NULL DEFAULT '[]',   -- JSON array of root paths
+        payload TEXT NOT NULL,                    -- full WorkspaceRef JSON
+        created_ts TEXT NOT NULL,
+        last_opened_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ide_ws_opened
+        ON ide_workspaces(last_opened_ts DESC);
+
+    CREATE TABLE IF NOT EXISTS ide_sessions (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        payload TEXT NOT NULL,                    -- full IDESession JSON
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ide_sessions_ws
+        ON ide_sessions(workspace_id, updated_ts DESC);
+    """,
 )
 
 

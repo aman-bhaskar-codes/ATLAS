@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from atlas.app import Atlas
 from atlas.infra.types import ToolRequest
 from atlas.interfaces.api.dependencies import get_atlas
+from atlas.interfaces.notify import ConfirmationRequiredError
 from atlas.knowledge.deletion import DeletionScope
 from atlas.safety.engine import DeniedError, HaltedError
 
@@ -259,14 +260,14 @@ async def get_document(document_id: str, atlas: Atlas = Depends(_get_atlas)) -> 
 #   * PREVIEW is read-only. `dry_run=True` computes per-store counts without
 #     mutating anything (§22), so it needs no approval — previewing what a
 #     forget would remove is part of the approval flow, not the deletion.
-#   * COMMIT routes through the SAME SafetyEngine funnel every tool dispatch
-#     uses (classify -> audit -> confirm -> execute). A REST caller therefore
-#     can never skip approval: a narrow forget is CONFIRM, a corpus-wide or
-#     cascading one is DANGEROUS (confirmation code), enforced by the
+#   * COMMIT is funnel-governed: it dispatches through `safety.guard(...)` so
+#     the policy engine, audit log, and kill switch all see it. A narrow forget
+#     (evidence/chunk/document) is auto-approved; a corpus-wide forget
+#     (source_type / uri / all) or a cascading-session forget is escalated to
+#     DANGEROUS and requires a confirmation code — driven by the
 #     `mass_research_deletion` matcher — not by anything in this file.
 # Both paths touch ONLY the research corpus; personal trusted memory is never
-# in scope (§11).
-
+# reached. (§11.)
 _FORGET_SCOPES = ("evidence", "chunk", "document", "session", "source_type", "uri", "all")
 
 
@@ -274,8 +275,8 @@ class ForgetRequest(BaseModel):
     """Request to forget research memory at a given scope."""
 
     scope: str  # one of _FORGET_SCOPES
-    target: str = ""  # id / source_type / uri the scope points at ("" for scope=all)
-    cascade_documents: bool = False  # session scope only: also remove the session's docs
+    target: str = ""
+    cascade_documents: bool = False
 
 
 class DeletionReportResponse(BaseModel):
@@ -375,6 +376,26 @@ async def forget_research(request: ForgetRequest, atlas: Atlas = Depends(_get_at
     )
     try:
         result = await atlas.safety.guard(req, tool)
+    except ConfirmationRequiredError as exc:
+        # The safety funnel reached a DANGEROUS tier and the CLI confirmer had
+        # no TTY to prompt on (HTTP request). Surface this as a 4xx challenge
+        # the caller can resolve out-of-band and retry, instead of a 500
+        # EOFError from reading stdin.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "confirmation_required",
+                "confirmation_required": True,
+                "approval_id": exc.approval_id,
+                "tier": exc.tier.name,
+                "matched_rule": exc.matched_rule,
+                "reason": exc.reason,
+                "prompt": exc.prompt,
+                "tool": req.tool,
+                "operation": req.operation,
+                "args": req.args,
+            },
+        ) from exc
     except DeniedError as exc:
         raise HTTPException(
             status_code=403, detail=f"forget denied (tier {exc.decision.tier.name}): {exc.decision.reason}"

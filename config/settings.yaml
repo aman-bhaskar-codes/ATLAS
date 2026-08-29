@@ -129,3 +129,15 @@ voice:
   openrouter_tts_voice: alloy
   openrouter_tts_voice_multilingual: ""
   openrouter_stt_model: openai/whisper-large-v3
+
+# ── ADE / IDE (Agentic Development Environment) ───────────────────────── #
+# Optional, off by default (mirrors voice/browser/agents). Enabling only mounts
+# the /api/v1/ide routes — every file mutation still routes through the SAME
+# SafetyEngine funnel + filesystem tool as any other dispatch, so the IDE can
+# never become a side door around ATLAS policy (Constitution). allowed_roots
+# bounds which directories a workspace may open ([] -> any, still funnel-gated).
+ide:
+  enabled: false
+  allowed_roots: []            # workspace roots the ADE may open ([] -> any)
+  max_tree_entries: 20000      # ceiling on a single tree() walk
+  max_open_file_bytes: 2000000 # refuse to open files larger than this

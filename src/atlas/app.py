@@ -155,6 +155,7 @@ class Atlas:
     public_api: Any = None  # Prompt 2: PublicAPIPlatform (catalog → validation → execution)
     knowledge_fabric: Any = None  # Prompt 3: KnowledgeFabricComponents (fabric + bridges + research)
     voice_service: Any = None  # Optional voice pipeline (VoiceService or None when disabled)
+    ide_service: Any = None  # Optional ADE (IDEService or None when disabled/no filesystem tool)
     curated: Any = None  # CuratedMemory — the always-loaded MEMORY/USER tier
     lane_one: Any = None  # LaneOneRecall — default read path (SQL, no embeddings)
     intents: Any = None  # IntentStore — prospective memory ("remember to X when Y")
@@ -535,6 +536,21 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     voice = build_voice(settings, config)
 
+    # ── ADE / IDE (optional; off by default) ──────────────────────── #
+    # Reuses the SAME safety funnel + filesystem tool as every other dispatch,
+    # so the IDE is never a side door around policy (Constitution).
+    from atlas.bootstrap.ide import build_ide
+
+    ide = build_ide(
+        config,
+        safety=safety,
+        filesystem_tool=tools.get("filesystem"),
+        ids=ids,
+        clock=clock,
+        db=db,
+        command_tool=tools.get("shell"),
+    )
+
     notifier_adapter = NotificationPlatformAdapter(notification_platform, clock, ids)
     active_notifier = notifier_adapter if settings.ntfy_topic else None
     safety.set_confirmer(CompositeConfirmer(active_notifier, CliConfirmer(), config.notify.confirm_timeout_s))
@@ -654,6 +670,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         public_api=public_api,
         knowledge_fabric=knowledge_fabric,
         voice_service=voice.service,
+        ide_service=ide.service,
         curated=curated,
         lane_one=lane_one,
         intents=intents,

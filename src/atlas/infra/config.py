@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     # true streaming partials, which OpenRouter's request/response STT lacks).
     deepgram_api_key: str = Field(default="", validation_alias="DEEPGRAM_API_KEY")
     fish_audio_api_key: str = Field(default="", validation_alias="FISH_AUDIO_API_KEY")
+    # ── Reserved: future Postgres session backend (Neon/Supabase) ─────
+    # NOT wired to a live client yet. IDE session persistence runs on the shared
+    # SQLite substrate (infra/db.py) today, behind the `IDESessionStore` protocol
+    # (capabilities/ide/persistence.py). These placeholders reserve the env names
+    # so a future Postgres impl of that protocol reads them with no rename churn.
+    # SUPABASE_SERVICE_ROLE_KEY is a secret — never logged/echoed, by key name only.
+    supabase_url: str = Field(default="", validation_alias="SUPABASE_URL")
+    supabase_service_role_key: str = Field(default="", validation_alias="SUPABASE_SERVICE_ROLE_KEY")
     # ── Zero-cost-first policy ────────────────────────────────────────
     profile: str = "free_hybrid"  # local_free | free_hybrid | free_demo | production
     cost_policy: str = "free_only"  # zero_cost | free_only | free_preferred | balanced | unrestricted
@@ -255,6 +263,28 @@ class VoiceCfg(BaseModel):
     openrouter_stt_model: str = "openai/whisper-large-v3"
 
 
+class IDECfg(BaseModel):
+    """Optional Agentic Development Environment (ADE).
+
+    Disabled by default (mirrors ``BrowserCfg``/``AgentsCfg``/``VoiceCfg``). The
+    read/write workspace engine + service live in ``capabilities/ide``; the REST/
+    WS surface and the ``atlas ide`` launcher live in ``interfaces``. Enabling it
+    only mounts the routes — every file mutation still routes through the SAME
+    ``SafetyEngine`` funnel and filesystem tool as any other tool dispatch, so the
+    IDE can never become a side door around ATLAS policy.
+
+    ``allowed_roots`` bounds which directories a workspace may open. Empty means
+    "no restriction beyond the filesystem tool's own write-path allowlist" — the
+    funnel still governs every write, but set this to pin the ADE to a project.
+    """
+
+    model_config = {"frozen": True}
+    enabled: bool = False
+    allowed_roots: tuple[str, ...] = ()  # workspace roots the ADE may open (() -> any)
+    max_tree_entries: int = 20_000  # ceiling on a single tree() walk
+    max_open_file_bytes: int = 2_000_000  # refuse to open files larger than this
+
+
 class AppConfig(BaseModel):
     model_config = {"frozen": True}
     logging: LoggingCfg = Field(default_factory=LoggingCfg)
@@ -270,6 +300,7 @@ class AppConfig(BaseModel):
     browser: BrowserCfg = Field(default_factory=BrowserCfg)
     agents: AgentsCfg = Field(default_factory=AgentsCfg)
     voice: VoiceCfg = Field(default_factory=VoiceCfg)
+    ide: IDECfg = Field(default_factory=lambda: IDECfg())
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
