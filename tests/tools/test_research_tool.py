@@ -130,6 +130,45 @@ class FakeRunner:
         return self.outcome
 
 
+class FakeRoundRecord:
+    def __init__(self, index: int, *, discovered: int, new_documents: int, facts: int, mean_gain: float) -> None:
+        self.index = index
+        self.discovered = discovered
+        self.new_documents = new_documents
+        self.facts = facts
+        self.mean_gain = mean_gain
+        self.stop_reason = "question list processed"
+
+
+class FakeSupervisedOutcome:
+    def __init__(self, candidates: tuple[FakeCandidate, ...], *, rounds: int = 2, discovered: int = 3) -> None:
+        self.goal = "autonomous adaptation evaluation"
+        self.session = FakeSession()
+        self.candidates = candidates
+        self.rounds = tuple(
+            FakeRoundRecord(i, discovered=1, new_documents=1, facts=i + 1, mean_gain=0.4) for i in range(rounds)
+        )
+        self.stop_reason = "all questions answered"
+        self.total_rounds = rounds
+        self.total_discovered = discovered
+        self.open_questions = 0
+
+
+class FakeSupervisor:
+    def __init__(self, outcome: FakeSupervisedOutcome | None = None, *, fail: bool = False) -> None:
+        self.outcome = outcome or FakeSupervisedOutcome((FakeCandidate("Paper", "https://ex.test/p", "a finding"),))
+        self.fail = fail
+        self.calls: list[tuple[str, bool]] = []
+
+    async def investigate(
+        self, goal: str, *, budget: Any = None, rewrites: tuple[str, ...] = (), resume: bool = True
+    ) -> Any:
+        self.calls.append((goal, resume))
+        if self.fail:
+            raise RuntimeError("supervisor exploded")
+        return self.outcome
+
+
 class FakeJob:
     document_id = "doc_new"
     state = "READY"
@@ -164,6 +203,7 @@ def test_dry_run_describes_every_operation_without_calling_out() -> None:
 
     assert "no external calls" in tool.dry_run({"operation": "search", "query": "adaptation"})
     assert "BOUNDED" in tool.dry_run({"operation": "research", "goal": "adaptation"})
+    assert "SUPERVISED" in tool.dry_run({"operation": "deep_research", "goal": "adaptation"})
     assert "Fetch and index" in tool.dry_run({"operation": "read_url", "url": "https://ex.test/p"})
     assert "no external calls" in tool.dry_run({"operation": "sources", "query": "adaptation"})
     assert "Unknown" in tool.dry_run({"operation": "teleport"})
@@ -285,6 +325,52 @@ async def test_a_runner_failure_is_reported_not_raised() -> None:
     assert not result.ok and "research failed" in (result.error or "")
 
 
+# ── deep_research (supervised, multi-round) ─────────────────────────────
+async def test_deep_research_reports_round_trace_and_findings() -> None:
+    supervisor = FakeSupervisor()
+    result = await _tool(supervisor=supervisor).execute({"operation": "deep_research", "goal": "adaptation"})
+
+    assert result.ok
+    payload = result.output
+    assert payload["session_id"] == "rs_1"
+    assert payload["total_rounds"] == 2
+    assert payload["total_discovered"] == 3
+    assert payload["open_questions"] == 0
+    assert payload["stop_reason"] == "all questions answered"
+    assert len(payload["rounds"]) == 2 and payload["rounds"][0]["new_documents"] == 1
+    assert payload["findings"][0]["uri"] == "https://ex.test/p"
+    assert payload["answer"]["citations"]  # synthesized, cited answer over the corpus
+    assert "coverage_warning" not in payload
+    assert supervisor.calls == [("adaptation", True)]
+
+
+async def test_deep_research_with_no_findings_admits_incomplete_coverage() -> None:
+    supervisor = FakeSupervisor(FakeSupervisedOutcome((), rounds=1, discovered=0))
+    result = await _tool(supervisor=supervisor).execute({"operation": "deep_research", "goal": "obscure"})
+    # §22: never imply coverage that did not happen across any round.
+    assert "Coverage is incomplete" in result.output["coverage_warning"]
+    assert result.output["findings"] == []
+
+
+async def test_deep_research_degrades_to_a_single_round_when_no_supervisor() -> None:
+    runner = FakeRunner()
+    result = await _tool(research=runner, supervisor=None).execute({"operation": "deep_research", "goal": "adaptation"})
+    assert result.ok
+    assert "supervisor unavailable" in result.output["degraded"]
+    # fell back to a real single round, not a fabricated investigation
+    assert runner.calls == [("adaptation", True)]
+
+
+async def test_deep_research_requires_a_goal() -> None:
+    result = await _tool(supervisor=FakeSupervisor()).execute({"operation": "deep_research"})
+    assert not result.ok and "goal" in (result.error or "")
+
+
+async def test_a_supervisor_failure_is_reported_not_raised() -> None:
+    result = await _tool(supervisor=FakeSupervisor(fail=True)).execute({"operation": "deep_research", "goal": "g"})
+    assert not result.ok and "deep_research failed" in (result.error or "")
+
+
 # ── read_url (§23: retrieved content is DATA) ───────────────────────────
 async def test_read_url_indexes_as_untrusted_external_data() -> None:
     pipeline = FakePipeline()
@@ -356,6 +442,113 @@ async def test_sources_lists_deduped_indexed_sources() -> None:
     assert uris == ["https://ex.test/p", "https://ex.test/q"]
     assert result.output["sources"][0]["authority"] == 0.877
     assert result.output["sources"][0]["title"] == "Paper"  # first wins, not overwritten
+
+
+# ── forget (§11/§22: destructive, coordinated, honestly counted) ─────────
+class FakeReport:
+    """A DeletionReport double — the tool reads it structurally."""
+
+    def __init__(self, scope: str, target: str, *, dry_run: bool, documents: int, vectors: int) -> None:
+        self.scope = scope  # a plain string stands in for the enum's `.value`
+        self.target = target
+        self.dry_run = dry_run
+        self.documents = documents
+        self.chunks = documents * 3
+        self.evidence = documents * 2
+        self.sessions = 0
+        self.vectors = vectors
+        self.vectors_failed = 0
+        self.lexical = documents * 3
+        self.notes = ["unlinked from 1 session(s)"] if documents else []
+
+    @property
+    def summary(self) -> str:
+        verb = "Would remove" if self.dry_run else "Removed"
+        return f"{verb} {self.documents} documents for {self.scope}={self.target!r}."
+
+
+class FakeMemory:
+    """Records every forget call and echoes an honest report."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[Any, str, bool, bool]] = []
+
+    async def forget(
+        self, scope: Any, target: str = "", *, cascade_documents: bool = False, dry_run: bool = False
+    ) -> FakeReport:
+        self.calls.append((scope, target, cascade_documents, dry_run))
+        # `scope` arrives as whatever the injected factory returned (see below).
+        return FakeReport(str(scope), target, dry_run=dry_run, documents=1, vectors=3)
+
+
+def _forgetful(**over: Any) -> tuple[ResearchTool, FakeMemory]:
+    memory = FakeMemory()
+    # The composition root injects the DeletionScope factory; a str echo keeps
+    # the test free of the knowledge enum (which the tool layer cannot import).
+    tool = _tool(memory=memory, deletion_scope=lambda s: s, **over)
+    return tool, memory
+
+
+def test_forget_dry_run_preview_is_pure_and_labelled() -> None:
+    tool, memory = _forgetful()
+    preview = tool.dry_run({"operation": "forget", "scope": "document", "target": "doc_1", "dry_run": True})
+    assert "PREVIEW ONLY" in preview and "deletes nothing" in preview
+    # Previewing must not touch the coordinator.
+    assert memory.calls == []
+
+
+def test_forget_commit_preview_warns_it_is_permanent() -> None:
+    tool, _ = _forgetful()
+    preview = tool.dry_run({"operation": "forget", "scope": "all", "target": ""})
+    assert "PERMANENTLY" in preview and "Irreversible" in preview
+    assert "Personal trusted memory is never touched" in preview
+
+
+async def test_forget_returns_honest_per_store_counts() -> None:
+    tool, memory = _forgetful()
+    result = await tool.execute({"operation": "forget", "scope": "document", "target": "doc_1"})
+    assert result.ok
+    payload = result.output
+    assert payload["scope"] == "document"
+    assert payload["documents"] == 1 and payload["chunks"] == 3 and payload["evidence"] == 2
+    assert payload["vectors"] == 3 and payload["dry_run"] is False
+    assert "Removed 1 documents" in payload["summary"]
+    # Committed forget: dry_run flag propagated as False to the coordinator.
+    assert memory.calls == [("document", "doc_1", False, False)]
+
+
+async def test_forget_dry_run_counts_without_mutating() -> None:
+    tool, memory = _forgetful()
+    result = await tool.execute({"operation": "forget", "scope": "all", "dry_run": True})
+    assert result.ok and result.output["dry_run"] is True
+    assert memory.calls == [("all", "", False, True)]  # dry_run flows through
+
+
+async def test_forget_passes_cascade_flag_through() -> None:
+    tool, memory = _forgetful()
+    await tool.execute({"operation": "forget", "scope": "session", "target": "rs_1", "cascade_documents": True})
+    assert memory.calls == [("session", "rs_1", True, False)]
+
+
+async def test_forget_requires_a_scope() -> None:
+    tool, _ = _forgetful()
+    result = await tool.execute({"operation": "forget"})
+    assert not result.ok and "scope" in (result.error or "")
+
+
+async def test_forget_rejects_an_unknown_scope() -> None:
+    def _reject(_s: str) -> Any:
+        raise ValueError("bad scope")
+
+    tool = _tool(memory=FakeMemory(), deletion_scope=_reject)
+    result = await tool.execute({"operation": "forget", "scope": "everything", "target": "x"})
+    assert not result.ok and "unknown forget scope" in (result.error or "")
+
+
+async def test_forget_without_a_coordinator_fails_closed() -> None:
+    # No memory wired (fabric-only build) — the op refuses rather than pretending.
+    result = await _tool().execute({"operation": "forget", "scope": "document", "target": "d"})
+    assert not result.ok and "coordinator" in (result.error or "")
 
 
 # ── HttpTextFetcher (bounded, no browser required) ──────────────────────

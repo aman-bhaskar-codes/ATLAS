@@ -28,6 +28,7 @@ const NAV_COMMANDS: NavCommand[] = [
   { id: "activity", label: "Go to Activity", hint: "Event search", keywords: "activity events search stream feed", href: "/events/search" },
   { id: "audit", label: "Go to Audit", hint: "Decision log", keywords: "audit log chain security verify", href: "/audit" },
   { id: "memory", label: "Go to Memory", hint: "Facts & recall", keywords: "memory facts recall", href: "/memory" },
+  { id: "research", label: "Go to Research", hint: "Cited answers", keywords: "research investigate cite sources evidence workspace", href: "/research" },
   { id: "capabilities", label: "Go to Capabilities", hint: "Tool posture", keywords: "capabilities tools posture", href: "/capabilities" },
   { id: "automations", label: "Go to Automations", hint: "Triggers", keywords: "automations triggers autonomy schedule", href: "/automations" },
   { id: "providers", label: "Go to Providers", hint: "Models & health", keywords: "providers models health", href: "/providers" },

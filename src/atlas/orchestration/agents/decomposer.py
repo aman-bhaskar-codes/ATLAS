@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 
-from atlas.infra.cognition import Complexity, RiskLevel, TaskIntent
+from atlas.infra.cognition import Complexity, RiskLevel, TaskDomain, TaskIntent
 from atlas.infra.ids import CorrelationId
 from atlas.infra.logging import get_logger
 from atlas.infra.types import ModelCapability, ModelRequest, Tier
@@ -47,6 +47,24 @@ _DECOMPOSE_SYSTEM = (
 )
 
 _DELEGATABLE_COMPLEXITY = frozenset({Complexity.MODERATE, Complexity.COMPLEX})
+
+# Appended to the system prompt ONLY for research-domain requests. WHY: a research
+# question decomposes along a different seam than a coding or ops one — into
+# independent *sub-questions / facets* that each need their own evidence gathering,
+# not into a pipeline of build-steps. Naming that seam here is what turns the
+# generic splitter into a research splitter without a second decomposer.
+_RESEARCH_GUIDANCE = (
+    "\nThis is a RESEARCH request. Prefer splitting it into INDEPENDENT sub-questions "
+    "or facets that can be investigated in parallel, each as a 'researcher' subtask. "
+    "Give every researcher subtask the 'knowledge' tool and a success criterion that "
+    "requires citing the source of each claim. Reserve 'writer'/'analyst' for a final "
+    "subtask that depends on the researchers and synthesises their findings."
+)
+
+# The evidence tool (ResearchTool.name). A researcher branch that never reaches for
+# it is just an LLM guessing, so we default the hint on when the model omits it.
+_KNOWLEDGE_TOOL = "knowledge"
+_CITE_CRITERION = "cite a source for each claim"
 
 
 class TaskDecomposer:
@@ -112,10 +130,13 @@ class TaskDecomposer:
         correlation_id: CorrelationId,
     ) -> str:
         criteria = "\n".join(f"- {c}" for c in intent.success_criteria) or "- (none stated)"
+        system = _DECOMPOSE_SYSTEM
+        if intent.domain is TaskDomain.RESEARCH:
+            system += _RESEARCH_GUIDANCE
         resp = await self._gw.complete(
             ModelRequest(
                 correlation_id=correlation_id,
-                system=_DECOMPOSE_SYSTEM,
+                system=system,
                 prompt=(
                     f"CONTEXT (truncated):\n{context[:4000]}\n\n"
                     f"REQUEST:\n{request}\n\n"
@@ -185,14 +206,26 @@ class TaskDecomposer:
                     id_map[str(d)] for d in dep_list if str(d) in id_map
                 )
             )
+            role = AgentRole.parse(row.get("role"))
+            tools = _str_tuple(row.get("suggested_tools"), limit=6)
+            criteria = _str_tuple(row.get("success_criteria"), limit=6)
+            # Research branches must reach for the evidence tool and cite. These are
+            # ADVISORY defaults filled only when the model left them empty — the
+            # registry still resolves tools and the SafetyEngine still gates every
+            # call, so this can widen a branch's intent but never its authority.
+            if role is AgentRole.RESEARCHER:
+                if not tools:
+                    tools = (_KNOWLEDGE_TOOL,)
+                if not criteria:
+                    criteria = (_CITE_CRITERION,)
             out.append(
                 SubTask(
                     id=canonical,
-                    role=AgentRole.parse(row.get("role")),
+                    role=role,
                     objective=str(row["objective"]).strip()[:2000],
-                    success_criteria=_str_tuple(row.get("success_criteria"), limit=6),
+                    success_criteria=criteria,
                     depends_on=tuple(d for d in deps if d != canonical),
-                    suggested_tools=_str_tuple(row.get("suggested_tools"), limit=6),
+                    suggested_tools=tools,
                     max_steps=_clamp_steps(row.get("max_steps"), self._max_steps),
                     # A subtask can never carry MORE risk than the parent intent
                     # allows; the SafetyEngine is the real gate either way.

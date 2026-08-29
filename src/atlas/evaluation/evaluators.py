@@ -21,6 +21,45 @@ from atlas.intelligence.gateway import ModelGateway
 
 _log = get_logger("atlas.eval")
 
+_CITATION = re.compile(r"\[(\d{1,3})\]")
+
+
+def check_citation_grounding(answer: str) -> tuple[bool, dict[str, bool], str | None]:
+    """Pure structural citation check for research answers (R8).
+
+    A research answer is grounded when every inline citation marker ``[n]`` used
+    in prose resolves to a source *defined* on its own line (``[n] Title — url``,
+    the footnote convention the synthesizer and the knowledge tool emit). This
+    catches the failure that matters — an answer that cites ``[3]`` when only two
+    sources exist — without judging whether the citation is *apt*, which only
+    grounding verification against the evidence can decide.
+
+    Returns ``(grounded, criteria, reason)``. An answer with no citations at all
+    is vacuously grounded here; require their presence with ``regex_all`` or
+    ``contains_*`` on the same task when the domain demands citations.
+    """
+    defined: set[int] = set()
+    used: set[int] = set()
+    for line in answer.splitlines():
+        markers = _CITATION.findall(line)
+        if not markers:
+            continue
+        head = line.lstrip()
+        if head.startswith(f"[{markers[0]}]"):
+            # Leading marker defines the source; any others on the line are uses.
+            defined.add(int(markers[0]))
+            used.update(int(m) for m in markers[1:])
+        else:
+            used.update(int(m) for m in markers)
+    dangling = sorted(used - defined)
+    grounded = not dangling
+    criteria = {
+        "citations_present": bool(used or defined),
+        "no_dangling_citations": grounded,
+    }
+    reason = None if grounded else f"citations point at undefined sources: {dangling}"
+    return grounded, criteria, reason
+
 
 @dataclass(frozen=True)
 class EvalResult:
@@ -88,6 +127,12 @@ class DeterministicEvaluator:
             reasons.append(f"answer too long ({len(answer)} > {spec.max_length})")
         elif spec.max_length:
             criteria["max_length"] = True
+
+        if spec.citations_grounded:
+            grounded, cite_criteria, cite_reason = check_citation_grounding(answer)
+            criteria.update(cite_criteria)
+            if not grounded and cite_reason:
+                reasons.append(cite_reason)
 
         passed = all(criteria.values()) if criteria else True
         score = (sum(1 for v in criteria.values() if v) / len(criteria)) if criteria else (1.0 if passed else 0.0)

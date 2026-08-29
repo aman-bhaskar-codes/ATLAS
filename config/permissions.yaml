@@ -45,7 +45,9 @@ rules:
   - {tool: knowledge,  operation: search,    tier: 0}   # indexed corpus + memory only
   - {tool: knowledge,  operation: sources,   tier: 0}   # list what is indexed
   - {tool: knowledge,  operation: research,  tier: 1}   # outbound: scholarly/web fan-out
+  - {tool: knowledge,  operation: deep_research, tier: 1}  # outbound: supervised multi-round fan-out
   - {tool: knowledge,  operation: read_url,  tier: 1}   # outbound: fetch + index one page
+  - {tool: knowledge,  operation: forget,    tier: 2}   # destructive: forget research corpus (preview via dry_run first)
   - {tool: memory,     operation: search,    tier: 0}
   - {tool: memory,     operation: store,     tier: 0}
   # ── Shell ──
@@ -127,4 +129,9 @@ require_confirm:
   - {tool: computer_use, operation: act,    match: financial_ui, tier: 2}
   - {tool: computer_use, operation: act,    match: credential_entry, tier: 2}
   - {tool: computer_use, operation: act,    match: destructive_ui, tier: 2}
+  # A research forget over a corpus-wide scope (all / source_type / uri) or a
+  # cascading session forget can remove many documents at once — raise it to
+  # DANGEROUS (approval + confirmation code). A dry_run preview mutates nothing
+  # and stays at the base CONFIRM tier.
+  - {tool: knowledge,  operation: forget,   match: mass_research_deletion, tier: 3}
 

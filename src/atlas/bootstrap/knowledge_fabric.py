@@ -33,6 +33,7 @@ from atlas.knowledge.research import ResearchRunner
 from atlas.knowledge.retrieval import HybridRetriever
 from atlas.knowledge.router import QueryRouter
 from atlas.knowledge.store import FabricStore
+from atlas.knowledge.supervisor import ResearchSupervisor
 from atlas.knowledge.synthesis import AnswerSynthesizer
 from atlas.knowledge.telemetry import RagTelemetry
 
@@ -67,6 +68,7 @@ class KnowledgeFabricComponents:
     store: FabricStore
     retriever: HybridRetriever
     research: ResearchRunner
+    supervisor: ResearchSupervisor
     research_memory: ResearchMemory
     browser_bridge: BrowserBridge
     live_bridge: LiveBridge
@@ -114,12 +116,16 @@ async def build_knowledge_fabric(
         cache=QueryResultCache(),
         memory=MemoryBridge(memory_retriever, clock),
     )
+    # The research runner executes ONE bounded round; the supervisor drives the
+    # multi-round loop above it (resume, cross-round budget + stop adjudication).
+    research = ResearchRunner(hybrid, store, ids, clock, discovery=live_bridge if providers else None)
     components = KnowledgeFabricComponents(
         fabric=fabric,
         pipeline=pipeline,
         store=store,
         retriever=hybrid,
-        research=ResearchRunner(hybrid, store, ids, clock, discovery=live_bridge if providers else None),
+        research=research,
+        supervisor=ResearchSupervisor(research),
         research_memory=ResearchMemory(store, hybrid, vectors),
         browser_bridge=BrowserBridge(pipeline, clock),
         live_bridge=live_bridge,

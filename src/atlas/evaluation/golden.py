@@ -24,6 +24,11 @@ class MatchSpec(BaseModel):
     regex_all: tuple[str, ...] = ()  # every regex must match (search)
     min_length: int = 0  # answer must be at least this many chars
     max_length: int = 0  # 0 = unbounded
+    # Research answers only: every inline citation marker [n] must resolve to a
+    # listed source [n]. A pure structural check — it never asks whether the
+    # citation is *correct* (that is grounding verification's job), only that the
+    # answer did not invent a citation number pointing at nothing.
+    citations_grounded: bool = False
 
 
 class GoldenTask(BaseModel):

@@ -52,6 +52,12 @@ from atlas.knowledge.research import (
 from atlas.knowledge.retrieval import Candidate, HybridRetriever, RetrievalResult
 from atlas.knowledge.router import QueryPlan, QueryRouter
 from atlas.knowledge.store import FabricStore
+from atlas.knowledge.supervisor import (
+    ResearchSupervisor,
+    RoundRecord,
+    SupervisedOutcome,
+    SupervisorBudget,
+)
 from atlas.knowledge.synthesis import AnswerSynthesizer, FabricAnswer
 from atlas.knowledge.telemetry import RagRecord, RagTelemetry
 
@@ -104,9 +110,13 @@ __all__ = [
     "ResearchQuestion",
     "ResearchRunner",
     "ResearchSession",
+    "ResearchSupervisor",
     "RetrievalResult",
+    "RoundRecord",
     "SecurityStatus",
     "SourceType",
+    "SupervisedOutcome",
+    "SupervisorBudget",
     "build_evidence_context",
     "chunk_parsed",
     "parse_content",

@@ -31,6 +31,7 @@ KNOWN_MATCHERS: frozenset[str] = frozenset(
         "destructive_ui",
         "credential_entry",
         "submits_form",
+        "mass_research_deletion",
     }
 )
 
@@ -177,3 +178,30 @@ def is_form_submission(tool: str, operation: str) -> tuple[bool, str]:
     if tool == "browser" and operation == "submit":
         return True, "browser form submission"
     return False, ""
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def is_mass_research_deletion(args: dict[str, Any]) -> tuple[bool, str]:
+    """Raise a research `forget` to DANGEROUS when it can wipe many documents at once.
+
+    A preview (`dry_run`) mutates nothing, so it stays at the base CONFIRM tier —
+    only a real commit over a corpus-wide scope (all / source_type / uri), or a
+    session forget that cascades its documents, earns the confirmation-code gate.
+    Narrow, single-target scopes (evidence / chunk / document) remain CONFIRM.
+    """
+    try:
+        if _truthy(args.get("dry_run")):
+            return False, ""
+        scope = str(args.get("scope", "")).strip().lower()
+        if scope in {"all", "source_type", "uri"}:
+            return True, f"forget scope {scope!r} can permanently remove many research documents at once"
+        if scope == "session" and _truthy(args.get("cascade_documents")):
+            return True, "forget cascades a session's documents, removing many at once"
+        return False, ""
+    except Exception as exc:  # fail closed
+        return True, f"matcher error, failing closed: {exc!r}"

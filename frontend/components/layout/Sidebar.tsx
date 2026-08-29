@@ -59,7 +59,7 @@ const GROUPS: NavGroup[] = [
   {
     title: "RESEARCH",
     items: [
-      { label: "Research", icon: FlaskConical, reason: "Research workspace not yet available" },
+      { href: "/research", label: "Research", icon: FlaskConical },
       { label: "Workspaces", icon: LayoutGrid, reason: "Workspaces not yet available" },
     ],
   },

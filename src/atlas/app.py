@@ -511,17 +511,23 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     # goes through the ordinary Tool contract so every research action passes the
     # SafetyEngine funnel, under the `knowledge` seat permissions.yaml reserves.
     if knowledge_fabric is not None:
+        from atlas.knowledge.deletion import DeletionScope
         from atlas.knowledge.domain import SourceType
         from atlas.tools.research import HttpTextFetcher, ResearchTool
 
         tools["knowledge"] = ResearchTool(
             fabric=knowledge_fabric.fabric,
             research=knowledge_fabric.research,
+            supervisor=knowledge_fabric.supervisor,
             pipeline=knowledge_fabric.pipeline,
             fetch=HttpTextFetcher(),
             # The tool layer sits below `knowledge` and cannot name this enum,
             # so the composition root supplies the member.
             web_source_type=SourceType.WEB_PAGE,
+            # The forget coordinator + the scope factory (str -> DeletionScope),
+            # injected for the same layering reason as web_source_type.
+            memory=knowledge_fabric.research_memory,
+            deletion_scope=DeletionScope,
         )
 
     # ── Voice pipeline (optional; off by default) ─────────────────── #

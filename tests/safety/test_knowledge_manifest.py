@@ -19,12 +19,16 @@ from atlas.tools.research import ResearchTool
 
 CONFIG = Path(__file__).resolve().parents[2] / "config" / "permissions.yaml"
 
-# operation → highest tier it may carry. Read-only == AUTO; outbound == NOTIFY.
+# operation → highest tier it may carry. Read-only == AUTO; outbound == NOTIFY;
+# the destructive forget == CONFIRM (raised to DANGEROUS for wide scopes by the
+# `mass_research_deletion` matcher, which lives in require_confirm, not here).
 EXPECTED: dict[str, Tier] = {
     "search": Tier.AUTO,
     "sources": Tier.AUTO,
     "research": Tier.NOTIFY,
+    "deep_research": Tier.NOTIFY,
     "read_url": Tier.NOTIFY,
+    "forget": Tier.CONFIRM,
 }
 
 

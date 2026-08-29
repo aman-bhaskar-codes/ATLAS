@@ -177,6 +177,8 @@ class TierClassifier:
             return matchers.is_credential_entry(req.tool, req.operation, req.args)
         if name == "submits_form":
             return matchers.is_form_submission(req.tool, req.operation)
+        if name == "mass_research_deletion":
+            return matchers.is_mass_research_deletion(req.args)
         return False, ""
 
     def _apply_constraint(self, constraint: str | None, req: ToolRequest, tier: Tier) -> tuple[Tier, str | None]:
