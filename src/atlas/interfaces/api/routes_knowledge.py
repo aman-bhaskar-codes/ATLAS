@@ -11,7 +11,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from atlas.app import Atlas
+from atlas.infra.types import ToolRequest
 from atlas.interfaces.api.dependencies import get_atlas
+from atlas.knowledge.deletion import DeletionScope
+from atlas.safety.engine import DeniedError, HaltedError
 
 router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
 
@@ -248,3 +251,137 @@ async def get_document(document_id: str, atlas: Atlas = Depends(_get_atlas)) -> 
         indexed=doc.indexed,
         created_ts=doc.created_ts.isoformat(),
     )
+
+
+# --- Research-corpus forget (the one destructive knowledge operation) ------- #
+#
+# WHY two paths, and WHY the commit is not a bare store call:
+#   * PREVIEW is read-only. `dry_run=True` computes per-store counts without
+#     mutating anything (§22), so it needs no approval — previewing what a
+#     forget would remove is part of the approval flow, not the deletion.
+#   * COMMIT routes through the SAME SafetyEngine funnel every tool dispatch
+#     uses (classify -> audit -> confirm -> execute). A REST caller therefore
+#     can never skip approval: a narrow forget is CONFIRM, a corpus-wide or
+#     cascading one is DANGEROUS (confirmation code), enforced by the
+#     `mass_research_deletion` matcher — not by anything in this file.
+# Both paths touch ONLY the research corpus; personal trusted memory is never
+# in scope (§11).
+
+_FORGET_SCOPES = ("evidence", "chunk", "document", "session", "source_type", "uri", "all")
+
+
+class ForgetRequest(BaseModel):
+    """Request to forget research memory at a given scope."""
+
+    scope: str  # one of _FORGET_SCOPES
+    target: str = ""  # id / source_type / uri the scope points at ("" for scope=all)
+    cascade_documents: bool = False  # session scope only: also remove the session's docs
+
+
+class DeletionReportResponse(BaseModel):
+    """Honest per-store outcome of a forget (§22) — never inflated coverage."""
+
+    scope: str
+    target: str
+    dry_run: bool
+    documents: int
+    chunks: int
+    evidence: int
+    sessions: int
+    vectors: int
+    vectors_failed: int
+    lexical: int
+    notes: list[str]
+    summary: str
+
+
+def _research_memory(atlas: Atlas) -> object | None:
+    """The ResearchMemory coordinator, or None when the fabric is unavailable."""
+    fabric = getattr(atlas, "knowledge_fabric", None)
+    return getattr(fabric, "research_memory", None) if fabric is not None else None
+
+
+def _validate_scope(scope: str) -> DeletionScope:
+    """Reject unknown scopes at the edge (400) before touching the funnel."""
+    key = (scope or "").strip().lower()
+    try:
+        return DeletionScope(key)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400, detail=f"unknown forget scope: {scope!r}; expected one of {list(_FORGET_SCOPES)}"
+        ) from exc
+
+
+def _report_to_response(report: object) -> DeletionReportResponse:
+    """Flatten a DeletionReport structurally (no knowledge-type import needed)."""
+    scope = getattr(report, "scope", "")
+    return DeletionReportResponse(
+        scope=str(getattr(scope, "value", scope)),
+        target=str(getattr(report, "target", "")),
+        dry_run=bool(getattr(report, "dry_run", False)),
+        documents=int(getattr(report, "documents", 0) or 0),
+        chunks=int(getattr(report, "chunks", 0) or 0),
+        evidence=int(getattr(report, "evidence", 0) or 0),
+        sessions=int(getattr(report, "sessions", 0) or 0),
+        vectors=int(getattr(report, "vectors", 0) or 0),
+        vectors_failed=int(getattr(report, "vectors_failed", 0) or 0),
+        lexical=int(getattr(report, "lexical", 0) or 0),
+        notes=list(getattr(report, "notes", []) or []),
+        summary=str(getattr(report, "summary", "")),
+    )
+
+
+@router.post("/research/forget/preview", response_model=DeletionReportResponse)
+async def preview_forget(request: ForgetRequest, atlas: Atlas = Depends(_get_atlas)) -> DeletionReportResponse:
+    """Preview a research forget WITHOUT deleting anything (read-only, §22).
+
+    Returns the real per-store counts a commit would remove. Mutates nothing, so
+    it is not approval-gated — this is the step you show a user before they issue
+    the destructive DELETE below.
+    """
+    memory = _research_memory(atlas)
+    if memory is None:
+        raise HTTPException(status_code=503, detail="research memory unavailable")
+    scope = _validate_scope(request.scope)
+    report = await memory.forget(  # type: ignore[attr-defined]
+        scope, request.target, cascade_documents=request.cascade_documents, dry_run=True
+    )
+    return _report_to_response(report)
+
+
+@router.delete("/research", response_model=DeletionReportResponse)
+async def forget_research(request: ForgetRequest, atlas: Atlas = Depends(_get_atlas)) -> DeletionReportResponse:
+    """Permanently forget research memory at the given scope — funnel-governed.
+
+    Irreversible. The request is classified, audited and confirmed by the
+    SafetyEngine exactly like any tool dispatch; a corpus-wide (all/source_type/
+    uri) or cascading-session forget is escalated to DANGEROUS and needs a
+    confirmation code. Personal trusted memory is never touched (§11).
+    """
+    tool = atlas.tools.get("knowledge")
+    if tool is None or _research_memory(atlas) is None:
+        raise HTTPException(status_code=503, detail="research memory unavailable")
+    _validate_scope(request.scope)  # 400 early; the funnel re-parses the string
+    req = ToolRequest(
+        correlation_id=atlas.ids.correlation_id(),
+        tool="knowledge",
+        operation="forget",
+        args={
+            "operation": "forget",
+            "scope": request.scope,
+            "target": request.target,
+            "cascade_documents": request.cascade_documents,
+        },
+    )
+    try:
+        result = await atlas.safety.guard(req, tool)
+    except DeniedError as exc:
+        raise HTTPException(
+            status_code=403, detail=f"forget denied (tier {exc.decision.tier.name}): {exc.decision.reason}"
+        ) from exc
+    except HaltedError as exc:
+        raise HTTPException(status_code=503, detail=f"forget halted: {exc}") from exc
+    if not result.ok:
+        raise HTTPException(status_code=500, detail=result.error or "forget failed")
+    # execute() returns the already-flattened DeletionReport payload.
+    return DeletionReportResponse(**result.output)
