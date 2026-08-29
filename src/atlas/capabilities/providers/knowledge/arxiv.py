@@ -49,19 +49,26 @@ class ArxivProvider:
 
                 st = getattr(entry, "published_parsed", None)
                 pub = datetime.fromtimestamp(time.mktime(st), tz=UTC) if st else None
+                link = getattr(entry, "link", None)
 
                 items.append(
                     KnowledgeItem(
                         title=str(getattr(entry, "title", "")).replace("\n", " "),
                         snippet=str(getattr(entry, "summary", ""))[:500].replace("\n", " "),
-                        url=getattr(entry, "link", None),
+                        url=link,
                         published=pub,
                         provenance=Provenance(
                             provider=self.name,
                             source_kind=SourceKind.OFFICIAL,
-                            uri=getattr(entry, "link", None),
+                            uri=link,
                             retrieved_ts=datetime.now(UTC),
                         ),
+                        # Scholarly metadata: without the arXiv id and author list a
+                        # citation cannot be rendered from the document alone.
+                        authors=_authors(entry),
+                        arxiv_id=_arxiv_id(link),
+                        doi=str(getattr(entry, "arxiv_doi", "") or ""),
+                        venue="arXiv",
                     )
                 )
             return items
@@ -79,3 +86,20 @@ class ArxivProvider:
 
     async def shutdown(self) -> None:
         await self._client.aclose()
+
+
+def _authors(entry: Any) -> tuple[str, ...]:
+    raw = getattr(entry, "authors", None) or []
+    out: list[str] = []
+    for a in raw[:12]:
+        name = a.get("name") if isinstance(a, dict) else getattr(a, "name", None)
+        if isinstance(name, str) and name.strip():
+            out.append(" ".join(name.split()))
+    return tuple(out)
+
+
+def _arxiv_id(link: str | None) -> str:
+    """abs URL → bare id ("2401.01234v2"). Empty when the shape is unexpected."""
+    if not link or "/abs/" not in link:
+        return ""
+    return link.rsplit("/abs/", 1)[1].strip("/")

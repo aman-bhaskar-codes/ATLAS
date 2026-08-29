@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from atlas.knowledge.citations import CitationEngine
+from atlas.knowledge.context import AssembledContext, ContextAssembler, build_evidence_context
 from atlas.knowledge.domain import (
     Citation,
     Claim,
@@ -23,13 +24,13 @@ from atlas.knowledge.domain import (
     Evidence,
     QueryRoute,
     RAGMode,
-    SecurityStatus,
-    SourceType,
 )
-from atlas.knowledge.injection import untrusted_prefix
 from atlas.knowledge.router import QueryPlan
 
-_UNTRUSTED_TYPES = frozenset({SourceType.WEB_PAGE, SourceType.BROWSER_PAGE, SourceType.RSS, SourceType.PUBLIC_API})
+# Re-exported for callers/tests that import the raw numbered-block helper from
+# here; the canonical implementation now lives in `atlas.knowledge.context`
+# alongside the richer ContextAssembler.
+__all__ = ["AnswerSynthesizer", "FabricAnswer", "build_evidence_context"]
 
 _SYSTEM = (
     "You answer STRICTLY from the numbered evidence provided. Cite every factual "
@@ -63,28 +64,16 @@ class FabricAnswer:
     detail: dict[str, Any] = field(default_factory=dict)
 
 
-def build_evidence_context(evidence: list[Evidence], *, max_chars: int = 6000) -> str:
-    """Numbered evidence block with provenance framing for untrusted sources."""
-    lines: list[str] = []
-    used = 0
-    for i, ev in enumerate(evidence, start=1):
-        framing = ""
-        if ev.source in _UNTRUSTED_TYPES or ev.provenance.get("security_status") == SecurityStatus.SUSPICIOUS.value:
-            framing = (
-                untrusted_prefix(ev.source.value, SecurityStatus(ev.provenance.get("security_status", "SAFE"))) + "\n"
-            )
-        line = f'[{i}] {ev.title or ev.uri} ({ev.source.value}, authority={ev.authority:.2f})\n{framing}"{ev.quote}"\n'
-        if used + len(line) > max_chars:
-            break
-        lines.append(line)
-        used += len(line)
-    return "\n".join(lines)
-
-
 class AnswerSynthesizer:
-    def __init__(self, citations: CitationEngine, model: SynthesizerModel | None = None) -> None:
+    def __init__(
+        self,
+        citations: CitationEngine,
+        model: SynthesizerModel | None = None,
+        assembler: ContextAssembler | None = None,
+    ) -> None:
         self._citations = citations
         self._model = model
+        self._assembler = assembler or ContextAssembler()
 
     async def synthesize(
         self,
@@ -98,8 +87,6 @@ class AnswerSynthesizer:
         degraded: bool = False,
         degradation_reason: str = "",
     ) -> FabricAnswer:
-        citation_list = self._citations.build(evidence)
-
         # ── honest refusal when there is nothing to stand on (§54) ───
         if not evidence:
             return FabricAnswer(
@@ -117,8 +104,16 @@ class AnswerSynthesizer:
                 degradation_reason=degradation_reason,
             )
 
+        # ── research-grade context assembly (§10) ────────────────────
+        # The assembler decides the FINAL evidence subset+order. That one list
+        # feeds citations, the context text, and the answer's evidence/citations,
+        # so [n] markers stay aligned across all three.
+        assembled: AssembledContext = self._assembler.assemble(evidence, contradictions)
+        included = assembled.included or evidence
+        citation_list = self._citations.build(included)
+
         if self._model is not None:
-            context = build_evidence_context(evidence)
+            context = assembled.text or build_evidence_context(included)
             contra_note = ""
             if contradictions:
                 contra_note = "\nKNOWN CONFLICTS (state them, do not resolve by averaging):\n" + "\n".join(
@@ -128,9 +123,9 @@ class AnswerSynthesizer:
             try:
                 raw = await self._model.complete(_SYSTEM, prompt)
             except Exception:
-                raw = _extractive_answer(evidence)
+                raw = _extractive_answer(included)
         else:
-            raw = _extractive_answer(evidence)
+            raw = _extractive_answer(included)
 
         text, markers_ok = self._citations.validate_markers(raw, citation_list)
 
@@ -140,11 +135,11 @@ class AnswerSynthesizer:
         n_claims = max(len(claims), 1)
         grounding = len(supported) / n_claims if claims else 1.0
 
-        avg_auth = sum(e.authority for e in evidence) / len(evidence)
+        avg_auth = sum(e.authority for e in included) / len(included)
         confidence = min(
             0.95,
             0.3
-            + 0.06 * min(len(evidence), 5)
+            + 0.06 * min(len(included), 5)
             + 0.15 * avg_auth
             + 0.15 * grounding
             - (0.1 if contradictions else 0.0)
@@ -160,7 +155,7 @@ class AnswerSynthesizer:
             text=text,
             answered=True,
             confidence=confidence,
-            evidence=tuple(evidence),
+            evidence=tuple(included),
             citations=tuple(citation_list),
             claims=tuple(claims),
             contradictions=tuple(contradictions),
@@ -170,6 +165,9 @@ class AnswerSynthesizer:
                 "unsupported_claims": len(unsupported),
                 "markers_valid": markers_ok,
                 "grounding": round(grounding, 3),
+                "context_dropped": len(assembled.dropped),
+                "context_truncated": assembled.truncated,
+                "coverage_warning": assembled.coverage_warning,
             },
         )
 

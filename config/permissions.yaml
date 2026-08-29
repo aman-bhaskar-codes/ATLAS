@@ -42,7 +42,10 @@ rules:
   - {tool: filesystem, operation: delete,           tier: 2}
   - {tool: filesystem, operation: overwrite,        tier: 2}
   # ── Knowledge / Memory ──
-  - {tool: knowledge,  operation: search,    tier: 0}
+  - {tool: knowledge,  operation: search,    tier: 0}   # indexed corpus + memory only
+  - {tool: knowledge,  operation: sources,   tier: 0}   # list what is indexed
+  - {tool: knowledge,  operation: research,  tier: 1}   # outbound: scholarly/web fan-out
+  - {tool: knowledge,  operation: read_url,  tier: 1}   # outbound: fetch + index one page
   - {tool: memory,     operation: search,    tier: 0}
   - {tool: memory,     operation: store,     tier: 0}
   # ── Shell ──

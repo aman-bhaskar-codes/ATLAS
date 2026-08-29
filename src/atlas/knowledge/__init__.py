@@ -16,6 +16,8 @@ from atlas.knowledge.chunking import chunk_parsed
 from atlas.knowledge.citations import CitationEngine
 from atlas.knowledge.codebase import CodebaseKnowledge
 from atlas.knowledge.compression import CitationPreservingCompressor, CompressedSummary
+from atlas.knowledge.context import AssembledContext, ContextAssembler, build_evidence_context
+from atlas.knowledge.deletion import DeletionReport, DeletionScope, ResearchMemory
 from atlas.knowledge.domain import (
     Citation,
     Claim,
@@ -55,6 +57,7 @@ from atlas.knowledge.telemetry import RagRecord, RagTelemetry
 
 __all__ = [
     "AnswerSynthesizer",
+    "AssembledContext",
     "BM25Index",
     "BrowserBridge",
     "Candidate",
@@ -66,8 +69,11 @@ __all__ = [
     "ClaimVerifier",
     "CodebaseKnowledge",
     "CompressedSummary",
+    "ContextAssembler",
     "Contradiction",
     "ContradictionDetector",
+    "DeletionReport",
+    "DeletionScope",
     "Evidence",
     "EvidenceSelector",
     "FabricAnswer",
@@ -92,6 +98,7 @@ __all__ = [
     "RerankWeights",
     "ResearchBudget",
     "ResearchGraph",
+    "ResearchMemory",
     "ResearchOutcome",
     "ResearchPlanner",
     "ResearchQuestion",
@@ -100,6 +107,7 @@ __all__ = [
     "RetrievalResult",
     "SecurityStatus",
     "SourceType",
+    "build_evidence_context",
     "chunk_parsed",
     "parse_content",
     "scan_for_injection",

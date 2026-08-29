@@ -89,6 +89,18 @@ class HybridRetriever:
             self._by_chunk.pop(cid, None)
             self._bm25.remove(cid)
 
+    def drop_chunk(self, chunk_id: str) -> None:
+        """Forget a single chunk from the lexical index + cache (§12 granular delete)."""
+        if self._by_chunk.pop(chunk_id, None) is not None:
+            self._bm25.remove(chunk_id)
+
+    def drop_all(self) -> None:
+        """Forget the entire in-memory corpus; a later retrieve lazily rebuilds from
+        SQL, so after a full purge the rebuilt corpus is empty too (§12)."""
+        self._by_chunk.clear()
+        self._bm25 = BM25Index()
+        self._built = False
+
     async def retrieve(
         self, query: str, *, k: int = 50, source_types: tuple[str, ...] | None = None
     ) -> RetrievalResult:

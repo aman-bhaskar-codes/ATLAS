@@ -36,11 +36,15 @@ from atlas.capabilities.providers.email.gmail import GmailProvider
 from atlas.capabilities.providers.knowledge.arxiv import ArxivProvider
 from atlas.capabilities.providers.knowledge.base import KnowledgeProvider
 from atlas.capabilities.providers.knowledge.brave import BraveSearchProvider
+from atlas.capabilities.providers.knowledge.crossref import CrossrefProvider
 from atlas.capabilities.providers.knowledge.duckduckgo import DuckDuckGoProvider
 from atlas.capabilities.providers.knowledge.github_releases import GitHubReleasesProvider
 from atlas.capabilities.providers.knowledge.memory_source import MemoryKnowledgeSource
+from atlas.capabilities.providers.knowledge.openalex import OpenAlexProvider
 from atlas.capabilities.providers.knowledge.parametric import ParametricKnowledgeSource
 from atlas.capabilities.providers.knowledge.rss import RSSProvider
+from atlas.capabilities.providers.knowledge.searxng import SearxngProvider
+from atlas.capabilities.providers.knowledge.semantic_scholar import SemanticScholarProvider
 from atlas.capabilities.providers.knowledge.tavily import TavilySearchProvider
 from atlas.capabilities.providers.knowledge.wikipedia import WikipediaProvider
 from atlas.capabilities.providers.location.nominatim import NominatimProvider
@@ -120,7 +124,7 @@ async def build_data_platforms(
         CapabilitySpec(
             capability=Capability.KNOWLEDGE,
             safety_tool="knowledge",
-            operations=("search",),
+            operations=("search", "sources"),
             default_tier=Tier.AUTO,
             requires_auth=False,
             description="Obtain knowledge from memory + official + web sources",
@@ -136,7 +140,24 @@ async def build_data_platforms(
         RSSProvider(name=k, feeds=v) for k, v in ksrc.get("official_feeds", {}).items()
     ]
     official += [WikipediaProvider(), ArxivProvider(), GitHubReleasesProvider()]
+
+    # ── scholarly federation (all keyless; §5) ────────────────────────
+    # `contact_email` only moves these into each API's polite pool; it is never
+    # required, so an empty value is fine and nothing is sent when unset.
+    scholar_cfg = ksrc.get("scholarly", {}) or {}
+    mailto = str(scholar_cfg.get("contact_email", "") or "")
+    if scholar_cfg.get("openalex", True):
+        official.append(OpenAlexProvider(mailto=mailto))
+    if scholar_cfg.get("crossref", True):
+        official.append(CrossrefProvider(mailto=mailto))
+    if scholar_cfg.get("semantic_scholar", True):
+        official.append(SemanticScholarProvider(api_key=str(scholar_cfg.get("semantic_scholar_api_key", "") or "")))
+
     web: list[KnowledgeProvider] = [DuckDuckGoProvider()]
+    # SearXNG is keyless but needs an operator-supplied instance; skipped when absent.
+    searxng_url = str((ksrc.get("searxng", {}) or {}).get("base_url", "") or "")
+    if searxng_url:
+        web.append(SearxngProvider(searxng_url, engines=str((ksrc.get("searxng", {}) or {}).get("engines", "") or "")))
     if config.models.allow_cloud:
         try:
             web.append(BraveSearchProvider(identity, credential_id="brave:default"))

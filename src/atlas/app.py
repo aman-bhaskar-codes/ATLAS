@@ -505,6 +505,25 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     tools["computer_use"] = computer_use.tool
     public_api = computer_use.public_api
 
+    # ── Knowledge / research tool ─────────────────────────────────── #
+    # WHY here: the fabric is built above but was unreachable by the agent — no
+    # tool meant the reasoning loop could not search, research or cite. The tool
+    # goes through the ordinary Tool contract so every research action passes the
+    # SafetyEngine funnel, under the `knowledge` seat permissions.yaml reserves.
+    if knowledge_fabric is not None:
+        from atlas.knowledge.domain import SourceType
+        from atlas.tools.research import HttpTextFetcher, ResearchTool
+
+        tools["knowledge"] = ResearchTool(
+            fabric=knowledge_fabric.fabric,
+            research=knowledge_fabric.research,
+            pipeline=knowledge_fabric.pipeline,
+            fetch=HttpTextFetcher(),
+            # The tool layer sits below `knowledge` and cannot name this enum,
+            # so the composition root supplies the member.
+            web_source_type=SourceType.WEB_PAGE,
+        )
+
     # ── Voice pipeline (optional; off by default) ─────────────────── #
     from atlas.bootstrap.voice import build_voice
 

@@ -12,9 +12,10 @@ deterministic — the fabric never needs an LLM to plan or stop research.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, Protocol
 
 from atlas.infra.clock import Clock
 from atlas.infra.ids import IdGenerator
@@ -232,6 +233,18 @@ class ResearchOutcome:
     candidates: tuple[Candidate, ...]
     stop_reason: str
     gains: tuple[float, ...]
+    discovered: int = 0  # documents pulled from live sources this round
+
+
+class Discovery(Protocol):
+    """Anything that can turn a question into freshly ingested documents.
+
+    `LiveBridge` (provider fan-out) satisfies this, and so does a browser
+    bridge wrapper. Structural on purpose: the research runner lives in
+    `knowledge` and must not import `capabilities`.
+    """
+
+    async def gather(self, query: str) -> list[Any]: ...
 
 
 class ResearchRunner:
@@ -239,6 +252,9 @@ class ResearchRunner:
 
     Sources are the hybrid retriever itself: anything already ingested
     (files, prior browser crawls, provider results) is a research source.
+    When a `discovery` hook is wired, each open question ALSO fans out to live
+    sources first, so a cold index is no longer a dead end — this is what
+    makes research work on a question nobody has asked before.
     Continuation (§137): if a prior session matches the goal, resume it and
     skip every source it already visited.
     """
@@ -251,12 +267,21 @@ class ResearchRunner:
         clock: Clock,
         *,
         planner: ResearchPlanner | None = None,
+        discovery: Discovery | None = None,
+        max_discovery_queries: int = 3,
+        discovery_timeout_s: float = 25.0,
     ) -> None:
         self._retriever = retriever
         self._store = store
         self._ids = ids
         self._clock = clock
         self._planner = planner or ResearchPlanner()
+        self._discovery = discovery
+        # Discovery is the expensive leg (N providers, each an HTTP call). Bound
+        # it independently of the query budget so a wide question list cannot
+        # turn into a crawl.
+        self._max_discovery = max(0, max_discovery_queries)
+        self._discovery_timeout = discovery_timeout_s
 
     async def start(
         self,
@@ -312,10 +337,15 @@ class ResearchRunner:
         gains: list[float] = []
         streak = 0
         stop_reason = ""
+        discovered = 0
+        discovery_rounds = 0
 
         open_qs = [q for q in session.questions if q.status is ResearchQuestionStatus.OPEN]
         for q in open_qs[: session.budget.max_queries - session.queries_used or 1]:
             session = replace(session, queries_used=session.queries_used + 1)
+            if discovery_rounds < self._max_discovery and not session.budget_exhausted().stop:
+                discovery_rounds += 1
+                discovered += await self._discover(q.text)
             result: RetrievalResult = await self._retriever.retrieve(q.text, k=20)
             fresh = [c for c in result.candidates if _source_of(c) not in session.visited_urls]
             if not fresh:
@@ -363,20 +393,46 @@ class ResearchRunner:
 
         if not stop_reason:
             stop_reason = "question list processed"
-        await self._persist(session, stop_reason)
+        await self._persist(session, stop_reason, discovered=discovered)
         _log.info(
             "research.done",
             event_type="knowledge",
             session=session.session_id,
             pages=session.pages_used,
             facts=len(session.graph.facts()),
+            discovered=discovered,
             stop=stop_reason,
         )
         return ResearchOutcome(
-            session=session, candidates=tuple(collected), stop_reason=stop_reason, gains=tuple(gains)
+            session=session,
+            candidates=tuple(collected),
+            stop_reason=stop_reason,
+            gains=tuple(gains),
+            discovered=discovered,
         )
 
-    async def _persist(self, session: ResearchSession, stop_reason: str) -> None:
+    async def _discover(self, question: str) -> int:
+        """Fan out to live sources for one question. Never raises, always bounded.
+
+        A discovery failure is not a research failure: the retriever still runs
+        against whatever is already indexed, so the round degrades instead of
+        dying (§22).
+        """
+        if self._discovery is None:
+            return 0
+        try:
+            jobs = await asyncio.wait_for(self._discovery.gather(question), timeout=self._discovery_timeout)
+        except TimeoutError:
+            _log.warning("research.discovery_timeout", event_type="knowledge", question=question[:80])
+            return 0
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _log.warning("research.discovery_failed", event_type="knowledge", error=repr(exc))
+            return 0
+        return len(jobs)
+
+    async def _persist(self, session: ResearchSession, stop_reason: str, *, discovered: int = 0) -> None:
         all_answered = all(q.status is ResearchQuestionStatus.ANSWERED for q in session.questions)
         status = ResearchQuestionStatus.ANSWERED if all_answered else ResearchQuestionStatus.OPEN
         now = self._clock.now()
@@ -391,6 +447,7 @@ class ResearchRunner:
                 "pages": float(session.pages_used),
                 "queries": float(session.queries_used),
                 "tokens": float(session.tokens_used),
+                "discovered": float(discovered),
                 "elapsed_s": round(session.elapsed(), 2),
                 "stop_reason": stop_reason,
             },

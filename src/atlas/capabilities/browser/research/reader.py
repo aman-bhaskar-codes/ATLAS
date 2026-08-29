@@ -1,30 +1,27 @@
-"""Reader engine: distills HTML into Article models."""
+"""Reader engine: distills HTML into Article models (§6, §7).
+
+Reader-mode extraction reuses the single dependency-free extractor in
+`atlas.tools.extract` (this layer sits above `atlas.tools`, so it may import it),
+rather than keeping a second, weaker copy of the HTML rules. Boilerplate is
+dropped and headings are preserved as markdown markers so the fabric chunker can
+respect section boundaries.
+"""
 
 from __future__ import annotations
 
-import re
+from atlas.tools.extract import html_to_text
 
 
 class ReaderEngine:
-    """Extracts article content from HTML (a simplified reader-mode)."""
+    """Extracts article content from HTML (structure-aware reader-mode)."""
 
     def extract_article_text(self, html: str, title: str) -> str:
-        """Naive extraction of main text by stripping tags and noise."""
-        if not html:
-            return ""
-
-        # Remove script and style blocks
-        text = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", html, flags=re.DOTALL | re.IGNORECASE)
-        # Remove nav, header, footer
-        text = re.sub(r"<(nav|header|footer)[^>]*>.*?</\1>", "", text, flags=re.DOTALL | re.IGNORECASE)
-        # Strip all other HTML tags
-        text = re.sub(r"<[^>]+>", " ", text)
-        # Normalize whitespace
-        text = re.sub(r"\s+", " ", text).strip()
-
+        """Main prose with boilerplate (nav/header/footer/scripts) removed."""
+        _title, text = html_to_text(html, title_hint=title)
         return text
 
     def extract_markdown(self, html: str, title: str) -> str:
-        """Convert simplified HTML to markdown (placeholder)."""
-        text = self.extract_article_text(html, title)
-        return f"# {title}\n\n{text}"
+        """Reader text rendered as markdown under an H1 title."""
+        found_title, text = html_to_text(html, title_hint=title)
+        heading = found_title or title
+        return f"# {heading}\n\n{text}" if heading else text

@@ -116,6 +116,136 @@ class FabricStore:
         await self._db.conn.execute("DELETE FROM fabric_documents WHERE document_id = ?", (document_id,))
         await self._db.conn.commit()
 
+    # ── deletion primitives (§12: granular forget) ───────────────────
+    # These return WHAT they touched (ids, counts) so a coordinator can honestly
+    # fan the same deletion out to the vector store and lexical index (§22). All
+    # are deterministic SQL — no model, no vectors. fabric_chunks cascade from
+    # fabric_documents via FK (PRAGMA foreign_keys=ON); fabric_evidence does NOT
+    # (index only), so evidence is always deleted explicitly here.
+    async def chunk_refs_for_document(self, document_id: str) -> list[tuple[str, str]]:
+        """(chunk_id, embedding_id) pairs for a document — the vector purge list."""
+        cur = await self._db.conn.execute(
+            "SELECT chunk_id, embedding_id FROM fabric_chunks WHERE document_id = ?", (document_id,)
+        )
+        rows = await cur.fetchall()
+        return [(r["chunk_id"], r["embedding_id"] or f"kc_{r['chunk_id']}") for r in rows]
+
+    async def chunk_refs_all(self) -> list[tuple[str, str]]:
+        cur = await self._db.conn.execute("SELECT chunk_id, embedding_id FROM fabric_chunks")
+        rows = await cur.fetchall()
+        return [(r["chunk_id"], r["embedding_id"] or f"kc_{r['chunk_id']}") for r in rows]
+
+    async def all_document_ids(self) -> list[str]:
+        cur = await self._db.conn.execute("SELECT document_id FROM fabric_documents")
+        return [r["document_id"] for r in await cur.fetchall()]
+
+    async def document_ids_for_source_type(self, source_type: SourceType) -> list[str]:
+        cur = await self._db.conn.execute(
+            "SELECT document_id FROM fabric_documents WHERE source_type = ?", (source_type.value,)
+        )
+        return [r["document_id"] for r in await cur.fetchall()]
+
+    async def document_ids_for_uri(self, uri: str) -> list[str]:
+        cur = await self._db.conn.execute(
+            "SELECT document_id FROM fabric_documents WHERE uri = ? OR canonical_uri = ?", (uri, uri)
+        )
+        return [r["document_id"] for r in await cur.fetchall()]
+
+    async def document_id_for_chunk(self, chunk_id: str) -> str | None:
+        cur = await self._db.conn.execute("SELECT document_id FROM fabric_chunks WHERE chunk_id = ?", (chunk_id,))
+        r = await cur.fetchone()
+        return r["document_id"] if r else None
+
+    async def delete_evidence(self, evidence_id: str) -> int:
+        cur = await self._db.conn.execute("DELETE FROM fabric_evidence WHERE evidence_id = ?", (evidence_id,))
+        await self._db.conn.commit()
+        return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+    async def delete_evidence_for_chunk(self, chunk_id: str) -> int:
+        cur = await self._db.conn.execute("DELETE FROM fabric_evidence WHERE chunk_id = ?", (chunk_id,))
+        await self._db.conn.commit()
+        return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+    async def delete_evidence_for_document(self, document_id: str) -> int:
+        cur = await self._db.conn.execute("DELETE FROM fabric_evidence WHERE document_id = ?", (document_id,))
+        await self._db.conn.commit()
+        return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+    async def delete_chunk(self, chunk_id: str) -> int:
+        cur = await self._db.conn.execute("DELETE FROM fabric_chunks WHERE chunk_id = ?", (chunk_id,))
+        await self._db.conn.commit()
+        return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+    async def evidence_id_exists(self, evidence_id: str) -> bool:
+        cur = await self._db.conn.execute("SELECT 1 FROM fabric_evidence WHERE evidence_id = ? LIMIT 1", (evidence_id,))
+        return await cur.fetchone() is not None
+
+    async def count_evidence_for_chunk(self, chunk_id: str) -> int:
+        cur = await self._db.conn.execute("SELECT COUNT(*) AS n FROM fabric_evidence WHERE chunk_id = ?", (chunk_id,))
+        r = await cur.fetchone()
+        return int(r["n"]) if r else 0
+
+    async def count_evidence_for_document(self, document_id: str) -> int:
+        cur = await self._db.conn.execute(
+            "SELECT COUNT(*) AS n FROM fabric_evidence WHERE document_id = ?", (document_id,)
+        )
+        r = await cur.fetchone()
+        return int(r["n"]) if r else 0
+
+    async def count_all_evidence(self) -> int:
+        cur = await self._db.conn.execute("SELECT COUNT(*) AS n FROM fabric_evidence")
+        r = await cur.fetchone()
+        return int(r["n"]) if r else 0
+
+    # ── session deletion / unlink (§12) ──────────────────────────────
+    async def delete_session(self, session_id: str) -> int:
+        cur = await self._db.conn.execute("DELETE FROM research_sessions WHERE session_id = ?", (session_id,))
+        await self._db.conn.commit()
+        return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+    async def get_session(self, session_id: str) -> dict[str, Any] | None:
+        cur = await self._db.conn.execute("SELECT * FROM research_sessions WHERE session_id = ?", (session_id,))
+        r = await cur.fetchone()
+        if r is None:
+            return None
+        return {
+            "session_id": r["session_id"],
+            "goal": r["goal"],
+            "status": r["status"],
+            "document_ids": json.loads(r["document_ids_json"]),
+        }
+
+    async def unlink_document_from_sessions(self, document_id: str) -> int:
+        """Remove a deleted document's id from every session's document_ids_json so
+        no session dangles a reference to a document that no longer exists (§22)."""
+        cur = await self._db.conn.execute(
+            "SELECT session_id, document_ids_json FROM research_sessions WHERE document_ids_json LIKE ?",
+            (f'%"{document_id}"%',),
+        )
+        touched = 0
+        for r in await cur.fetchall():
+            ids = json.loads(r["document_ids_json"])
+            if document_id in ids:
+                remaining = [d for d in ids if d != document_id]
+                await self._db.conn.execute(
+                    "UPDATE research_sessions SET document_ids_json = ? WHERE session_id = ?",
+                    (json.dumps(remaining), r["session_id"]),
+                )
+                touched += 1
+        if touched:
+            await self._db.conn.commit()
+        return touched
+
+    async def count_all_sessions(self) -> int:
+        cur = await self._db.conn.execute("SELECT COUNT(*) AS n FROM research_sessions")
+        r = await cur.fetchone()
+        return int(r["n"]) if r else 0
+
+    async def delete_all_sessions(self) -> int:
+        cur = await self._db.conn.execute("DELETE FROM research_sessions")
+        await self._db.conn.commit()
+        return cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
     async def set_document_status(self, document_id: str, state: IngestionState, error: str = "") -> None:
         await self._db.conn.execute(
             "UPDATE fabric_documents SET status = ? WHERE document_id = ?",

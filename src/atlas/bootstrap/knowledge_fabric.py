@@ -22,6 +22,7 @@ from atlas.knowledge.cache import QueryResultCache
 from atlas.knowledge.citations import CitationEngine
 from atlas.knowledge.codebase import CodebaseKnowledge
 from atlas.knowledge.compression import CitationPreservingCompressor
+from atlas.knowledge.deletion import ResearchMemory
 from atlas.knowledge.engine import KnowledgeFabric
 from atlas.knowledge.evidence import ClaimExtractor, ClaimVerifier, ContradictionDetector, EvidenceSelector
 from atlas.knowledge.ingestion import IngestionPipeline
@@ -66,6 +67,7 @@ class KnowledgeFabricComponents:
     store: FabricStore
     retriever: HybridRetriever
     research: ResearchRunner
+    research_memory: ResearchMemory
     browser_bridge: BrowserBridge
     live_bridge: LiveBridge
     codebase: CodebaseKnowledge
@@ -93,6 +95,10 @@ async def build_knowledge_fabric(
     pipeline = IngestionPipeline(store, hybrid, ids, clock, embedder=embedder, vector=vectors)
     telemetry = RagTelemetry()
     synthesizer = AnswerSynthesizer(CitationEngine(), model=GatewaySynthesizer(gateway, ids) if use_models else None)
+    # The live bridge is the research runner's DISCOVERY leg. Without it the
+    # runner can only re-read an already-warm index, so a genuinely new
+    # question returns nothing.
+    live_bridge = LiveBridge(providers or [], pipeline)
     fabric = KnowledgeFabric(
         retriever=hybrid,
         reranker=FeatureReranker(),
@@ -113,9 +119,10 @@ async def build_knowledge_fabric(
         pipeline=pipeline,
         store=store,
         retriever=hybrid,
-        research=ResearchRunner(hybrid, store, ids, clock),
+        research=ResearchRunner(hybrid, store, ids, clock, discovery=live_bridge if providers else None),
+        research_memory=ResearchMemory(store, hybrid, vectors),
         browser_bridge=BrowserBridge(pipeline, clock),
-        live_bridge=LiveBridge(providers or [], pipeline),
+        live_bridge=live_bridge,
         codebase=CodebaseKnowledge(pipeline),
         compressor=CitationPreservingCompressor(),
         telemetry=telemetry,

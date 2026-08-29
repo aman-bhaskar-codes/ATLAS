@@ -9,11 +9,30 @@ official_feeds:
   qwen: ["https://qwenlm.github.io/index.xml"]
   hf: ["https://huggingface.co/blog/feed.xml"]
 
+# Scholarly federation (§5). All keyless. `contact_email` is optional and only
+# moves requests into each API's polite pool — nothing is sent when it is blank.
+scholarly:
+  openalex: true
+  crossref: true
+  semantic_scholar: true
+  semantic_scholar_api_key: ""   # optional: raises the keyless rate limit
+  contact_email: ""
+
+# Self-hosted metasearch. Left blank = provider not registered (no paid search
+# service is ever a default). Example: "http://localhost:8080"
+searxng:
+  base_url: ""
+  engines: ""                    # optional comma list, e.g. "google,bing,duckduckgo"
+
 provider_preferences:      # lower = tried first (free-first, official-first)
   "rss:*": 10
   "wikipedia": 20
   "arxiv": 20
   "github_releases": 20
+  "openalex": 25
+  "semantic_scholar": 25
+  "crossref": 30
+  "searxng": 45
   "brave": 50
   "tavily": 50
   "duckduckgo": 60
