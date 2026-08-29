@@ -1,504 +1,796 @@
-<!-- ─────────────────────────────────────────────────────────────────────────
-     ATLAS · README
-     Local-first, safety-governed autonomous agent runtime.
-     Every claim below is verified against the current repository.
-────────────────────────────────────────────────────────────────────────── -->
+<!--
+  ATLAS README — regenerated 2026-08-29 directly against the live tree.
+  Every number, path, flag and command below was verified from source, not
+  from memory. Motion graphics are self-hosted animated SVGs (no third-party
+  badge/animation services), each paired with a prefers-reduced-motion
+  static fallback via <picture>.
+-->
 
-<p align="center">
-  <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/hero/atlas-hero-static.svg" />
-    <img src="assets/readme/hero/atlas-hero.svg" alt="ATLAS — an OTAR cognitive core surrounded by its capability constellation: Model Gateway, Safety Engine, Memory, Knowledge, Tools, and Perception (partial, opt-in). Local-first, safety-governed, zero-cost by default, fully auditable." width="100%" />
-  </picture>
-</p>
+<div align="center">
 
-<h1 align="center">ATLAS</h1>
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/motion/atlas-titlecard-static.svg">
+  <img src="assets/readme/motion/atlas-titlecard.svg" width="100%"
+       alt="ATLAS — Autonomous Task & Learning Agent System. A local-first, safety-governed agent runtime: zero cost by default, five free OpenRouter models, a five-tier safety gate, and a hash-chained audit log.">
+</picture>
 
-<p align="center">
-  <strong>Autonomous Task &amp; Learning Agent System</strong><br/>
-  A local-first, safety-governed agent runtime — <em>zero-cost by default, fully auditable, and yours to run.</em>
-</p>
+<br/>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/python-3.13-58a6ff?style=flat-square&logo=python&logoColor=white" alt="Python 3.13" />
-  <img src="https://img.shields.io/badge/packaging-uv-58a6ff?style=flat-square" alt="uv" />
-  <img src="https://img.shields.io/badge/typing-mypy%20strict-bc8cff?style=flat-square" alt="mypy strict" />
-  <img src="https://img.shields.io/badge/lint-ruff-f778ba?style=flat-square" alt="ruff" />
-  <img src="https://img.shields.io/badge/web-Next.js%2016-0d1117?style=flat-square&logo=nextdotjs&logoColor=white" alt="Next.js 16" />
-  <img src="https://img.shields.io/badge/cost-%240%20by%20default-3fb950?style=flat-square" alt="Zero cost by default" />
-  <img src="https://img.shields.io/badge/license-MIT-3fb950?style=flat-square" alt="MIT License" />
-</p>
+[![Python](https://img.shields.io/badge/python-3.13%2B-3776AB?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
+[![Tests](https://img.shields.io/badge/tests-1%2C388%20collected-3fb950?style=flat-square&logo=pytest&logoColor=white)](tests)
+[![Coverage](https://img.shields.io/badge/coverage-70%25%20%2F%20floor%2063-238636?style=flat-square)](pyproject.toml)
+[![Models](https://img.shields.io/badge/models-5%20free%20%C2%B7%201%20key-58a6ff?style=flat-square)](config/models.yaml)
+[![Cost](https://img.shields.io/badge/runtime%20cost-%240.00-0f2417?style=flat-square&labelColor=238636)](config/settings.yaml)
+[![Safety](https://img.shields.io/badge/safety-T0%E2%80%93T4%20deny%20by%20default-bc8cff?style=flat-square)](src/atlas/safety)
+[![Layers](https://img.shields.io/badge/import--linter-3%20contracts%20kept-f778ba?style=flat-square)](importlinter.ini)
+[![License](https://img.shields.io/badge/license-MIT-e3b341?style=flat-square)](LICENSE)
 
-<p align="center">
-  <a href="#what-is-atlas">What</a> ·
-  <a href="#why-atlas">Why</a> ·
-  <a href="#capabilities">Capabilities</a> ·
-  <a href="#living-architecture">Architecture</a> ·
-  <a href="#how-atlas-works">How it works</a> ·
-  <a href="#safety">Safety</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#configuration">Config</a> ·
-  <a href="#current-status">Status</a>
-</p>
+**[What it is](#what-atlas-is)** · **[Pipeline](#the-pipeline-one-funnel-no-bypasses)** · **[Architecture](#architecture)** · **[Safety](#safety-the-part-that-says-no)** · **[Memory](#memory--two-lane-recall)** · **[Models](#intelligence--cost)** · **[Voice](#voice)** · **[Quick start](#quick-start)** · **[Config](#configuration)** · **[Status](#current-status-honest-version)**
 
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
+</div>
 
-## What is ATLAS
+<img src="assets/divider.svg" width="100%" alt="">
 
-ATLAS is an **autonomous agent runtime** that runs on your own machine. You give it a task in natural language; it *understands* the intent, *plans* an approach, then executes a **bounded reasoning loop** — thinking, calling tools, observing results, and reflecting — until it produces a verified answer or safely stops.
+## What ATLAS is
 
-Three properties define it:
+ATLAS is a **personal autonomous agent runtime** that runs on your machine, spends
+nothing to think, and cannot take a consequential action without passing a
+deny-by-default safety gate that writes a tamper-evident record of what it did.
 
-- **Zero-cost by construction.** The default profile runs on a curated fleet of **five free OpenRouter models** with **$0** budgets; paid model classes are physically unreachable under the default cost policy.
-- **Safety-governed.** No tool ever executes except through a reference-monitor **Safety Engine**: every action is classified into a risk tier, checked against policy, and written to a tamper-evident audit log *before* it runs.
-- **Auditable & single-user.** One person, one runtime. Every decision, cost, and side-effect is recorded in an append-only, hash-chained ledger you can verify at any time.
+It is one process, one composition root, one funnel. A request arriving from the
+CLI, the HTTP API, a WebSocket, a cron automation or a spoken sentence lands in the
+*same* orchestrator, gets classified into the *same* five-tier risk ladder, and is
+executed through the *same* sandboxed tool registry. There is no side door — that
+property is enforced by an import-linter contract, not by convention.
 
-> ATLAS is a **single-orchestrator** system built around one composition root (`atlas.app.build()`). It is engineered for correctness and traceability, not scale — it is meant to be run locally by the person who owns it.
+What it is **not**: a chat wrapper, a prompt-template collection, or a hosted
+service. There is no server to sign up for and no per-token bill; the default
+configuration resolves to five free OpenRouter models behind a single API key.
 
-## Why ATLAS
+<img src="assets/divider.svg" width="100%" alt="">
 
-Most agent frameworks optimise for capability first and ask questions about trust later. ATLAS inverts that. Its design principles are enforced in code and in CI, not just documented:
+## At a glance
 
-| Principle | What it means in practice | Where it lives |
-| :-- | :-- | :-- |
-| **The model proposes, ATLAS decides** | The LLM never executes anything directly — it emits a proposed action that the Safety Engine independently classifies and gates. | `safety/engine.py`, `orchestration/dispatcher.py` |
-| **Deny-by-default** | Consequential actions require explicit confirmation; high-impact actions require a one-time code; some categories are hard-blocked. | `config/permissions.yaml` |
-| **Everything is auditable** | Every decision is appended to a SHA-256 hash-chained log that doubles as the single source of truth for cost. | `safety/audit.py` |
-| **Zero-cost first** | The model selector filters by cost class *before* ranking; a zero-cost profile can never resolve a paid model. | `config/models.yaml`, `infra/profiles.py` |
-| **Bounded by construction** | The reasoning loop has hard step, token, and time limits; it degrades to a graceful failure rather than running forever. | `orchestration/reasoning.py`, `orchestration/limits.py` |
-| **Enforced layering** | Architectural boundaries are checked by import-linter in CI — infrastructure may never import higher layers. | `importlinter.ini` |
+Everything in this table was measured against the working tree at commit `f72d29e`
+on branch `pass1/cognitive-runtime`.
 
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
+| | |
+|---|---|
+| **Source** | 475 Python modules · 65,243 lines · 19 top-level packages under `src/atlas` |
+| **Tests** | 1,388 collected across 177 test files · ~70% line coverage |
+| **Coverage floors** | 63% global · 70% `safety/` · 83% `orchestration/` (CI-enforced) |
+| **Layering** | 14 layers, 3 import-linter contracts, 0 broken |
+| **Database** | SQLite (`.atlas/atlas.db`), 29 forward-only migrations, versioned in-band |
+| **Model fleet** | 5 OpenRouter `:free` models, 1 `OPENROUTER_API_KEY`, `$0.00` per run |
+| **Embeddings** | `qwen/qwen3-embedding-0.6b`, 1024-dim, same key and base URL as chat |
+| **HTTP surface** | 18 routers under `/api/v1` + 2 WebSocket routes |
+| **Runtime** | Python 3.13+, `uv`-managed, phased startup with health gating |
+| **Web UI** | Next.js 16.2.11 · React 19.2.4 (separate `frontend/` workspace) |
 
-## Capabilities
+<img src="assets/divider.svg" width="100%" alt="">
 
-Status legend — **✅ Stable** (wired into the runtime & covered by tests) · **⚠️ Partial / opt-in** · **🧪 Experimental** · **🛠 Planned (present in code, not wired)**.
+## The pipeline: one funnel, no bypasses
 
-| Capability | Status | Summary |
-| :-- | :--: | :-- |
-| **Bounded OTAR reasoning** | ✅ | Observe → Think → Act → Reflect loop with verification and bounded replanning. |
-| **Safety engine (5 tiers)** | ✅ | Every tool call classified, policy-checked, audited, and sandboxed before execution. |
-| **Hash-chained audit + cost ledger** | ✅ | Append-only SHA-256 chain; verifiable at any time; single source of truth for spend. |
-| **Zero-cost model gateway** | ✅ | Cost-class-aware selection across local + free cloud models; policy-enforced budgets. |
-| **Layered memory** | ✅ | Working, episodic, semantic, user-model & knowledge stores over SQLite + ChromaDB. |
-| **Knowledge fabric** | ✅ | Hybrid retrieval (BM25 + reciprocal-rank fusion), feature reranking, query routing, prompt-injection scanning. |
-| **Filesystem & shell tools** | ✅ | Path- and command-scoped, sandboxed, tier-gated. |
-| **Autonomy (triggers, automations, cron)** | ✅ | Event- and schedule-driven task creation; nightly memory consolidation. |
-| **HTTP API + Web dashboard** | ✅ | FastAPI control plane (`:8730`) with SSE + WebSocket streaming; Next.js 16 UI. |
-| **Trajectory capture & evaluation gate** | ✅ | Full execution traces recorded; a recorded-answer regression gate runs in CI. |
-| **Experience → skill/strategy learning** | 🧪 | Post-task experience extraction feeds skills that can inform future planning. |
-| **Computer use / browser** | ⚠️ | Registered and safety-gated, but **opt-in** — disabled by default (runtime boots `DEGRADED`). |
-| **Public-API connectors** | 🧪 | Discovered-only, safety-gated integrations. |
-| **Multi-agent specialists** | ✅ | The `agents/` package is wired behind the single orchestrator: complex tasks are decomposed into a DAG of role-specialist subtasks that run concurrently, then synthesized — all through the same ReasoningLoop → dispatcher → SafetyEngine funnel. Off by default (`agents.enabled: false`); no separate tool path. |
+<div align="center">
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/motion/atlas-pipeline-static.svg">
+  <img src="assets/readme/motion/atlas-pipeline.svg" width="100%"
+       alt="A request travels left to right: ingress from CLI, API, WebSocket, voice or cron; the orchestrator's observe-think-act-reflect loop; tier classification with provenance; the deny-by-default safety gate; sandboxed execution at 1 CPU and 512 MB; and an append-only SHA-256 audit chain.">
+</picture>
+</div>
 
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
+Read that diagram as a call graph, because it is one:
 
-## Living Architecture
+1. **Ingress** — every transport builds the same `InboundEvent`, tagged with a
+   `source` and a provenance class. A transport cannot smuggle in a pre-approved action.
+2. **Orchestrator** (`orchestration/orchestrator.py`) — runs the OTAR cycle and decides
+   which tool to call with which arguments.
+3. **Classify** (`safety/classifier.py`) — deterministic and fail-closed. Hard-block
+   matchers run *first*, so a credential read is high-tier even if a later rule would
+   have allowed it. On any classifier error the tier defaults to `CONFIRM`, never `AUTO`.
+4. **Gate** (`safety/engine.py`) — allows, notifies, demands approval, demands an
+   approval *code*, or refuses. The kill switch is re-checked *after* confirmation, so
+   a stop issued while you were deciding still wins.
+5. **Execute** (`orchestration/registry.py` → `tools/`) — inside a `python:3.13-slim`
+   container capped at 1 CPU / 512 MB, or the native sandbox where Docker is unavailable.
+6. **Audit** (`safety/audit.py`) — append-only, each record hashing the previous one.
+   Secrets are scrubbed before the record is written, not after.
 
-ATLAS is a strictly layered system. Dependencies point **downward only** — a rule that import-linter enforces on every CI run (`"top may import lower; never the reverse"`).
+<img src="assets/divider.svg" width="100%" alt="">
 
-<p align="center">
-  <img src="assets/readme/architecture/atlas-system.svg" alt="ATLAS layered architecture. Top to bottom, dependencies point downward only: Interfaces (CLI, HTTP API on :8730, Next.js 16 web UI); Orchestration (orchestrator, OTAR loop, planner, router, verification); the Safety Engine reference-monitor layer that every tool action passes through; Cognitive Platforms (model gateway, memory, knowledge, tools, capabilities, perception which is partial, adaptation which is experimental); and Infrastructure (SQLite, ChromaDB, event bus, SHA-256 audit, config, clock). Import-linter enforces the layering in CI." width="100%" />
-</p>
+## The OTAR loop
 
-**Composition root.** A single call, `atlas.app.build()`, wires the entire system and returns one `Atlas` object. Startup is phased by a `RuntimeSupervisor` (`bootstrap → infrastructure → safety → intelligence → memory → capabilities → orchestration → readiness`); non-critical subsystems degrade gracefully, so a missing browser or knowledge backend never blocks boot.
+<div align="center">
+<img src="assets/animations/otar-loop.svg" width="76%"
+     alt="The OTAR cycle: Observe the request and recalled context, Think to produce a plan, Act through the safety-gated tool registry, Reflect on the outcome and write what was learned back into memory.">
+</div>
+
+**O**bserve → **T**hink → **A**ct → **R**eflect. The interesting part is the last
+step: reflection is not logging. It writes structured artifacts back into the stores
+that the *next* task reads — trajectories, extracted experiences, failure records and
+skill-promotion candidates. That is why `trajectories`, `experiences` and `failures`
+are first-class operator commands rather than debug output.
+
+The loop is bounded on purpose. Step limits, wall-clock limits and cost limits live in
+`orchestration/limits.py`, and a self-critique pass (`self_critique.py`) can reject the
+agent's own plan before a single tool fires.
+
+<img src="assets/divider.svg" width="100%" alt="">
+
+## Architecture
+
+<div align="center">
+<img src="assets/readme/architecture/atlas-system.svg" width="100%"
+     alt="ATLAS system architecture: interfaces on top, then diagnostics, adaptation, evaluation, orchestration, knowledge, capabilities, memory, intelligence, safety, tools, control, perception, and infra at the base. Dependencies point downward only.">
+</div>
+
+One composition root, one object graph. `atlas.app.build()` constructs everything and
+returns a single `Atlas` dataclass; every interface receives that same instance.
+Nothing in the tree reaches for a global, and no subsystem constructs its own database
+handle, model provider or safety engine.
+
+Startup is **phased and health-gated** by `RuntimeSupervisor`:
+
+```
+bootstrap → infrastructure → safety → intelligence → memory
+          → capabilities → orchestration → readiness
+```
+
+A phase that fails does not leave a half-built runtime accepting traffic — the API
+reports unready and the CLI tells you which phase broke.
+
+### Dependency direction is a build gate
+
+The 14 layers below are declared in [`importlinter.ini`](importlinter.ini) as three
+contracts. Dependencies point **downward only**, and CI fails on a single upward edge.
+
+```
+interfaces → diagnostics → adaptation → evaluation → orchestration → knowledge
+           → capabilities → memory → intelligence → safety → tools → control
+           → perception → infra
+```
+
+That is what makes the "no bypasses" claim in the pipeline section checkable rather
+than aspirational: the voice engine physically cannot import the orchestrator, so
+speech has to enter through the same front door as everything else.
 
 <details>
-<summary><strong>Repository layout</strong></summary>
+<summary><b>Repository layout</b> — all 19 packages under <code>src/atlas</code></summary>
 
-```text
+```
 atlas/
-├── src/
-│   ├── atlas/
-│   │   ├── app.py              # composition root — build() wires everything
-│   │   ├── bootstrap/          # RuntimeSupervisor, phased startup
-│   │   ├── orchestration/      # Orchestrator, OTAR loop, planner, dispatcher
-│   │   ├── safety/             # engine, classifier, policy, audit, killswitch, sandbox
-│   │   ├── intelligence/       # model gateway, selector, provider adapters
-│   │   ├── memory/             # working/episodic/semantic/user-model + retrieval
-│   │   ├── knowledge/          # BM25, reranking, router, injection scan
-│   │   ├── capabilities/       # email/calendar/contacts/weather/location/…
-│   │   ├── autonomy/           # trigger engine, automations, scheduler
-│   │   ├── tools/              # filesystem, shell, computer_use
-│   │   ├── interfaces/api/     # FastAPI app, routers, SSE/WebSocket
-│   │   └── infra/              # db, bus, config, clock, audit types, migrations
-│   └── atlas_cli/              # `atlas` command-line interface
-├── config/                     # models.yaml · settings.yaml · permissions.yaml
-├── frontend/                   # Next.js 16 + React 19 control-plane dashboard
-├── benchmarks/                 # hot-path p50/p95/p99 harness
-├── eval/                       # recorded answers for the CI regression gate
-├── tests/                      # ~790 test functions across 124 files
-└── .github/workflows/ci.yml    # lint · types · import boundaries · tests · eval gate
+├─ src/atlas/
+│  ├─ app.py               # composition root — build() returns the Atlas graph
+│  ├─ bootstrap/           # one builder per startup phase; the only place wiring lives
+│  ├─ infra/               # config, db + 29 migrations, backends, clock, logging, types
+│  ├─ perception/          # screen/accessibility perception + sensitivity redaction
+│  ├─ control/             # OS-level control surface (osascript, scripted actions)
+│  ├─ tools/               # filesystem, shell, browser primitives (base.py contract)
+│  ├─ safety/              # classifier, engine, matchers, policy, sandbox, kill switch, audit
+│  ├─ intelligence/        # provider registry, model catalog, selection, routing
+│  ├─ memory/              # working, episodic, semantic, curated, lanes, trajectory
+│  ├─ capabilities/        # browser, computer_use, connectors, pim, notification, voice
+│  ├─ knowledge/           # ingestion, chunking, BM25 + rerank, citations, synthesis
+│  ├─ orchestration/       # orchestrator, planner, registry, limits, self-critique, DAG
+│  ├─ agents/              # multi-agent delegation (disabled by default)
+│  ├─ evaluation/          # golden sets, RAG metrics, the eval gate CI runs
+│  ├─ adaptation/          # experiments, canary/shadow, calibration, skill promotion
+│  ├─ diagnostics/         # doctor checks and self-inspection
+│  ├─ engineering/         # code fingerprinting / repo-aware helpers
+│  ├─ training/            # dataset + triplet shaping for self-improvement
+│  ├─ autonomy/            # automations, trigger engine, proactive events
+│  └─ interfaces/          # cli.py, api/ (18 routers), shell, transports
+├─ src/atlas_cli/          # the installed `atlas` command — thin HTTP client
+├─ config/                 # settings.yaml, models.yaml, policies (hot-editable)
+├─ frontend/               # Next.js 16 web UI
+├─ tests/                  # 177 files, 1,388 tests
+└─ importlinter.ini        # the 3 layering contracts CI enforces
 ```
+
 </details>
+
+<img src="assets/divider.svg" width="100%" alt="">
+
+## Safety: the part that says no
+
+<div align="center">
+<img src="assets/readme/architecture/atlas-safety.svg" width="100%"
+     alt="The safety funnel: a tool request is matched against hard-block rules, classified into a tier, checked against policy and constraints, gated for approval, executed in a sandbox, and recorded in the hash-chained audit log.">
+</div>
+
+Every tool call is classified into one of five tiers before it runs. The ladder is an
+`IntEnum`, so "at least CONFIRM" is expressible as arithmetic (`max(tier, Tier.CONFIRM)`)
+and a constraint violation can only ever *raise* a tier, never lower one.
+
+| Tier | Name | Meaning | Outcome |
+|:---:|---|---|---|
+| **T0** | `AUTO` | read-only, no side effects | runs immediately |
+| **T1** | `NOTIFY` | reversible side effects | runs, you are told |
+| **T2** | `CONFIRM` | irreversible or outward-facing | explicit approval required |
+| **T3** | `DANGEROUS` | deletes data, spends money, touches credentials | approval **+ typed confirmation code** |
+| **T4** | `BLOCK` | hard-blocked | never executed, at any privilege |
+
+### What the gate guarantees
+
+- **Deny by default.** An unmatched or unclassifiable request does not fall through to
+  `AUTO`; `default_tier_on_error: 2` in [`config/settings.yaml`](config/settings.yaml)
+  means the failure mode is "ask a human".
+- **Hash-chained audit.** Each `AuditRecord` includes the hash of its predecessor, so
+  removing or editing history breaks the chain verifiably. Inspect it from the CLI.
+- **Secrets never reach disk.** Scrubbing happens on the way *into* the record and into
+  logs, so a leaked argument is not preserved by the thing meant to hold you accountable.
+- **Real isolation.** Shell and code execution run in `python:3.13-slim` with 1 CPU and
+  512 MB; the native sandbox is the fallback, not the default.
+- **A kill switch that cannot be raced.** `STOP.flag` is re-read *after* an approval
+  returns, so "stop" issued mid-decision still stops the action.
+- **Approval fatigue is a design constraint.** T0/T1 are silent by design — if
+  everything asked, you would approve everything without reading it.
+
+<img src="assets/divider.svg" width="100%" alt="">
+
+## Memory & two-lane recall
+
+<div align="center">
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/motion/atlas-recall-lanes-static.svg">
+  <img src="assets/readme/motion/atlas-recall-lanes.svg" width="100%"
+       alt="Two-lane recall. Lane 1 runs on every turn: the curated tier plus one indexed SQL query over write-time trigger hints, ranked by importance times a 30-day half-life decay, limit three, with zero model or network calls. Lane 2, the vector path, unlocks only when Lane 1 returns nothing usable and a deterministic regex detects recall intent.">
+</picture>
+</div>
+
+Most agent frameworks recall with one lane: embed the query, hit a vector store, often
+ask a model to rerank. That is three latency sources on the hot path and two of them are
+network calls. ATLAS splits it:
+
+**Lane 1 — the default, every turn.** The curated tier plus a single indexed SQL query
+over `trigger_hint` values scored *at write time*, while a model was already in the loop
+for that turn. Ranking is `importance × 2^(−age / 30 days)`, `LIMIT 3`. Zero embedding
+calls, zero vector round-trips, zero model calls — pure arithmetic over the handful of
+rows a partial index already narrowed to:
+
+```sql
+CREATE INDEX idx_ep_trigger_hint ON episodes(trigger_hint)
+    WHERE trigger_hint IS NOT NULL;
+```
+
+**Lane 2 — escalation, rare by construction.** Hybrid vector retrieval, reached only
+when Lane 1 finds nothing above `min_score` **and** a deterministic regex says the
+message actually asks for deep recall. Because it is rare, the vector store stops being
+either a latency cost or a storage-ceiling problem.
+
+Two deliberate implementation choices, both documented in
+[`src/atlas/memory/lanes.py`](src/atlas/memory/lanes.py):
+
+- The decay is computed **in Python, not SQL** — `exp()` is an optional SQLite build
+  flag, so a SQL-side decay would work on one machine and silently fail on another.
+- `LIMIT 3` is a **context-budget** decision, not a relevance one. Injecting ten
+  "relevant" memories reliably produces worse answers than injecting the best three.
+
+### Provenance is a security boundary, not metadata
+
+Every episode carries two columns constrained by SQL `CHECK`, and recall filters on them
+**inside the query**. A caller cannot forget to exclude untrusted content, because the
+index that makes recall fast encodes the eligibility rule in its own `WHERE` clause.
+
+| `origin_class` | Where it came from | Recallable? |
+|---|---|---|
+| `owner` | you said it | yes, highest trust |
+| `agent` | ATLAS produced it | yes |
+| `untrusted` | fetched page, tool output, third-party text | **never injected** |
+| `system` | runtime bookkeeping | internal only |
+
+| `session_kind` | Meaning |
+|---|---|
+| `interactive` | a live turn with you present |
+| `cron` | scheduled automation |
+| `heartbeat` | background maintenance |
+| `subagent` | delegated agent run |
+
+Rows that predate the columns default to `agent`/`interactive` — deliberately *not*
+`owner`, so backfilled history can never be mistaken for something you actually said.
+
+### The memory tiers
+
+<div align="center">
+<img src="assets/memory-layers.svg" width="82%"
+     alt="Memory tiers: working memory for the current task, episodic memory for what happened, semantic memory for distilled facts, the curated always-loaded tier, and the vector store for semantic neighbours.">
+</div>
+
+| Tier | Module | Lifetime | Written by |
+|---|---|---|---|
+| Working | `memory/working.py` | one task | the live loop |
+| Episodic | `memory/episodic.py` | append-only history | every turn |
+| Semantic | `memory/semantic.py` | distilled facts | consolidation + explicit edits |
+| Curated | `memory/curated.py` | always loaded at session start | consolidation **only** |
+| Vector | `memory/vectorstore.py` | Chroma, 1024-dim | ingestion + episodes |
+
+The curated tier is the `MEMORY.md`/`USER.md` equivalent: small, always in context, and
+never written by a live turn. It carries a `content_hash` compare-and-swap token plus a
+one-step `pre_image`, so a bad consolidation sweep is revertible without a backup.
+
+<img src="assets/divider.svg" width="100%" alt="">
+
+## Intelligence & cost
+
+The default fleet is **five OpenRouter free models behind one key**. No Ollama, no local
+weights, no second vendor, and no per-token bill.
+
+| # | Model id | OpenRouter slug | Tier role |
+|:---:|---|---|---|
+| 1 | `glm-5.2-free` | `z-ai/glm-5.2:free` | deep reasoning + planning |
+| 2 | `minimax-m3-free` | `minimax/minimax-m3:free` | long-context, **vision**, general agent |
+| 3 | `nemotron-3-ultra-free` | `nvidia/nemotron-3-ultra:free` | deep reasoning + orchestration |
+| 4 | `north-mini-code-free` | `cohere/north-mini-code:free` | fast agentic coding / tool work |
+| 5 | `laguna-s-2.1-free` | `poolside/laguna-s-2.1:free` | software engineering |
+
+All five are `cost_class: free_quota`, `usd_per_1m_input/output: 0.0`, and `enabled: true`
+in [`config/models.yaml`](config/models.yaml). Because slugs live in YAML, correcting one
+that OpenRouter renames needs **no code change**.
+
+Models are grouped into logical tiers rather than referenced directly, so retuning is a
+config edit:
+
+```yaml
+fast_models:      # cheap work that runs on every task: intent, routing, short summaries
+  - north-mini-code-free
+  - minimax-m3-free
+  - laguna-s-2.1-free
+deep_models:      # worth a stronger model: planning, recovery, verification
+  - glm-5.2-free
+  - nemotron-3-ultra-free
+  - minimax-m3-free
+fallback_models:  # last resort when a tier's picks are all unavailable
+  - minimax-m3-free
+  - glm-5.2-free
+```
+
+Tier lists are **ranking preferences applied after** the selector's hard cost, network
+and privacy filters. Listing a paid model in a zero-cost profile does not create a
+loophole — it simply has no eligible candidate.
+
+### Cost is enforced, not suggested
+
+| Knob | Default | Effect |
+|---|---|---|
+| `profile` | `free_hybrid` | allows free cloud + free-quota classes |
+| `cost_policy` | `free_only` | a paid model is not selectable, period |
+| `network_policy` | `free_cloud` | egress limited to free-tier endpoints |
+| `sync_openrouter_free` | `false` | do **not** auto-register every free model OpenRouter lists — only the 5 curated entries exist |
+
+That last flag matters: auto-sync would silently grow the fleet on every restart, which
+makes routing non-reproducible. It is off, and it is off on purpose.
+
+### Embeddings ride the same key
+
+OpenRouter serves `/chat/completions`, `/embeddings`, `/audio/speech` and
+`/audio/transcriptions` on one base URL, so a single `OPENROUTER_API_KEY` covers chat,
+vectors and speech. Embeddings default to `qwen/qwen3-embedding-0.6b` at **1024 dims** —
+the same width as the bge-m3 vectors ATLAS used previously, so existing Chroma
+collections stay dimension-compatible.
+
+`ATLAS_EMBED_API_KEY` is optional and exists only to point embeddings at a *different*
+vendor (Jina, Cohere, Voyage). Leave it empty and `effective_embed_api_key()` falls back
+to the OpenRouter key. Switching vendors is a `.env` change, not a code change.
+
+> **One-time migration.** If you ran ATLAS on bge-m3 embeddings before this change, old
+> and new vectors are not comparable. Wipe the store once: `rm -rf ./.atlas/chroma`.
+> Nothing auto-deletes it for you.
+
+<img src="assets/divider.svg" width="100%" alt="">
+
+## Knowledge & research
+
+<div align="center">
+<img src="assets/readme/knowledge/atlas-knowledge-loop.svg" width="92%"
+     alt="The knowledge loop: ingest documents and pages, chunk them, retrieve with BM25 plus vector search, rerank, attach citations, and synthesise an answer with a confidence score.">
+</div>
+
+The knowledge layer is a real retrieval stack, not a `.txt` folder: chunking, BM25
+(`bm25.py`) fused with vector search, reranking, evidence tracking, citation attachment,
+compression, and a research cache so a repeated question does not re-fetch the web.
+
+Answers carry **confidence and provenance**. Anything pulled from a fetched page enters
+memory as `origin_class: untrusted`, which means it can inform an answer *now* but can
+never be silently recalled later as if you had said it. That is the same boundary the
+recall query enforces — one rule, applied in one place.
+
+<img src="assets/divider.svg" width="100%" alt="">
+
+## Voice
+
+> **Status: built, tested, and disabled by default** (`voice.enabled: false`).
+> **Privacy:** when enabled, microphone audio and synthesis text are sent to a
+> third-party API — *audio leaves your machine.* This is the one subsystem where the
+> local-first guarantee does not hold, which is exactly why it ships off.
+
+Speech is a transport, not a special case. The audio↔text engine lives low in
+`capabilities/voice/` (`contracts.py`, `service.py`, three providers) and **cannot import
+the orchestrator** — the layering contract forbids it. The speech→task loop lives in
+`interfaces/`, builds an ordinary `InboundEvent(source="voice")`, and rides the same
+safety funnel as a typed command. A spoken "delete everything" still hits T3 and still
+demands a typed confirmation code.
+
+| Role | Default | Alternatives |
+|---|---|---|
+| TTS primary | `openrouter` (`openai/gpt-4o-mini-tts`) | `deepgram`, `fish_audio` |
+| TTS fallback / non-English | `openrouter_multilingual` (`fish-audio/s2.1-pro`) | any of the above |
+| STT | `openrouter` (`openai/whisper-large-v3`) | `deepgram` (Flux — true streaming partials) |
+
+The default path needs **no extra vendor key** — speech rides `OPENROUTER_API_KEY` like
+everything else. `DEEPGRAM_API_KEY` and `FISH_AUDIO_API_KEY` are optional upgrades:
+Deepgram is the only provider here with genuine streaming partials, and Fish Audio direct
+is worth it for expressive Hindi/multilingual narration. Each TTS provider is the other's
+fallback, following the same pattern as `FallbackEmbedder`.
+
+```bash
+uv sync --extra voice
+```
+
+Then set `voice.enabled: true` and:
+
+```bash
+python -m atlas.interfaces.cli voice speak "नमस्ते, यह एक परीक्षण है" --lang hi
+```
+
+<img src="assets/divider.svg" width="100%" alt="">
+
+## Optional subsystems
+
+Three capability layers ship **off**, each behind one flag, each degrading cleanly rather
+than crashing when unavailable. This is a convention, not three ad-hoc special cases:
+`bootstrap/*.py` returns `None` for a disabled subsystem and every call site handles it.
+
+| Subsystem | Flag | Default | Why off by default |
+|---|---|---|---|
+| **Browser automation** | `browser.enabled` | `false` | needs Playwright + a browser download; headless Chromium is a heavy dependency |
+| **Multi-agent delegation** | `agents.enabled` | `false` | costs a decomposition call + a synthesis call on top of per-subtask reasoning; only pays off on multi-branch work |
+| **Voice** | `voice.enabled` | `false` | sends audio to a third party |
+
+**Perception & computer use** (`perception/`, `capabilities/computer_use/`) reads the
+macOS accessibility tree and can drive the desktop. It is genuinely experimental: it
+requires the `macos` extra, needs Accessibility permission granted by hand, and every
+action it proposes is classified like any other tool call. `sensitivity.py` redacts what
+the perception layer is allowed to report before it ever reaches a model — a password
+field is not something the agent should be able to read out loud.
+
+<img src="assets/divider.svg" width="100%" alt="">
+
+## Interfaces
+
+ATLAS has **two command-line surfaces**, and knowing which one you want saves confusion:
+
+### 1. `atlas` — the installed client
+
+The console script from `pyproject.toml` (`atlas = "atlas_cli.main:app"`) is a thin HTTP
+client. It talks to a **running** runtime, so start one first:
+
+```bash
+atlas runtime start
+```
+
+| Command | Does |
+|---|---|
+| `atlas run "<request>"` | execute a task, live progress by default (`--no-watch`, `--json`) |
+| `atlas task` | list or watch tasks |
+| `atlas shell` | interactive ATLAS shell |
+| `atlas events` | live event stream, or search history |
+| `atlas doctor` | verify environment, providers, models |
+| `atlas profile` | show or set the operating profile |
+| `atlas providers` | list · health · free · quota |
+| `atlas models` | list · doctor · pull |
+| `atlas memory` | consolidation and skill promotion |
+| `atlas cost` | view and manage cost controls |
+| `atlas automations` | manage scheduled automations |
+| `atlas voice` | speak text, or hold a spoken conversation |
+| `atlas runtime` | `start` · `stop` · `status` · `restart` |
+| `atlas smoke-test` | offline check of the computer-use + connector stack |
+
+### 2. `python -m atlas.interfaces.cli` — the in-process operator CLI
+
+This one builds the whole `Atlas` graph in your shell — no server required — and exposes
+the deep surface used for inspection, memory work and safety drills.
 
 <details>
-<summary><strong>Visual language</strong></summary>
+<summary><b>Full in-process command list</b></summary>
 
-<p align="center">
-  <img src="assets/readme/icons/atlas-icons.svg" alt="ATLAS iconography: a consistent 2px line-icon language — cognitive core, model gateway, tool, memory, knowledge, safety shield, hash-chained audit, and kill switch — reused across every diagram." width="100%" />
-</p>
+| Command | Does |
+|---|---|
+| `run` | execute a task through the orchestration runtime |
+| `worker` / `enqueue` / `resume` | durable queue: consume, submit, crash-resume |
+| `fs` / `sh` | drive the filesystem and shell tools **through** the safety engine |
+| `run-tool` | invoke a single registered tool directly |
+| `recall` | show exactly what memory *would* surface for a query |
+| `remember` | add a semantic fact as an explicit owner-tier edit |
+| `consolidate` / `prune` | run the distillation and auto-cleaning sweeps by hand |
+| `user-model` | edit an always-loaded user-model section |
+| `trajectories` / `trajectory` | list runs, or show one run's full execution history |
+| `experiences` / `failures` | learned lessons and the failure taxonomy |
+| `extract-experiences` | trigger experience extraction from recent trajectories |
+| `know` | answer from memory + official sources + web, ranked with confidence |
+| `knowledge` | ingest · search · list · delete documents |
+| `audit` | read and verify the hash-chained audit log |
+| `kill` / `revive` | trip and clear the kill switch |
+| `watch` | stream task events over WebSocket |
+| `verify` | end-to-end smoke test of critical pipeline stages |
+| `doctor` | environment and provider diagnostics |
+| `model` | model inspection |
+| `cal` / `contacts` | calendar (list, free-busy, search, create) and contact search |
+| `memory` | live memory inspection sub-app |
+| `voice speak` / `voice chat` | TTS one-shot, or the full mic→STT→task→TTS loop |
+
 </details>
 
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
+### HTTP + WebSocket API
 
-## How ATLAS Works
+FastAPI, 18 routers. `/api/v1/health` is intentionally unauthenticated so container
+probes work; **everything else sits behind `auth_required`**.
 
-Every transport — CLI, HTTP API, Web UI — funnels into the same orchestrator pipeline. Nothing takes shortcuts.
+<details>
+<summary><b>Router surface</b></summary>
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#58a6ff','lineColor':'#8b949e','fontFamily':'ui-monospace, monospace'}}}%%
-sequenceDiagram
-    actor U as You
-    participant API as API / CLI
-    participant ORCH as Orchestrator
-    participant CTX as Memory + Context
-    participant PLAN as Planner
-    participant LOOP as OTAR Loop
-    participant SAFE as Safety Engine
-    participant TOOL as Tool
-    U->>API: submit task
-    API->>ORCH: run(event)
-    ORCH->>ORCH: understand intent (once)
-    ORCH->>CTX: build layered, token-budgeted context
-    ORCH->>PLAN: plan(goal)
-    ORCH->>LOOP: run(plan)
-    loop until final answer or limit
-        LOOP->>LOOP: Observe → Think (model)
-        LOOP->>SAFE: dispatch proposed action
-        SAFE->>TOOL: execute (only if allowed)
-        TOOL-->>LOOP: observation
-        LOOP->>LOOP: Reflect · verify · maybe replan
-    end
-    LOOP-->>ORCH: verified result + trajectory
-    ORCH-->>API: TaskResult
-    API-->>U: result + live events (SSE / WebSocket)
-```
+`health` · `runtime` · `tasks` · `approvals` · `capabilities` · `feedback` ·
+`knowledge` · `memory` · `trajectory` · `attachments` · `trust` · `events` ·
+`events_ws` · `learning` · `ops` · `providers` · `automations` · `voice`
 
-### The OTAR loop
+WebSocket: `/ws/events` for live task/event streaming, plus a bidirectional voice socket
+(audio in → STT → orchestrator → TTS audio out).
 
-The reasoning loop is the heart of the runtime, and it **cannot run forever** — step, token, and wall-clock limits raise typed errors that the monitor turns into a graceful failure. Consequential actions are critiqued *before* dispatch; outcomes are reflected on *after*.
+</details>
 
-<p align="center">
-  <img src="assets/readme/runtime/atlas-cognitive-loop.svg" alt="The bounded OTAR reasoning loop: Observe (task and tool results) → Think (model call) → Act (tool call routed through the Safety Engine) → Reflect, cycling until a final answer is verified against success criteria. Passing yields an answer plus full trajectory; failing with budget left triggers a bounded replan back to Observe. Step, token, and wall-clock limits keep the loop bounded." width="92%" />
-</p>
+> **Security note.** With `ATLAS_API_KEYS` unset, the API runs in **local mode**: it binds
+> localhost and treats every request as the trusted owner. That is fine on your laptop and
+> **not** fine on any other interface. Set `ATLAS_API_KEYS` *before* binding to `0.0.0.0`.
+> A `ro:` prefix makes a key read-only:
+> `ATLAS_API_KEYS=full-key-here,ro:read-only-key-here`
 
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
+<img src="assets/divider.svg" width="100%" alt="">
 
-## Safety
+## Quick start
 
-Safety is not a wrapper around ATLAS — it is the path everything travels through. The `dispatcher` never touches a tool directly; it calls `SafetyEngine.guard()`, whose funnel is fixed:
-
-<p align="center">
-  <img src="assets/readme/architecture/atlas-safety.svg" alt="The Safety Engine guard funnel: a proposed tool action is checked against the kill switch (halts if active), then classified into risk tier 0–4, checked against the policy chain, and appended to a SHA-256 hash-chained audit log before any decision. The decision either denies/blocks, or requires human approval (a one-time code if DANGEROUS) followed by a kill-switch re-check, or auto-approves and executes in a sandbox, returning an observation to the loop. Risk tiers run T0 AUTO to T4 BLOCK. Hard-blocked categories, never run regardless of approval: credential access, financial transactions, mass deletion over 25 items, and edits to the safety config." width="100%" />
-</p>
-
-### Risk tiers
-
-ATLAS classifies every action into one of five tiers (the "Vamos" model, `config/permissions.yaml`):
-
-| Tier | Label | Behaviour |
-| :--: | :-- | :-- |
-| **0** | `AUTO` | Read-only, no side effects — auto-approved, logged silently. |
-| **1** | `NOTIFY` | Reversible side effects — auto-approved with a notification. |
-| **2** | `CONFIRM` | Irreversible or external — requires explicit user approval. |
-| **3** | `DANGEROUS` | High-impact (delete data, spend money, touch credentials) — approval **plus a one-time confirmation code**. |
-| **4** | `BLOCK` | Hard-blocked — never executed. |
-
-**Hard-blocked categories** (never run, regardless of approval): credential access, financial transactions, mass deletion (default threshold 25 items), and edits to the safety config itself.
-
-### Guarantees
-
-- **Tamper-evident audit.** Each record hashes `SHA-256(prev_hash + action + payload + timestamp)`. Altering any historical row breaks the chain; `verify_chain()` (and `atlas doctor --verify-manifest`) walks the log and reports the first tampered entry.
-- **Secrets never leak.** Payloads are deep-scrubbed before they are logged or streamed — known secret fields are redacted and token-shaped strings (`Bearer …`, `sk-…`, `ghp_…`, JWTs) are pattern-matched out. Master keys live in the OS keychain, never in the repo.
-- **Sandboxed execution.** Tools run in a resource-capped sandbox (Docker `python:3.13-slim`, 1 CPU, 512 MB, PID-limited), falling back to a native sandbox in development.
-- **Kill switch.** A filesystem stop-flag halts execution immediately — and it is **re-checked after any human confirmation**, because the world can change while a prompt waits.
-
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
-
-## Intelligence & Cost
-
-ATLAS treats model choice as a policy decision. The gateway filters candidates by **cost class** (`local` · `free` · `free_quota` · `paid`) *before* ranking them — so a zero-cost profile physically cannot resolve a paid model, even if an API key is present.
-
-| Profile | Cost policy | Network | Model classes | Budget |
-| :-- | :-- | :-- | :-- | :-- |
-| **`free_hybrid`** *(default)* | `free_only` | `free_cloud` | free · free-quota · local | **$0** |
-| `local_free` | `zero_cost` | `local_only` | local | $0 |
-| `free_demo` | `free_preferred` | `free_cloud` | + small paid ceiling | $0.50 / day |
-| `production` | `balanced` | `unrestricted` | + paid | $5 / day |
-
-Select a profile with `ATLAS_PROFILE`, or tune tiers (`fast_models` / `deep_models` / `fallback_models`) in `config/settings.yaml` without touching code.
-
-### The model fleet
-
-`config/models.yaml` ships exactly five entries — all OpenRouter `:free` slugs, all `cost_class: free_quota`, all $0 in and out:
-
-| Model id | Role |
-| :-- | :-- |
-| `glm-5.2-free` | primary reasoning + agentic work (deep tier, default model) |
-| `nemotron-3-ultra-free` | deep reasoning, orchestration, research (heavy model) |
-| `minimax-m3-free` | general agent, long context, vision |
-| `north-mini-code-free` | agentic coding + terminal/tool work (fast tier) |
-| `laguna-s-2.1-free` | software engineering / coding |
-
-Only `OPENROUTER_API_KEY` is needed — for chat, embeddings **and** speech. The startup step that used to auto-register *every* free OpenRouter model is now opt-in (`models.sync_openrouter_free`, default `false`), so the fleet stays exactly this curated set. If a `:free` slug is renamed upstream, correct it in `config/models.yaml` — no code change.
-
-**Embeddings** ride the same key and base URL: OpenRouter serves an OpenAI-shaped `POST /api/v1/embeddings`, and the default model is `qwen/qwen3-embedding-0.6b` (1024-dim). Leave `ATLAS_EMBED_API_KEY` empty and the OpenRouter key is used; set `ATLAS_EMBED_BASE_URL` / `ATLAS_EMBED_MODEL` / `ATLAS_EMBED_API_KEY` to point at any other OpenAI-compatible embedder (Jina, Cohere, Voyage) without touching code. Embeddings never silently degrade to zero vectors — a failure raises `EmbeddingError`, and the semantic cache treats an unavailable embedder as a cache miss rather than an error.
-
-> **Upgrading from a bge-m3 install:** old and new vectors are not comparable. Wipe `./.atlas/chroma` once before the first run so collections are rebuilt with the new embedder.
-
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
-
-## Memory
-
-Memory is layered by lifetime and authority. Recent turns live in working memory; durable knowledge is persisted to SQLite + ChromaDB and consolidated on a nightly schedule.
-
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#58a6ff','lineColor':'#8b949e','clusterBkg':'#0d1117','clusterBorder':'#30363d','fontFamily':'ui-monospace, monospace'}}}%%
-flowchart TB
-    subgraph HOT["Hot path"]
-        WORK["Working memory<br/>(recent turns)"]
-    end
-    subgraph DUR["Durable · SQLite + ChromaDB"]
-        EPI["Episodic (events)"]
-        SEM["Semantic (facts)"]
-        UM["User model"]
-        KS["Knowledge store"]
-        TRAJ["Trajectories"]
-    end
-    WORK --> EPI
-    EPI -->|consolidation · 02:00 nightly| SEM
-    EPI --> RET["Retriever<br/>hybrid + rerank"]
-    SEM --> RET
-    UM --> RET
-    KS --> RET
-    RET --> CTX["Layered context<br/>(token-budgeted, deterministic)"]
-    TRAJ --> EXP["Experience extractor"]
-    EXP --> SKILL["Skills / strategies"]
-```
-
-The **context builder** assembles a deterministic, priority-ordered prompt (`system → safety → user-model → tools → memory → working`) under a hard token budget, trimming only the most negotiable layers. Retrieval is time-bounded: if the vector store hiccups, the task proceeds with the layers it always has rather than stalling.
-
-## Knowledge & Research
-
-<p align="center">
-  <img src="assets/readme/knowledge/atlas-knowledge-loop.svg" alt="The knowledge fabric pipeline: sources (documents, web, codebase) feed two parallel retrieval lanes — BM25 lexical search and vector similarity — which merge via reciprocal-rank fusion, then feature reranking, then a prompt-injection scan, producing grounded, cited context for the model. Retrieval is time-bounded and degrades gracefully." width="100%" />
-</p>
-
-The knowledge fabric turns documents into grounded, ranked context:
-
-- **Hybrid retrieval** — BM25 lexical search fused with vector similarity via reciprocal-rank fusion.
-- **Feature reranking** — candidates re-scored on authority, freshness, and relevance features.
-- **Query routing** — multi-hop questions decomposed and routed.
-- **Injection scanning** — retrieved content is scanned for prompt-injection before it can influence the model.
-
-Every CPU leg of this path is tracked by the benchmark harness (see [Evaluation and Performance](#evaluation-and-performance)); the whole fabric degrades gracefully — if it fails to initialise, the runtime continues without it.
-
-## Perception & Computer Use ⚠️
-
-A `computer_use` tool is registered and fully safety-gated. Browser-driven perception is **opt-in and disabled by default** — the runtime deliberately boots into a `DEGRADED` state with the browser off, and you enable it explicitly. As with every tool, actions here are tier-classified and audited; nothing bypasses the Safety Engine.
-
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
-
-## Voice ⚠️
-
-ATLAS can take a task by speech and answer out loud. The pipeline is **built and tested but disabled by default** (`voice.enabled: false` in `config/settings.yaml`) — flip the flag and install the optional `voice` extra. **No extra API key:** OpenRouter serves speech on the same base URL and the same `OPENROUTER_API_KEY` as chat.
-
-- **STT** — `POST /api/v1/audio/transcriptions` (default `openai/whisper-large-v3`). Request/response, so a spoken turn produces one final transcript rather than interim hypotheses.
-- **TTS** — `POST /api/v1/audio/speech`, registered twice from the one key: `openrouter` (`openai/gpt-4o-mini-tts`) for English/low-latency and `openrouter_multilingual` (**Fish Audio S2.1 Pro**) for Hindi and other expressive multilingual output. Each is the other's fallback — if the chosen voice fails before any audio is produced, the other one speaks instead.
-- **Optional vendor keys** — `DEEPGRAM_API_KEY` adds Deepgram (Flux STT over a WebSocket, the only path here with true streaming partials, plus Aura TTS); `FISH_AUDIO_API_KEY` adds Fish Audio direct. Both are extra fallbacks, never required.
-- **Model slugs are config** — OpenRouter ids churn, so `voice.openrouter_*_model` in `config/settings.yaml` is the only place to correct one.
-- **Layering** — the audio↔text engine lives in `capabilities/voice/` and cannot import orchestration. The speech→task loop lives in `interfaces/` (CLI + API) and creates a normal `InboundEvent(source="voice")`, so **a spoken request goes through the same Safety Engine funnel as a typed one** — approval-gated tools still prompt.
+**Requirements:** Python 3.13+, [`uv`](https://docs.astral.sh/uv/), and one free
+[OpenRouter key](https://openrouter.ai/keys). Docker is optional but recommended — without
+it, shell execution falls back to the native sandbox.
 
 ```bash
-uv sync --extra voice                  # sounddevice + soundfile + numpy
-# .env: OPENROUTER_API_KEY=…           (the key you already have)
-# config/settings.yaml: voice.enabled: true
-
-uv run atlas runtime start                                     # the CLI drives the gateway
-uv run atlas voice speak "नमस्ते, यह एक परीक्षण है" --lang hi   # TTS only
-uv run atlas voice chat                                        # mic → task → speaker
-```
-
-HTTP surface: `POST /api/v1/voice/speak` (text → streamed audio), `POST /api/v1/voice/transcribe` (audio → text), and `WS /api/v1/ws/voice` for a full duplex turn.
-
-> **Privacy:** voice is the one subsystem that always leaves the machine. Microphone audio and synthesis text are sent to the configured speech API (OpenRouter by default). Nothing is sent while `voice.enabled` is `false`, and no other part of the zero-cost path depends on it.
-
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
-
-## Quick Start
-
-**Prerequisites:** Python 3.13 · [uv](https://docs.astral.sh/uv/) · an [OpenRouter](https://openrouter.ai) API key (free tier) · Node 20+ (optional, for the Web UI) · Docker (optional, for the container sandbox).
-
-```bash
-# 1 · Clone
 git clone https://github.com/aman-bhaskar-codes/ATLAS.git
 cd ATLAS
-
-# 2 · Install dependencies (creates the virtualenv)
-uv sync                   # add --extra voice for speech in/out
-
-# 3 · Configure — one free-tier key
+uv sync
 cp .env.example .env
-#   OPENROUTER_API_KEY=…    (the only required key: chat + embeddings + speech)
-#   DEEPGRAM_API_KEY=…      (optional: adds streaming STT partials)
-#   FISH_AUDIO_API_KEY=…    (optional: adds a direct multilingual TTS fallback)
-
-# 4 · Verify the install
-uv run atlas doctor
 ```
 
-**Run a task from the CLI:**
+Open `.env` and paste your key into the one required line:
+
+```dotenv
+OPENROUTER_API_KEY=sk-or-v1-...
+```
+
+> **Run every command from this directory.** `Settings` resolves `env_file=".env"`
+> relative to the **current working directory**, not the package. Launch from anywhere
+> else and no `.env` is loaded at all — `OPENROUTER_API_KEY` comes back empty and every
+> model call fails auth with a message that does not obviously say "wrong directory".
+
+Set the secret-store master key. On macOS put it in the Keychain so it never touches disk:
 
 ```bash
-uv run atlas run "Summarise the README and list the safety tiers"
+security add-generic-password -a "$USER" -s atlas-master -w "$(python3 -c 'import secrets;print(secrets.token_hex(32))')"
 ```
 
-**Start the API + control plane:**
+On Linux or CI, set `ATLAS_MASTER_KEY` in `.env` instead. If neither exists, dev mode
+derives a throwaway key from the hostname and warns on stderr — anything encrypted under
+that key is unrecoverable once you set a real one.
+
+Verify, then run:
 
 ```bash
-uv run uvicorn atlas.interfaces.api.app:create_app --factory \
-  --host 127.0.0.1 --port 8730 --reload
-# API docs → http://127.0.0.1:8730/api/docs
+uv run python -m atlas.interfaces.cli doctor
+uv run python -m atlas.interfaces.cli run "summarise the three most recent files in this repo"
 ```
 
-**(Optional) launch the Web dashboard:**
+Or bring up the full runtime and use the client CLI:
 
 ```bash
-cd frontend && npm install && npm run dev   # → http://localhost:3000
+atlas runtime start
+atlas run "what changed in this project this week?"
+atlas events
 ```
 
-<p align="center">
-  <img src="assets/readme/ui/atlas-ui.svg" alt="Schematic (not a screenshot) of the ATLAS local control plane: a left navigation lists Tasks, Approvals, Events, Memory, Knowledge, Cost, Providers, Automations and Runtime; the main area shows a task stream with status chips, a pending Tier-2 approval card with approve and deny actions, and a live event ticker over server-sent events and WebSocket. Status pills show the default profile local_free, zero cost, and a DEGRADED runtime because the browser is off by default." width="100%" />
-</p>
-<p align="center"><sub>Schematic of the local control plane — the panels map to real API routers; run <code>frontend/</code> for the live UI.</sub></p>
+<details>
+<summary><b>Web UI</b> (optional)</summary>
 
-> If you use [`just`](https://github.com/casey/just): `just serve` runs the API and `just check` runs the full quality gate.
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:3000 — expects the ATLAS API to be running
+```
 
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
+Next.js 16.2.11 / React 19.2.4, in its own workspace with its own CI job (lint, typecheck,
+build, Playwright E2E).
+
+</details>
+
+<img src="assets/divider.svg" width="100%" alt="">
 
 ## Configuration
 
-ATLAS reads layered configuration from `config/` with environment overrides. All environment variables are `ATLAS_`-prefixed.
+**There is exactly one `.env`, and it lives beside `pyproject.toml`.** A `.env` anywhere
+else in the tree is dead config that nothing reads.
+[`.env.example`](.env.example) is the committed, exhaustive template — every variable any
+code path reads is in it, with a comment saying what it does and whether it is optional.
+When you add a new key, add it to **both** files.
 
-| Variable | Purpose | Default |
-| :-- | :-- | :-- |
-| `ATLAS_PROFILE` | Operating profile | `free_hybrid` |
-| `ATLAS_COST_POLICY` | `zero_cost` … `unrestricted` | `free_only` |
-| `ATLAS_NETWORK_POLICY` | `offline` … `unrestricted` | `free_cloud` |
-| `ATLAS_DEFAULT_MODEL` | Default reasoning model | `glm-5.2-free` |
-| `ATLAS_HEAVY_MODEL` | Deep-reasoning model | `nemotron-3-ultra-free` |
-| `OPENROUTER_API_KEY` | Chat (all five) + embeddings + speech | — |
-| `ATLAS_EMBED_MODEL` | Embedding model | `qwen/qwen3-embedding-0.6b` |
-| `ATLAS_EMBED_BASE_URL` | Embedding endpoint | `https://openrouter.ai/api/v1` |
-| `ATLAS_EMBED_API_KEY` | Embedding key — empty falls back to `OPENROUTER_API_KEY` | — |
-| `DEEPGRAM_API_KEY` | Optional: streaming STT partials + Aura TTS fallback | — |
-| `FISH_AUDIO_API_KEY` | Optional: direct multilingual TTS fallback | — |
-| `ATLAS_MASTER_KEY` | Secrets key (OS keychain `atlas-master`) | — |
+Precedence: code defaults **<** `config/settings.yaml` **<** `.env` / real environment.
 
-<details>
-<summary><strong>Config files</strong></summary>
-
-- **`config/models.yaml`** — the model registry. Every entry declares a `cost_class`; the selector enforces cost/network policy against it.
-- **`config/settings.yaml`** — profiles, inference tiers, budgets, sandbox limits, voice, critique/verification switches.
-- **`config/permissions.yaml`** — the five-tier permission model, per-tool rules, hard-block categories, and thresholds.
-- `OPENROUTER_API_KEY` is the only required key — it powers all five chat models, embeddings, and speech. The optional vendor voice keys are read only when `voice.enabled` is true.
-</details>
-
-## Command-Line Interface
-
-`atlas` is the primary control surface. Run `uv run atlas --help` for the full tree.
-
-| Command | Purpose |
-| :-- | :-- |
-| `atlas run "<task>"` | Execute a task through the full pipeline. |
-| `atlas voice speak "<text>" \| chat` | Speak text, or run a full mic → task → speaker loop (needs the `voice` extra). |
-| `atlas doctor` | Health & manifest verification (`--verify-manifest`). |
-| `atlas events` | Stream live runtime events. |
-| `atlas providers list \| free \| health \| verify` | Inspect model providers. |
-| `atlas models list \| doctor` | Inspect the model registry. |
-| `atlas cost show \| enforce <mode>` | View spend or set the cost policy. |
-| `atlas memory consolidate \| promote` | Run memory maintenance. |
-| `atlas automations list \| create \| toggle` | Manage autonomous triggers. |
-| `atlas profile` | Show the active operating profile. |
-| `atlas runtime …` | Runtime supervisor controls. |
+| Variable | Required | Purpose |
+|---|:---:|---|
+| `OPENROUTER_API_KEY` | **yes** | chat, embeddings **and** speech — the only key you need |
+| `ATLAS_MASTER_KEY` | Linux/CI | encrypts stored credentials; macOS uses the Keychain instead |
+| `ATLAS_ENV` | no | `dev` / `prod` |
+| `ATLAS_DATA_DIR` | no | state root, default `./.atlas` |
+| `ATLAS_DEFAULT_MODEL` | no | default `glm-5.2-free` |
+| `ATLAS_HEAVY_MODEL` | no | default `nemotron-3-ultra-free` |
+| `ATLAS_PROFILE` | no | default `free_hybrid` |
+| `ATLAS_EMBED_*` | no | point embeddings at a different vendor; empty = reuse OpenRouter |
+| `ATLAS_API_KEYS` | only if exposed | bearer keys; unset ⇒ trusted-localhost mode |
+| `ATLAS_RATE_LIMIT_CAPACITY` / `_PER_MINUTE` | no | token-bucket limits |
+| `ATLAS_NTFY_TOPIC` | no | ntfy.sh push for approval prompts |
+| `DEEPGRAM_API_KEY` / `FISH_AUDIO_API_KEY` | no | optional voice vendors |
+| `ATLAS_SAFE_BROWSING_API_KEY` / `ATLAS_VIRUSTOTAL_API_KEY` | no | URL scanners; empty ⇒ that scanner is skipped, the rest of the funnel still applies |
+| `ATLAS_ANTHROPIC_API_KEY` / `ATLAS_GEMINI_API_KEY` / `ATLAS_GROQ_API_KEY` | no | extra chat vendors **outside** the free fleet; still blocked by `cost_policy` |
 
 <details>
-<summary><strong>HTTP API surface</strong></summary>
+<summary><b>Config files</b></summary>
 
-The FastAPI app (factory `atlas.interfaces.api.app:create_app`) mounts routers mostly under `/api/v1`, with interactive docs at `/api/docs` and OpenAPI at `/api/openapi.json`. Routers include: **health, runtime, tasks, approvals, capabilities, feedback, knowledge, memory, trajectory, attachments, trust, events, learning, ops, providers, automations, voice**, plus WebSocket endpoints under `/ws`. CORS is restricted to the local dev origin and requests are rate-limited (120 burst / 60 per minute).
+| File | Holds | Hot-editable |
+|---|---|---|
+| `config/settings.yaml` | profile, cost/network policy, model tiers, sandbox, critique, verification, agents, voice | yes |
+| `config/models.yaml` | the 5-model catalog: slugs, capabilities, cost class | yes |
+| `.env` | secrets and machine-specific overrides (gitignored) | yes |
+| `importlinter.ini` | the 3 layering contracts | build gate |
+| `pyproject.toml` | deps, extras, ruff/mypy/pytest/coverage config | — |
+
+Retuning which model handles which kind of work never requires touching Python.
+
 </details>
 
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
+<img src="assets/divider.svg" width="100%" alt="">
 
-## Evaluation and Performance
+## Quality gates
 
-**Self-improvement.** Completed tasks produce full **trajectories** (actions, observations, decisions). A post-task **experience extractor** distils lessons into skills and strategies that can inform future planning *(experimental)*.
+Run everything the CI backend job runs:
 
-<p align="center">
-  <img src="assets/readme/learning/atlas-learning-loop.svg" alt="The experimental self-improvement loop: a completed task produces a full trajectory of actions, observations and decisions; a post-task experience extractor distils skills and strategies that can inform future planning. This loop is experimental and never bypasses the Safety Engine." width="92%" />
-</p>
+```bash
+uv run ruff check . && uv run ruff format --check .
+uv run mypy
+uv run lint-imports --config importlinter.ini
+uv run pytest -q
+```
 
-**Regression gate.** CI replays recorded answers through an evaluation gate (`scripts/eval_gate.py`) so behavioural regressions fail the build.
+| Gate | Threshold | Current |
+|---|---|---|
+| `ruff check` + `format --check` | zero findings | clean |
+| `mypy` | strict, zero errors | clean |
+| `lint-imports` | 3 contracts kept, **0 broken** | kept |
+| `pytest` | all pass | 1,388 collected |
+| Coverage — global | `fail_under = 63` | ~70% |
+| Coverage — `safety/` | 70 | enforced in CI |
+| Coverage — `orchestration/` | 83 | enforced in CI |
+| `scripts/eval_gate.py` | task-quality floor | enforced in CI |
 
-**Performance harness.** `uv run python benchmarks/run.py` measures **p50 / p95 / p99** latency for 13 deterministic hot-path stages — plan parsing, context compaction, tool routing, model-selection ranking, grounding verification, and the knowledge fabric's BM25 build/query, query routing, reranking, and injection scan — appending results to `benchmarks/report.json` so trends stay comparable over time. *(Run it locally for numbers on your hardware; no figures are hard-coded here.)*
+Two known environmental caveats, stated so a red local run does not look like a
+regression: Playwright browser tests need a downloaded Chromium (CI has one, a fresh
+laptop may not), and the provider-swap test needs live network. Neither indicates broken
+application code.
 
-**Quality gate** (enforced on every push via `.github/workflows/ci.yml`):
+<img src="assets/divider.svg" width="100%" alt="">
 
-| Gate | Tool |
-| :-- | :-- |
-| Lint | `ruff check .` |
-| Types | `mypy` (strict) |
-| Import boundaries | `lint-imports` |
-| Tests + global coverage floor | `pytest --cov` (≥ 63%) |
-| Safety coverage floor | ≥ 70% |
-| Orchestration coverage floor | ≥ 83% |
-| Evaluation regression | `scripts/eval_gate.py` |
+## Current status (honest version)
 
-The test suite is roughly **790 test functions across 124 files**, and `pre-commit` mirrors the lint/type/import gates locally.
+Alpha. It runs, it is heavily tested, and it is a single-developer project — not a
+product with an SLA. Here is what that actually means, per subsystem:
 
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
+| Subsystem | State | Notes |
+|---|:---:|---|
+| Safety engine, tiers, audit chain | ✅ live | the most-tested layer; 70% coverage floor |
+| Orchestration + OTAR loop | ✅ live | 83% coverage floor; bounded steps/time/cost |
+| Memory: working, episodic, semantic, curated | ✅ live | 29 migrations, provenance-constrained |
+| Two-lane recall | ✅ live | newest work; Lane 1 is the default path |
+| Model fleet + routing | ✅ live | 5 free models, `$0.00`, one key |
+| Knowledge & research | ✅ live | BM25 + vector fusion, citations, confidence |
+| HTTP + WebSocket API | ✅ live | 18 routers, auth-gated except health |
+| CLI (both surfaces) | ✅ live | client + in-process operator CLI |
+| Web UI | ✅ builds | Next 16 / React 19, own CI job |
+| Learning & adaptation | 🧪 works, evolving | trajectories → experiences → skill promotion |
+| Multi-agent delegation | ⚠️ off | `agents.enabled: false` |
+| Browser automation | ⚠️ off | `browser.enabled: false`; needs Playwright browsers |
+| Voice pipeline | ⚠️ off | built + unit-tested against provider fakes; **not yet validated against live vendor APIs** |
+| Perception / computer use | 🧪 experimental | macOS only, needs the `macos` extra + Accessibility grant |
+| Postgres backend | 🛠 seam only | `PostgresConnection` exists and is never constructed; `ATLAS_DATABASE_URL` is read by nothing |
 
-## Extending ATLAS
+Two things worth calling out explicitly rather than burying:
 
-- **Add a model** — append an entry to `config/models.yaml` with its `cost_class`; the gateway picks it up under the matching profile. No code change.
-- **Retune inference tiers** — edit `fast_models` / `deep_models` / `fallback_models` in `config/settings.yaml`.
-- **Add a tool** — implement the `Tool` interface (`dry_run` + `execute`), register it in the composition root, and declare its permissions in `config/permissions.yaml`. It is automatically routed through the Safety Engine.
-- **Respect the layers** — infrastructure must not import safety, tools, interfaces, memory, or intelligence; provider adapters stay isolated. `lint-imports` will reject violations.
+- **The five OpenRouter slugs are unverified against the live catalog.** They are
+  best-guess `:free` identifiers. Providers rename and retire free tiers constantly.
+  If a model 404s, fix the slug in `config/models.yaml` — no code change needed.
+- **Voice has never talked to a real vendor endpoint.** Providers are covered by unit
+  tests with mocked HTTP and WebSocket transports, which proves the parsing and fallback
+  logic, not the wire format of today's API.
 
-## Current Status
-
-ATLAS is actively developed and honest about its maturity. The core runtime — orchestration, safety, audit, memory, model gateway, CLI, and API — is wired end-to-end and covered by the CI gates above. Some capabilities are intentionally opt-in or experimental:
-
-| Area | Reality |
-| :-- | :-- |
-| Core runtime (orchestrator, safety, audit, memory, gateway, CLI, API) | ✅ Wired & tested. |
-| Web dashboard (Next.js 16) | ✅ Local control plane; treat as a developer UI. |
-| Browser / computer use | ⚠️ Opt-in; off by default (runtime boots `DEGRADED`). |
-| Experience → skill learning | 🧪 Wired but experimental. |
-| Public-API connectors | 🧪 Discovered-only, safety-gated. |
-| Multi-agent specialists (`agents/`) | ✅ Integrated behind the single orchestrator; off by default (`agents.enabled: false`). |
-
-> **On the `agents/` package:** it implements a decompose → delegate-concurrently → synthesize strategy *inside* the one task pipeline. When enabled, the orchestrator asks an `AgentSupervisor` whether a request is worth splitting before it pays for a plan; if so, role specialists run the subtask DAG on the **same** `ReasoningLoop` instance the serial path uses — so every delegated tool call still passes through the identical `ToolDispatcher → SafetyEngine.guard()` funnel. There is no second runtime and no second tool path. Any failure inside the layer (decomposition, a specialist, synthesis) degrades to the serial single-agent path rather than failing the task.
+<img src="assets/divider.svg" width="100%" alt="">
 
 ## Roadmap
 
-- Expand computer-use perception beyond opt-in browsing.
-- Broaden the evaluation corpus and publish reproducible benchmark baselines.
-- Harden and document the public-API connector framework.
+Ordered by what would most improve the system, not by what is easiest:
+
+1. **Live validation pass** — confirm the five model slugs, exercise voice against real
+   Deepgram/Fish endpoints, and record the results in this README.
+2. **Backfill Lane 1** — the episodes written before `trigger_hint` existed are invisible
+   to fast recall. The hint function is pure, so one `UPDATE` sweep fixes it.
+3. **Turn learning on by default** — enough evaluation evidence that skill promotion
+   improves outcomes rather than just changing them.
+4. **Decide the storage question deliberately** — the vendor-neutral SQLite layer is the
+   right default; a Postgres/cloud migration should be an explicit choice with a
+   migration story, not a half-wired seam.
+5. **Harden multi-agent delegation** to the point it can ship enabled.
+
+<img src="assets/divider.svg" width="100%" alt="">
+
+## Extending ATLAS
+
+The layering is the extension guide — put new code where its dependencies allow, and the
+build gate tells you immediately if you guessed wrong.
+
+| To add… | Put it in | And then |
+|---|---|---|
+| a **tool** | `tools/` implementing the `base.py` contract | register it in `orchestration/registry.py`; add safety rules so it is classified, not defaulted |
+| a **model provider** | `intelligence/providers/` | the `provider-sdk-containment` contract keeps the vendor SDK from leaking upward |
+| a **model** | `config/models.yaml` | declare `cost_class`; add the id to a tier list in `settings.yaml` |
+| a **capability** | `capabilities/<name>/` + a `bootstrap/<name>.py` builder | return `None` when disabled, and add an `enabled` flag defaulting to `false` |
+| an **interface** | `interfaces/` | build an `InboundEvent`; never call a tool directly |
+| a **safety rule** | `config/` policy + `safety/matchers.py` | add a test that proves the *deny* path, not just the allow path |
+
+Three rules that are not negotiable, because the whole design rests on them:
+
+1. **Never bypass the funnel.** If your code calls a tool without `SafetyEngine.guard`,
+   it is wrong even if it works.
+2. **Never let a subsystem build its own dependencies.** Wiring belongs in `bootstrap/`.
+3. **Fail closed.** An error in classification, policy or provenance must raise the
+   restriction, never relax it.
+
+<img src="assets/divider.svg" width="100%" alt="">
 
 ## Contributing
 
-1. `uv sync` and enable hooks: `uv run pre-commit install`.
-2. Make your change; keep it inside its architectural layer.
-3. Run the gate locally: `just check` (or the individual `ruff` / `mypy` / `lint-imports` / `pytest` commands).
-4. Open a pull request — CI runs the same gate, including the coverage floors and evaluation regression.
+Issues and pull requests are welcome. Before opening one:
 
-## License
+```bash
+uv run ruff check . && uv run ruff format --check .
+uv run mypy && uv run lint-imports --config importlinter.ini && uv run pytest -q
+```
 
-Released under the **MIT License** — © 2026 Aman Bhaskar. See [`LICENSE`](LICENSE).
+A change to `safety/` or `orchestration/` needs tests that cover the refusal path — those
+two directories carry higher coverage floors precisely because their failure modes are the
+expensive ones. New behaviour behind a config flag should default to **off**.
 
-<p align="center"><img src="assets/divider.svg" alt="" width="100%" /></p>
+<img src="assets/divider.svg" width="100%" alt="">
 
-<p align="center">
-  <sub>Built to be run by the person who owns it — local-first, safety-governed, and fully auditable.</sub>
-</p>
+<div align="center">
+
+**MIT** © 2026 Aman Bhaskar · [LICENSE](LICENSE)
+
+<sub>Built to be understood, not just used. Every diagram above corresponds to code you
+can open.</sub>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
