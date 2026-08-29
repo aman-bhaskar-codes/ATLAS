@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img"
+     aria-label="Two-lane recall. Lane 1 is the default: a curated memory tier plus one indexed SQL query over write-time trigger hints, ranked by importance times two to the power of minus age over half-life with a thirty day half-life, limit three, using zero embedding, model or network calls. Lane 2, the vector path, is reached only when Lane 1 returns nothing above the minimum score and a deterministic regex detects recall intent.">
+  <defs>
+    <linearGradient id="rbg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f1521"/><stop offset="100%" stop-color="#0b0e14"/>
+    </linearGradient>
+    <radialGradient id="fastpkt" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/><stop offset="40%" stop-color="#3fb950"/><stop offset="100%" stop-color="#3fb950" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="rglow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="rframe"><rect width="1200" height="340" rx="12"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#rframe)" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
+    <rect width="1200" height="340" fill="url(#rbg)"/>
+    <rect x="0.5" y="0.5" width="1199" height="339" rx="12" fill="none" stroke="#30363d"/>
+    <text x="24" y="30" font-size="12.5" fill="#8b949e" letter-spacing="2.5">TWO-LANE RECALL — THE CHEAP LANE IS THE DEFAULT LANE</text>
+
+    <rect x="14" y="140" width="152" height="62" rx="9" fill="#141b2d" stroke="#388bfd"/>
+    <text x="90" y="166" text-anchor="middle" font-size="11.5" fill="#79c0ff" font-weight="700">INBOUND TURN</text>
+    <text x="90" y="185" text-anchor="middle" font-size="10" fill="#8b949e">“what did I decide?”</text>
+    <path d="M166 171 H206" stroke="#388bfd" stroke-width="1.6"/>
+    <path d="M206 171 V96 H236" stroke="#238636" stroke-width="1.6" fill="none"/>
+    <path d="M206 171 V252 H236" stroke="#8957e5" stroke-width="1.6" fill="none" stroke-dasharray="4 4"/>
+
+    <text x="236" y="66" font-size="11" fill="#3fb950" letter-spacing="1.6">LANE 1 · SQL · 0 model calls · 0 bytes egress</text>
+    <line x1="236" y1="96" x2="900" y2="96" stroke="#3fb950" stroke-width="1.8" stroke-dasharray="8 12"/>
+    <g stroke="#238636" fill="#0f2417" stroke-width="1.3">
+      <rect x="248" y="72" width="166" height="48" rx="8"/><rect x="452" y="72" width="186" height="48" rx="8"/>
+      <rect x="676" y="72" width="166" height="48" rx="8"/>
+    </g>
+    <g font-size="10.5" fill="#8b949e" text-anchor="middle">
+      <text x="331" y="92" fill="#3fb950" font-size="11.5" font-weight="700">curated tier</text>
+      <text x="331" y="108">indexed trigger_hint</text>
+      <text x="545" y="92" fill="#3fb950" font-size="11.5" font-weight="700">time-decay rank</text>
+      <text x="545" y="108">importance × 2^(−age / 30d)</text>
+      <text x="759" y="92" fill="#3fb950" font-size="11.5" font-weight="700">LIMIT 3</text>
+      <text x="759" y="108">≥ min_score → done</text>
+    </g>
+
+    <text x="236" y="222" font-size="11" fill="#bc8cff" letter-spacing="1.6">LANE 2 · VECTOR · reached only on a double condition</text>
+    <line x1="236" y1="252" x2="900" y2="252" stroke="#8957e5" stroke-width="1.8" stroke-opacity="0.35" stroke-dasharray="5 6"/>
+    <g stroke="#8957e5" fill="#1c1233" stroke-width="1.3">
+      <rect x="248" y="228" width="166" height="48" rx="8"/><rect x="452" y="228" width="186" height="48" rx="8"/>
+      <rect x="676" y="228" width="166" height="48" rx="8"/>
+    </g>
+    <g font-size="10.5" fill="#8b949e" text-anchor="middle">
+      <text x="331" y="248" fill="#bc8cff" font-size="11.5" font-weight="700">gate</text>
+      <text x="331" y="264">miss ∧ recall intent</text>
+      <text x="545" y="248" fill="#bc8cff" font-size="11.5" font-weight="700">embed 1024-d</text>
+      <text x="545" y="264">qwen3-embedding · 1 call</text>
+      <text x="759" y="248" fill="#bc8cff" font-size="11.5" font-weight="700">chroma k-NN</text>
+      <text x="759" y="264">semantic neighbours</text>
+    </g>
+    <g transform="translate(324 292)" stroke="#8957e5" fill="none" stroke-width="1.4">
+      <rect x="0" y="4" width="16" height="12" rx="2" fill="#1c1233"/>
+      <path d="M3 4V1.5A5 5 0 0 1 13 1.5V4"/>
+    </g>
+    <text x="352" y="306" font-size="10" fill="#6e7681">unlocks only when both conditions hold</text>
+
+    <path d="M900 96 H930" stroke="#238636" stroke-width="1.6"/>
+    <path d="M900 252 H930" stroke="#8957e5" stroke-width="1.6" stroke-dasharray="4 4"/>
+    <path d="M930 96 V171 H962" stroke="#238636" stroke-width="1.6" fill="none"/>
+    <path d="M930 252 V171" stroke="#8957e5" stroke-width="1.6" fill="none" stroke-dasharray="4 4"/>
+    <rect x="962" y="140" width="224" height="62" rx="9" fill="#161b22" stroke="#30363d"/>
+    <text x="1074" y="164" text-anchor="middle" font-size="11.5" fill="#e6edf3" font-weight="700">CONTEXT INJECTED</text>
+    <text x="1074" y="183" text-anchor="middle" font-size="10" fill="#8b949e">provenance-filtered in SQL</text>
+
+    <g filter="url(#rglow)" transform="translate(759 96)">
+      <circle r="11" fill="url(#fastpkt)"/><circle r="3.5" fill="#ffffff"/>
+    </g>
+
+    <text x="962" y="222" font-size="10.5" fill="#6e7681" text-anchor="middle">memory/lanes.py · idx_ep_trigger_hint (partial)</text>
+  </g>
+</svg>
