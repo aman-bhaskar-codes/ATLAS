@@ -256,7 +256,7 @@ def build_orchestration(
         skill_store=skill_store,  # Batch 4
         world_state=world_state,  # Batch 4
         dag_executor=DagExecutor(dispatcher),  # Batch 5
-        supervisor=_build_supervisor(config, gateway, reasoning, events),
+        supervisor=_build_supervisor(config, gateway, reasoning, events, verifier),
     )
 
     return OrchestrationComponents(
@@ -274,6 +274,7 @@ def _build_supervisor(
     gateway: ModelGateway,
     reasoning: ReasoningLoop,
     events: EventPublisher,
+    verifier: Verifier,
 ) -> AgentSupervisor | None:
     """Assemble the multi-agent layer, or return None when it is disabled.
 
@@ -284,6 +285,10 @@ def _build_supervisor(
     The specialist reuses the SAME ReasoningLoop instance the serial path uses.
     That is what guarantees delegated tool calls cannot skip the SafetyEngine:
     there is only ever one loop, one dispatcher, one funnel.
+
+    It also receives the SAME Verifier, so a delegated answer is checked by the
+    same strategies as a serial one — there is no second verification system and
+    no LLM-blesses-LLM path.
     """
     cfg = config.agents
     if not cfg.enabled:
@@ -302,6 +307,8 @@ def _build_supervisor(
         ),
         synthesizer=Synthesizer(gateway, max_tokens=cfg.synthesis_max_tokens),
         events=events,
+        verifier=verifier,
         max_concurrency=cfg.max_concurrency,
         deadline_s=cfg.deadline_s,
+        max_total_tokens=cfg.max_total_tokens,
     )

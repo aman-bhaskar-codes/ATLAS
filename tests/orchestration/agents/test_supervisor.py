@@ -262,7 +262,7 @@ async def test_lifecycle_events_are_emitted_for_the_whole_run() -> None:
 
     kinds = events.kinds()
     assert kinds[0] == "agents.decomposed"
-    assert kinds[-1] == "agents.synthesized"
+    assert kinds[-2:] == ["agents.synthesized", "agents.verified"]
     assert kinds.count("agents.subtask_started") == 2
     assert kinds.count("agents.subtask_finished") == 2
     decomposed = events.emitted[0]

@@ -1,4 +1,4 @@
-"""AgentSupervisor — decompose, delegate concurrently, synthesize.
+"""AgentSupervisor — decompose, delegate concurrently, synthesize, verify.
 
 WHY it lives behind the Orchestrator rather than beside it: there is exactly one
 task pipeline, and multi-agent execution is a *strategy inside* it, not a second
@@ -10,29 +10,40 @@ Bounded by construction:
   - the graph is capped (subtask count, steps per subtask) at decomposition;
   - a semaphore caps how many specialists run at once (single-user machine);
   - each specialist carries its own step/token/runtime budget;
+  - a run-wide token budget abandons remaining batches once spend is exhausted;
   - a wall-clock deadline abandons remaining batches rather than running long;
   - a failed subtask SKIPS its transitive dependents instead of running them
     against missing input.
 
+Verified, not assumed: a specialist reporting SUCCEEDED means its own loop
+finished, which is not evidence that the request was answered. After synthesis
+the supervisor runs the SAME Verifier the serial path uses (deterministic
+checks first — see orchestration/verification.py) plus a deterministic
+cross-branch conflict scan, and derives a RunOutcome from that. There is no
+verifier agent persona: an LLM asked to bless another LLM's answer is a second
+opinion, not verification.
+
 Safety: every tool call still goes ReasoningLoop -> ToolDispatcher ->
 SafetyEngine.guard(). The supervisor introduces no tool path, no tier change,
-and no way to approve anything.
+and no way to approve anything. Verification runs through the same funnel.
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from atlas.infra.cognition import TaskIntent
+from atlas.infra.cognition import Evidence, TaskIntent, VerificationResult
 from atlas.infra.ids import CorrelationId, TaskId
 from atlas.infra.logging import get_logger
+from atlas.orchestration.agents.adjudication import ClaimConflict, detect_conflicts
 from atlas.orchestration.agents.decomposer import TaskDecomposer
 from atlas.orchestration.agents.specialists import Specialist
 from atlas.orchestration.agents.synthesizer import Synthesizer
 from atlas.orchestration.agents.types import (
+    RunOutcome,
     SubTask,
     SubTaskResult,
     SubTaskStatus,
@@ -40,11 +51,13 @@ from atlas.orchestration.agents.types import (
 )
 from atlas.orchestration.errors import CancellationError
 from atlas.orchestration.events import EventPublisher
+from atlas.orchestration.goal import GoalState, Verifier
 from atlas.orchestration.managers.cancellation import CancellationToken
 
 _log = get_logger("atlas.orch.agents.supervisor")
 
 _UPSTREAM_CHARS = 4000  # per dependency, injected into a specialist's context
+_EVIDENCE_CHARS = 240  # per subtask, in the evidence handed to the verifier
 
 
 @dataclass(frozen=True)
@@ -60,12 +73,42 @@ class SupervisionResult:
     answer: str | None = None
     results: tuple[SubTaskResult, ...] = ()
     dag: TaskDAG | None = None
+    # Independent verification of the synthesized answer. None means no verifier
+    # was wired, which is reported as UNCERTAIN — never as verified.
+    verification: VerificationResult | None = None
+    conflicts: tuple[ClaimConflict, ...] = field(default_factory=tuple)
+    # Subtasks never attempted because the run ran out of time or tokens, as
+    # opposed to being skipped because a dependency failed. An incomplete graph
+    # cannot produce a verified answer.
+    abandoned: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def ok(self) -> bool:
-        """True when at least one subtask succeeded and none of the graph's
-        leaves were left unattempted for lack of budget."""
+        """True when the run produced something worth returning."""
         return bool(self.results) and any(r.ok for r in self.results)
+
+    @property
+    def outcome(self) -> RunOutcome:
+        """Derived, never stored — so no caller can assert a verdict it did not earn."""
+        if not self.ok or not (self.answer or "").strip():
+            return RunOutcome.FAILED
+        v = self.verification
+        if v is None:
+            return RunOutcome.UNCERTAIN  # nothing checked it
+        if not v.passed:
+            # A crashed verifier means "not verified", not "proven wrong".
+            reason = v.failure_reason or ""
+            return RunOutcome.UNCERTAIN if reason.startswith("verifier_error") else RunOutcome.REJECTED
+        if v.verifier == "none":
+            # not_applicable(): passed=True but nothing was actually checked.
+            return RunOutcome.UNCERTAIN
+        if self.conflicts or self.abandoned:
+            return RunOutcome.UNCERTAIN
+        return RunOutcome.VERIFIED
+
+    @property
+    def verified(self) -> bool:
+        return self.outcome is RunOutcome.VERIFIED
 
     @property
     def steps_taken(self) -> int:
@@ -113,18 +156,28 @@ class AgentSupervisor:
         specialist: Specialist,
         synthesizer: Synthesizer,
         events: EventPublisher,
+        verifier: Verifier | None = None,
         max_concurrency: int = 2,
         deadline_s: float = 600.0,
+        max_total_tokens: int = 0,
     ) -> None:
         self._decomposer = decomposer
         self._specialist = specialist
         self._synthesizer = synthesizer
         self._events = events
+        # The SAME verifier instance the serial path uses. Passing it in rather
+        # than constructing one here is what keeps there being a single
+        # verification system (deterministic checks first, model opinion last).
+        self._verifier = verifier
         # WHY default 2, not the CPU count: concurrent specialists contend for
         # ONE local model (gpu_concurrency: 1). Beyond a small number they queue
         # on the gateway anyway while multiplying token spend.
         self._sem = asyncio.Semaphore(max(1, max_concurrency))
         self._deadline_s = deadline_s
+        # Run-wide ceiling. Per-subtask token limits bound one specialist; they
+        # do not bound a graph, so a wide DAG could multiply spend by its width.
+        # 0 disables the check.
+        self._max_total_tokens = max(0, max_total_tokens)
 
     async def maybe_run(
         self,
@@ -154,13 +207,14 @@ class AgentSupervisor:
             repairs=list(dag.repairs),
         )
 
-        results = await self._execute(
+        execution = await self._execute(
             dag=dag,
             task_id=task_id,
             correlation_id=correlation_id,
             context=context,
             token=token,
         )
+        results = execution.results
         answer = await self._synthesizer.synthesize(
             request=request,
             results=results,
@@ -174,14 +228,86 @@ class AgentSupervisor:
             succeeded=sum(1 for r in results if r.ok),
             failed=sum(1 for r in results if r.status is SubTaskStatus.FAILED),
             skipped=sum(1 for r in results if r.status is SubTaskStatus.SKIPPED),
+            abandoned=list(execution.abandoned),
         )
-        return SupervisionResult(
+
+        # Independent checks, in order of trustworthiness: a deterministic scan
+        # for contradictions between branches, then the shared Verifier.
+        conflicts = detect_conflicts(results)
+        verification = await self._verify(
+            request=request,
+            intent=intent,
+            answer=answer,
+            results=results,
+            context=context,
+            correlation_id=correlation_id,
+        )
+
+        supervision = SupervisionResult(
             delegated=True,
             reason=outcome.reason,
             answer=answer,
             results=results,
             dag=dag,
+            verification=verification,
+            conflicts=conflicts,
+            abandoned=execution.abandoned,
         )
+        await self._events.emit(
+            task_id=task_id,
+            correlation_id=correlation_id,
+            state="validating",
+            kind="agents.verified",
+            outcome=supervision.outcome.value,
+            verifier=verification.verifier if verification else "none",
+            verification_passed=bool(verification.passed) if verification else None,
+            verification_score=round(verification.score, 3) if verification else None,
+            conflicts=[c.describe() for c in conflicts],
+        )
+        return supervision
+
+    async def _verify(
+        self,
+        *,
+        request: str,
+        intent: TaskIntent,
+        answer: str,
+        results: tuple[SubTaskResult, ...],
+        context: str,
+        correlation_id: CorrelationId,
+    ) -> VerificationResult | None:
+        """Check the synthesized answer against the ORIGINAL request's criteria.
+
+        Fails CLOSED in the honest direction: a verifier that raises yields
+        ``VerificationResult.error()`` (passed=False), which the outcome maps to
+        UNCERTAIN — not to a pass, and not to a claim that the answer is wrong.
+        Returns None only when no verifier is wired at all, which is likewise
+        reported as UNCERTAIN.
+        """
+        if self._verifier is None:
+            return None
+        goal = GoalState(
+            objective=intent.objective or request,
+            success_criteria=intent.success_criteria,
+            current_state="delegated",
+        )
+        try:
+            return await self._verifier.verify(
+                goal,
+                answer,
+                correlation_id,
+                context,
+                intent.domain,
+                _evidence_from(results),
+            )
+        except Exception as exc:
+            _log.warning(
+                "agents.verification_failed",
+                event_type="orchestration",
+                correlation_id=str(correlation_id),
+                error=repr(exc),
+            )
+            return VerificationResult.error(repr(exc), verifier=getattr(self._verifier, "name", "unknown"))
 
     async def _execute(
         self,
@@ -191,11 +317,12 @@ class AgentSupervisor:
         correlation_id: CorrelationId,
         context: str,
         token: CancellationToken,
-    ) -> tuple[SubTaskResult, ...]:
+    ) -> _Execution:
         """Run the graph batch by batch. Returns one result per subtask."""
         started = time.perf_counter()
         done: dict[str, SubTaskResult] = {}
         skipped: set[str] = set()
+        abandoned: list[str] = []
 
         for batch in dag.batches():
             runnable = [s for s in batch if s.id not in skipped]
@@ -205,16 +332,17 @@ class AgentSupervisor:
             if not runnable:
                 continue
 
-            if (elapsed := time.perf_counter() - started) > self._deadline_s:
+            if reason := self._exhausted(started, done):
                 _log.warning(
-                    "agents.deadline_exceeded",
+                    "agents.budget_exhausted",
                     event_type="orchestration",
                     correlation_id=str(correlation_id),
-                    elapsed_s=round(elapsed, 1),
+                    reason=reason,
                     abandoned=[s.id for s in runnable],
                 )
                 for s in runnable:
-                    done[s.id] = _skip(s, "supervisor deadline exceeded before this subtask started")
+                    done[s.id] = _skip(s, f"{reason} before this subtask started")
+                    abandoned.append(s.id)
                     skipped |= dag.dependents_of(s.id)
                 continue
 
@@ -249,7 +377,18 @@ class AgentSupervisor:
 
         # Preserve DAG order in the returned tuple; fill any gap defensively so
         # the synthesizer always sees every subtask exactly once.
-        return tuple(done.get(s.id) or _skip(s, "not executed") for s in dag.subtasks)
+        results = tuple(done.get(s.id) or _skip(s, "not executed") for s in dag.subtasks)
+        return _Execution(results=results, abandoned=tuple(abandoned))
+
+    def _exhausted(self, started: float, done: dict[str, SubTaskResult]) -> str:
+        """Return a reason string when no further batch may start."""
+        if (elapsed := time.perf_counter() - started) > self._deadline_s:
+            return f"supervisor deadline exceeded ({elapsed:.0f}s > {self._deadline_s:.0f}s)"
+        if self._max_total_tokens:
+            spent = sum(r.tokens_used for r in done.values())
+            if spent >= self._max_total_tokens:
+                return f"run token budget exhausted ({spent} >= {self._max_total_tokens})"
+        return ""
 
     async def _run_one(
         self,
@@ -297,6 +436,38 @@ class AgentSupervisor:
                 tool_calls=result.tool_calls,
             )
             return result
+
+
+@dataclass(frozen=True)
+class _Execution:
+    """Graph execution outcome: one result per subtask, plus what was abandoned.
+
+    Abandonment is tracked separately from skipping because the two mean
+    different things: a skipped subtask was correctly not attempted (its input
+    never existed), whereas an abandoned one *should* have run and did not. Only
+    the second makes the run's answer incomplete.
+    """
+
+    results: tuple[SubTaskResult, ...]
+    abandoned: tuple[str, ...] = ()
+
+
+def _evidence_from(results: tuple[SubTaskResult, ...]) -> tuple[Evidence, ...]:
+    """Turn specialist outcomes into verifier evidence.
+
+    Deterministic and derived from what actually ran — a subtask's id, role and
+    self-reported status, never its claims. GroundingVerifier uses this to reject
+    an answer that no branch actually supports.
+    """
+    return tuple(
+        Evidence(
+            source=r.subtask_id,
+            operation=r.role.value,
+            ok=r.ok,
+            summary=(r.output[:_EVIDENCE_CHARS] if r.ok else (r.error or r.status.value)),
+        )
+        for r in results
+    )
 
 
 def _upstream_block(subtask: SubTask, done: dict[str, SubTaskResult]) -> str:

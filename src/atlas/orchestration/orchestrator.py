@@ -23,6 +23,7 @@ from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
 from atlas.infra.tasks import spawn
 from atlas.infra.types import InboundEvent
+from atlas.orchestration.agents.types import RunOutcome
 from atlas.orchestration.context_builder import ContextBuilder
 from atlas.orchestration.events import EventPublisher
 from atlas.orchestration.goal import GoalState
@@ -45,6 +46,34 @@ _SAFETY_CONSTRAINTS = (
     "You operate under deny-by-default. Consequential actions require confirmation. "
     "Prefer reversible, least-privilege actions. Never fabricate tool results."
 )
+
+
+def _unverified_banner(supervision: Any) -> str:
+    """A visible, leading statement that the answer below was not verified.
+
+    WHY it goes in the answer text and not only in a flag: `verification_passed`
+    is persisted and read by the learning loop, but no interface renders it. An
+    unverified multi-agent answer that *looks* finished is the specific failure
+    this guards against — the user has to be able to see it.
+    """
+    outcome = supervision.outcome
+    reasons: list[str] = []
+    v = supervision.verification
+    if v is None:
+        reasons.append("no verifier is configured")
+    elif v.verifier == "none":
+        reasons.append("no applicable verification strategy")
+    elif not v.passed:
+        reasons.append(v.failure_reason or "verification did not pass")
+    if supervision.conflicts:
+        reasons.append(
+            f"{len(supervision.conflicts)} cross-agent contradiction(s): " + supervision.conflicts[0].describe()
+        )
+    if supervision.abandoned:
+        reasons.append("incomplete graph — not run: " + ", ".join(supervision.abandoned))
+    detail = "; ".join(reasons) or "verification inconclusive"
+    label = "NOT VERIFIED" if outcome is RunOutcome.UNCERTAIN else "FAILED VERIFICATION"
+    return f"[{label} — {detail}]\n\n"
 
 
 @dataclass(frozen=True)
@@ -326,16 +355,27 @@ class Orchestrator:
             return None
 
         ok = supervision.ok
+        outcome = supervision.outcome
+        verification = supervision.verification
         machine.transition(TaskState.REASONING)
         machine.transition(TaskState.VALIDATING)
         machine.transition(TaskState.COMPLETED if ok else TaskState.FAILED)
 
+        # A multi-agent run must not present an unchecked answer as a finished
+        # one. The flag below is what the learning loop and the trajectory read;
+        # the banner is what the human reads.
+        answer = supervision.answer if ok else None
+        if answer and outcome is not RunOutcome.VERIFIED:
+            answer = _unverified_banner(supervision) + answer
+
         result = TaskResult(
             task_id=task.id,
             ok=ok,
-            answer=supervision.answer if ok else None,
+            answer=answer,
             steps_taken=supervision.steps_taken,
             error=None if ok else f"all delegated subtasks failed ({supervision.summary()})",
+            verification_passed=(outcome is RunOutcome.VERIFIED) if ok else None,
+            verification_score=verification.score if verification else None,
             actions=supervision.actions,
             observations=supervision.observations,
             latency_ms=int((time.perf_counter() - started) * 1000),
@@ -371,6 +411,8 @@ class Orchestrator:
             latency_ms=result.latency_ms,
             strategy="multi_agent",
             subtasks=len(supervision.results),
+            outcome=outcome.value,
+            verification_passed=result.verification_passed,
         )
         return result
 

@@ -207,6 +207,11 @@ class AgentsCfg(BaseModel):
     max_steps_per_subtask: int = 6
     max_concurrency: int = 2  # concurrent specialists (one local GPU lane)
     max_tokens_per_subtask: int = 20_000
+    # Run-wide ceiling. Per-subtask limits bound one specialist, not a graph:
+    # a 4-wide DAG at 20k each could spend 80k plus decomposition and synthesis.
+    # Once this is reached, remaining subtasks are abandoned and the run can no
+    # longer report a verified result. 0 disables the check.
+    max_total_tokens: int = 60_000
     subtask_runtime_s: float = 180.0  # per specialist
     deadline_s: float = 600.0  # whole delegated run
     synthesis_max_tokens: int = 2048

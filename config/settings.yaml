@@ -101,6 +101,7 @@ agents:
   max_steps_per_subtask: 6
   max_concurrency: 2       # concurrent specialists; local models have 1 GPU lane
   max_tokens_per_subtask: 20000
+  max_total_tokens: 60000   # whole run; remaining subtasks abandoned past this
   subtask_runtime_s: 180.0 # per specialist
   deadline_s: 600.0        # whole delegated run; remaining subtasks are skipped
   synthesis_max_tokens: 2048

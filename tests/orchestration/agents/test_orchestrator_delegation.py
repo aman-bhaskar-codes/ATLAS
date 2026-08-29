@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from atlas.infra.cognition import Complexity, RiskLevel, TaskDomain, TaskIntent
+from atlas.infra.cognition import Complexity, RiskLevel, TaskDomain, TaskIntent, VerificationResult
 from atlas.infra.ids import CorrelationId, ExecutionId, TaskId
 from atlas.infra.types import InboundEvent
 from atlas.orchestration.agents.supervisor import SupervisionResult
@@ -140,7 +140,12 @@ class FakeTrajectoryStore:
         return ()
 
 
-def delegated_result(*, ok: bool = True) -> SupervisionResult:
+def verified() -> VerificationResult:
+    """What an independently-checked delegated run looks like."""
+    return VerificationResult(passed=True, score=0.9, verifier="fake")
+
+
+def delegated_result(*, ok: bool = True, verification: VerificationResult | None = None) -> SupervisionResult:
     status = SubTaskStatus.SUCCEEDED if ok else SubTaskStatus.FAILED
     results = (
         SubTaskResult(
@@ -161,6 +166,7 @@ def delegated_result(*, ok: bool = True) -> SupervisionResult:
         answer="synthesized answer" if ok else None,
         results=results,
         dag=TaskDAG.build("goal", (SubTask(id="st1", objective="research"),)),
+        verification=verification if ok else None,
     )
 
 
@@ -207,13 +213,14 @@ async def test_no_supervisor_leaves_the_serial_path_untouched() -> None:
 
 async def test_delegation_returns_the_synthesized_answer_and_skips_planning() -> None:
     planner, reasoning, events = FakePlanner(), FakeReasoning(), FakeEvents()
-    sup = StubSupervisor(delegated_result())
+    sup = StubSupervisor(delegated_result(verification=verified()))
     orch = build_orchestrator(supervisor=sup, planner=planner, reasoning=reasoning, events=events)
 
     result = await orch.run(event())
 
     assert result.ok is True
     assert result.answer == "synthesized answer"
+    assert result.verification_passed is True
     assert result.steps_taken == 3
     assert result.tool_calls == 2
     assert result.model_calls == 2
@@ -225,6 +232,36 @@ async def test_delegation_returns_the_synthesized_answer_and_skips_planning() ->
     completed = [e for e in events.emitted if e["kind"] == "task.completed"]
     assert completed[-1]["strategy"] == "multi_agent"
     assert completed[-1]["subtasks"] == 1
+    assert completed[-1]["outcome"] == "verified"
+
+
+async def test_an_unverified_delegated_answer_says_so_in_the_answer_and_the_flag() -> None:
+    """No interface renders `verification_passed`, so the caveat has to be visible
+    in the text the user actually reads."""
+    events = FakeEvents()
+    orch = build_orchestrator(supervisor=StubSupervisor(delegated_result()), events=events)
+
+    result = await orch.run(event())
+
+    assert result.ok is True
+    assert result.verification_passed is False
+    assert result.answer is not None
+    assert result.answer.startswith("[NOT VERIFIED")
+    assert "synthesized answer" in result.answer  # the work is not thrown away
+    assert [e for e in events.emitted if e["kind"] == "task.completed"][-1]["outcome"] == "uncertain"
+
+
+async def test_a_rejected_delegated_answer_is_flagged_not_silently_completed() -> None:
+    rejected = VerificationResult(passed=False, score=0.1, verifier="fake", failure_reason="criteria unmet")
+    orch = build_orchestrator(supervisor=StubSupervisor(delegated_result(verification=rejected)))
+
+    result = await orch.run(event())
+
+    assert result.verification_passed is False
+    assert result.verification_score == 0.1
+    assert result.answer is not None
+    assert result.answer.startswith("[FAILED VERIFICATION")
+    assert "criteria unmet" in result.answer
 
 
 async def test_a_declining_supervisor_falls_through_to_serial() -> None:
@@ -306,13 +343,14 @@ async def test_a_failing_trajectory_save_does_not_fail_the_delegated_task() -> N
         async def save_trajectory(self, trajectory: Any) -> Any:
             raise RuntimeError("disk full")
 
-    supervision = delegated_result()
+    supervision = delegated_result(verification=verified())
     with_actions = SupervisionResult(
         delegated=True,
         reason="r",
         answer="synthesized answer",
         results=(supervision.results[0].model_copy(update={"actions": (ActionRecord(step=1, kind="final_answer"),)}),),
         dag=supervision.dag,
+        verification=verified(),
     )
     orch = build_orchestrator(supervisor=StubSupervisor(with_actions), trajectory_store=BrokenStore())
 

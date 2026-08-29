@@ -25,6 +25,7 @@ from atlas.infra.cognition import RiskLevel
 __all__ = [
     "AgentRole",
     "DecompositionOutcome",
+    "RunOutcome",
     "SubTask",
     "SubTaskResult",
     "SubTaskStatus",
@@ -62,6 +63,27 @@ class SubTaskStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     SKIPPED = "skipped"  # a dependency failed; never attempted
+
+
+class RunOutcome(StrEnum):
+    """Verdict on a whole delegated run.
+
+    WHY this is separate from "did a subtask succeed": a specialist reporting
+    SUCCEEDED means it finished its own loop, not that the run answered the
+    request. Only independent verification can say that, so the run-level
+    verdict is derived from the verification result — never self-reported.
+
+    UNCERTAIN is a first-class outcome, not a soft failure: when verification
+    was inconclusive, was never performed, branches contradicted each other, or
+    part of the graph was abandoned for budget, the honest state is "we have an
+    answer and cannot vouch for it". Collapsing that into either success or
+    failure is what makes a multi-agent system confidently wrong.
+    """
+
+    VERIFIED = "verified"  # answered and independently verified
+    UNCERTAIN = "uncertain"  # answered; verification inconclusive/absent/contested
+    REJECTED = "rejected"  # answered; verification actively failed
+    FAILED = "failed"  # no usable answer was produced at all
 
 
 class SubTask(BaseModel):
