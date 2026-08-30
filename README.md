@@ -1,5 +1,5 @@
 <!--
-  ATLAS README — regenerated 2026-08-29 directly against the live tree.
+  ATLAS README — regenerated 2026-08-30 directly against the live tree.
   Every number, path, flag and command below was verified from source, not
   from memory. Motion graphics are self-hosted animated SVGs (no third-party
   badge/animation services), each paired with a prefers-reduced-motion
@@ -17,7 +17,7 @@
 <br/>
 
 [![Python](https://img.shields.io/badge/python-3.13%2B-3776AB?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-1%2C388%20collected-3fb950?style=flat-square&logo=pytest&logoColor=white)](tests)
+[![Tests](https://img.shields.io/badge/tests-1%2C687%20collected-3fb950?style=flat-square&logo=pytest&logoColor=white)](tests)
 [![Coverage](https://img.shields.io/badge/coverage-70%25%20%2F%20floor%2063-238636?style=flat-square)](pyproject.toml)
 [![Models](https://img.shields.io/badge/models-5%20free%20%C2%B7%201%20key-58a6ff?style=flat-square)](config/models.yaml)
 [![Cost](https://img.shields.io/badge/runtime%20cost-%240.00-0f2417?style=flat-square&labelColor=238636)](config/settings.yaml)
@@ -25,7 +25,7 @@
 [![Layers](https://img.shields.io/badge/import--linter-3%20contracts%20kept-f778ba?style=flat-square)](importlinter.ini)
 [![License](https://img.shields.io/badge/license-MIT-e3b341?style=flat-square)](LICENSE)
 
-**[What it is](#what-atlas-is)** · **[Pipeline](#the-pipeline-one-funnel-no-bypasses)** · **[Architecture](#architecture)** · **[Safety](#safety-the-part-that-says-no)** · **[Memory](#memory--two-lane-recall)** · **[Models](#intelligence--cost)** · **[Voice](#voice)** · **[Quick start](#quick-start)** · **[Config](#configuration)** · **[Status](#current-status-honest-version)**
+**[What it is](#what-atlas-is)** · **[Pipeline](#the-pipeline-one-funnel-no-bypasses)** · **[Architecture](#architecture)** · **[Safety](#safety-the-part-that-says-no)** · **[Memory](#memory--two-lane-recall)** · **[Models](#intelligence--cost)** · **[Voice](#voice)** · **[IDE / ADE](#ide--ade-the-agentic-development-environment)** · **[Quick start](#quick-start)** · **[Config](#configuration)** · **[Status](#current-status-honest-version)**
 
 </div>
 
@@ -51,19 +51,19 @@ configuration resolves to five free OpenRouter models behind a single API key.
 
 ## At a glance
 
-Everything in this table was measured against the working tree at commit `f72d29e`
-on branch `pass1/cognitive-runtime`.
+Everything in this table was measured against the working tree on branch `main`
+(`672e33e`).
 
 | | |
 |---|---|
-| **Source** | 475 Python modules · 65,243 lines · 19 top-level packages under `src/atlas` |
-| **Tests** | 1,388 collected across 177 test files · ~70% line coverage |
+| **Source** | 491 Python modules · 69,398 lines · 19 top-level packages under `src/atlas` |
+| **Tests** | 1,687 collected across 201 test files · ~70% line coverage |
 | **Coverage floors** | 63% global · 70% `safety/` · 83% `orchestration/` (CI-enforced) |
 | **Layering** | 14 layers, 3 import-linter contracts, 0 broken |
-| **Database** | SQLite (`.atlas/atlas.db`), 29 forward-only migrations, versioned in-band |
+| **Database** | SQLite (`.atlas/atlas.db`), 30 forward-only migrations, versioned in-band |
 | **Model fleet** | 5 OpenRouter `:free` models, 1 `OPENROUTER_API_KEY`, `$0.00` per run |
 | **Embeddings** | `qwen/qwen3-embedding-0.6b`, 1024-dim, same key and base URL as chat |
-| **HTTP surface** | 18 routers under `/api/v1` + 2 WebSocket routes |
+| **HTTP surface** | 19 routers under `/api/v1` + WebSocket routes (events, voice) |
 | **Runtime** | Python 3.13+, `uv`-managed, phased startup with health gating |
 | **Web UI** | Next.js 16.2.11 · React 19.2.4 (separate `frontend/` workspace) |
 
@@ -169,7 +169,7 @@ atlas/
 │  ├─ safety/              # classifier, engine, matchers, policy, sandbox, kill switch, audit
 │  ├─ intelligence/        # provider registry, model catalog, selection, routing
 │  ├─ memory/              # working, episodic, semantic, curated, lanes, trajectory
-│  ├─ capabilities/        # browser, computer_use, connectors, pim, notification, voice
+│  ├─ capabilities/        # browser, computer_use, connectors, pim, notification, voice, ide
 │  ├─ knowledge/           # ingestion, chunking, BM25 + rerank, citations, synthesis
 │  ├─ orchestration/       # orchestrator, planner, registry, limits, self-critique, DAG
 │  ├─ agents/              # multi-agent delegation (disabled by default)
@@ -183,7 +183,7 @@ atlas/
 ├─ src/atlas_cli/          # the installed `atlas` command — thin HTTP client
 ├─ config/                 # settings.yaml, models.yaml, policies (hot-editable)
 ├─ frontend/               # Next.js 16 web UI
-├─ tests/                  # 177 files, 1,388 tests
+├─ tests/                  # 201 files, 1,687 tests
 └─ importlinter.ini        # the 3 layering contracts CI enforces
 ```
 
@@ -434,7 +434,61 @@ python -m atlas.interfaces.cli voice speak "नमस्ते, यह एक �
 
 <img src="assets/divider.svg" width="100%" alt="">
 
-## Optional subsystems
+## IDE / ADE: the Agentic Development Environment
+
+> **Status: foundational slices live and tested; the full agentic build-loop is in progress.**
+> Everything below is governed the same way as any other tool call — the ADE is a
+> capability, not a privileged escape hatch.
+
+The ADE (`capabilities/ide/`) turns ATLAS into a coding environment that can open a
+project, read and edit it under content-hash versioning, run commands, and report
+git state — all **through the safety funnel**, never around it. It lives low in the
+layer graph (it may import `infra`/`safety`/`tools` but **not** `orchestration` or
+`interfaces`); the HTTP/WS surface and the `atlas ide` commands live up in
+`interfaces/`. Workspaces persist behind an `IDESessionStore` protocol (shared
+SQLite today) so a session survives a restart.
+
+What works today, end to end:
+
+| Capability | Module | Governed how |
+|---|---|---|
+| Open workspace · file tree · read document | `workspace.py` | read-only (T0) |
+| Structured edits with stale-write refusal | `editing.py` | write routed through `SafetyEngine.guard`; refuses if the on-disk `sha256` moved |
+| Run a command in the workspace root | `commands.py` | `CommandRunner` → funnel; read-only commands allow, anything else needs confirmation |
+| `git status` (porcelain v1 parse) | `git.py` | read-only through the funnel |
+| `git diff` / `git diff --staged` (numstat + patch) | `git.py` | read-only through the funnel |
+| Project model (languages, managers, frameworks, test/build/run commands) | `project.py` | read-only analysis; reported commands are candidates, not auto-run |
+
+Two safety properties are worth stating because they were the hard part:
+
+- **Content-hash versioning, not timestamps.** An edit declares the `sha256` it
+  expects; if the file changed underneath, the writer returns `stale=True` and writes
+  nothing. Concurrent edits cannot silently clobber.
+- **The governed-command path is real.** Commands are tiered by an explicit
+  `operation: run` rule and matched against a **token-prefix** allowlist, so
+  `git status` / `git diff` are allowed while `git push` and unknown executables fall
+  to deny-by-default. Read-only git runs at T1; `git commit` / `pytest` demand
+  confirmation.
+
+Both surfaces are thin projections over one `IDEService`:
+
+```bash
+# in-process operator CLI
+python -m atlas.interfaces.cli ide tree    <path>
+python -m atlas.interfaces.cli ide read    <path> <file>
+python -m atlas.interfaces.cli ide edit    <path> <file> ...
+python -m atlas.interfaces.cli ide run     <path> "<command>"
+python -m atlas.interfaces.cli ide git     <path>
+python -m atlas.interfaces.cli ide diff    <path> [--staged] [--patch]
+python -m atlas.interfaces.cli ide project <path>
+```
+
+The HTTP mirror is the `ide` router under `/api/v1/ide/workspaces/...` (open, tree,
+document, change, command, git/status, git/diff, project). It returns `503` until the
+subsystem is enabled and the service is built — the same optional-subsystem
+convention `browser` and `voice` follow.
+
+<img src="assets/divider.svg" width="100%" alt="">
 
 Three capability layers ship **off**, each behind one flag, each degrading cleanly rather
 than crashing when unavailable. This is a convention, not three ad-hoc special cases:
@@ -445,6 +499,7 @@ than crashing when unavailable. This is a convention, not three ad-hoc special c
 | **Browser automation** | `browser.enabled` | `false` | needs Playwright + a browser download; headless Chromium is a heavy dependency |
 | **Multi-agent delegation** | `agents.enabled` | `false` | costs a decomposition call + a synthesis call on top of per-subtask reasoning; only pays off on multi-branch work |
 | **Voice** | `voice.enabled` | `false` | sends audio to a third party |
+| **IDE / ADE** | `ide.enabled` | `false` | mounts the workspace read/write/run surface; off until a project explicitly opts in |
 
 **Perception & computer use** (`perception/`, `capabilities/computer_use/`) reads the
 macOS accessibility tree and can drive the desktop. It is genuinely experimental: it
@@ -516,13 +571,14 @@ the deep surface used for inspection, memory work and safety drills.
 | `model` | model inspection |
 | `cal` / `contacts` | calendar (list, free-busy, search, create) and contact search |
 | `memory` | live memory inspection sub-app |
+| `ide` | open a workspace and drive it: `tree` · `read` · `edit` · `run` · `git` · `diff` · `project` — all funnel-governed |
 | `voice speak` / `voice chat` | TTS one-shot, or the full mic→STT→task→TTS loop |
 
 </details>
 
 ### HTTP + WebSocket API
 
-FastAPI, 18 routers. `/api/v1/health` is intentionally unauthenticated so container
+FastAPI, 19 routers. `/api/v1/health` is intentionally unauthenticated so container
 probes work; **everything else sits behind `auth_required`**.
 
 <details>
@@ -530,7 +586,7 @@ probes work; **everything else sits behind `auth_required`**.
 
 `health` · `runtime` · `tasks` · `approvals` · `capabilities` · `feedback` ·
 `knowledge` · `memory` · `trajectory` · `attachments` · `trust` · `events` ·
-`events_ws` · `learning` · `ops` · `providers` · `automations` · `voice`
+`events_ws` · `learning` · `ops` · `providers` · `automations` · `voice` · `ide`
 
 WebSocket: `/ws/events` for live task/event streaming, plus a bidirectional voice socket
 (audio in → STT → orchestrator → TTS audio out).
@@ -642,7 +698,7 @@ Precedence: code defaults **<** `config/settings.yaml` **<** `.env` / real envir
 
 | File | Holds | Hot-editable |
 |---|---|---|
-| `config/settings.yaml` | profile, cost/network policy, model tiers, sandbox, critique, verification, agents, voice | yes |
+| `config/settings.yaml` | profile, cost/network policy, model tiers, sandbox, critique, verification, agents, voice, ide | yes |
 | `config/models.yaml` | the 5-model catalog: slugs, capabilities, cost class | yes |
 | `.env` | secrets and machine-specific overrides (gitignored) | yes |
 | `importlinter.ini` | the 3 layering contracts | build gate |
@@ -670,16 +726,18 @@ uv run pytest -q
 | `ruff check` + `format --check` | zero findings | clean |
 | `mypy` | strict, zero errors | clean |
 | `lint-imports` | 3 contracts kept, **0 broken** | kept |
-| `pytest` | all pass | 1,388 collected |
+| `pytest` | all pass | 1,687 collected |
 | Coverage — global | `fail_under = 63` | ~70% |
 | Coverage — `safety/` | 70 | enforced in CI |
 | Coverage — `orchestration/` | 83 | enforced in CI |
 | `scripts/eval_gate.py` | task-quality floor | enforced in CI |
 
-Two known environmental caveats, stated so a red local run does not look like a
-regression: Playwright browser tests need a downloaded Chromium (CI has one, a fresh
-laptop may not), and the provider-swap test needs live network. Neither indicates broken
-application code.
+Two integration tests are **environment-gated**: the Playwright lifecycle test and the
+CDP provider-swap test both launch a real headless Chromium (the swap test additionally
+binds a CDP debugging port). On a machine with a browser installed they run in full; in a
+sandbox with no launchable browser they now **skip cleanly** (`browser_available` probes
+launchability once per session) rather than fail. A clean local run is therefore fully
+green — a missing browser is an absent environment, not broken application code.
 
 <img src="assets/divider.svg" width="100%" alt="">
 
@@ -696,8 +754,9 @@ product with an SLA. Here is what that actually means, per subsystem:
 | Two-lane recall | ✅ live | newest work; Lane 1 is the default path |
 | Model fleet + routing | ✅ live | 5 free models, `$0.00`, one key |
 | Knowledge & research | ✅ live | BM25 + vector fusion, citations, confidence |
-| HTTP + WebSocket API | ✅ live | 18 routers, auth-gated except health |
+| HTTP + WebSocket API | ✅ live | 19 routers, auth-gated except health |
 | CLI (both surfaces) | ✅ live | client + in-process operator CLI |
+| ADE / IDE subsystem | 🧪 foundational | open/tree/read, hash-versioned edits, governed run, `git status`/`diff`, project model — all funnel-gated; full agentic build-loop in progress |
 | Web UI | ✅ builds | Next 16 / React 19, own CI job |
 | Learning & adaptation | 🧪 works, evolving | trajectories → experiences → skill promotion |
 | Multi-agent delegation | ⚠️ off | `agents.enabled: false` |
@@ -721,16 +780,20 @@ Two things worth calling out explicitly rather than burying:
 
 Ordered by what would most improve the system, not by what is easiest:
 
-1. **Live validation pass** — confirm the five model slugs, exercise voice against real
+1. **Finish the ADE agentic build-loop** — the read/edit/run/git foundation is live and
+   governed; next is the full understand → plan → edit → test → diagnose → repair →
+   browser-test → review loop, resumable from persisted task state, plus the git
+   stage/commit verbs and an interactive PTY terminal.
+2. **Live validation pass** — confirm the five model slugs, exercise voice against real
    Deepgram/Fish endpoints, and record the results in this README.
-2. **Backfill Lane 1** — the episodes written before `trigger_hint` existed are invisible
+3. **Backfill Lane 1** — the episodes written before `trigger_hint` existed are invisible
    to fast recall. The hint function is pure, so one `UPDATE` sweep fixes it.
-3. **Turn learning on by default** — enough evaluation evidence that skill promotion
+4. **Turn learning on by default** — enough evaluation evidence that skill promotion
    improves outcomes rather than just changing them.
-4. **Decide the storage question deliberately** — the vendor-neutral SQLite layer is the
+5. **Decide the storage question deliberately** — the vendor-neutral SQLite layer is the
    right default; a Postgres/cloud migration should be an explicit choice with a
    migration story, not a half-wired seam.
-5. **Harden multi-agent delegation** to the point it can ship enabled.
+6. **Harden multi-agent delegation** to the point it can ship enabled.
 
 <img src="assets/divider.svg" width="100%" alt="">
 
