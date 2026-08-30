@@ -4,7 +4,7 @@ from atlas.capabilities.browser.providers.playwright_provider import PlaywrightP
 
 
 @pytest.mark.asyncio
-async def test_playwright_provider_lifecycle() -> None:
+async def test_playwright_provider_lifecycle(require_browser: None) -> None:
     provider = PlaywrightProvider()
 
     # Create a session (this starts the browser lazily via launch)
