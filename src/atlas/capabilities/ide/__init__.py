@@ -18,6 +18,7 @@ from atlas.capabilities.ide.contracts import (
     DebugSessionId,
     DebugStatus,
     DevProcess,
+    DiffStat,
     DocumentId,
     DocumentSnapshot,
     DocumentStatus,
@@ -26,6 +27,7 @@ from atlas.capabilities.ide.contracts import (
     EditorGroup,
     FileChange,
     FileNode,
+    GitDiff,
     GitFileChange,
     GitFileState,
     GitStatus,
@@ -49,6 +51,7 @@ from atlas.capabilities.ide.editing import (
     WorkspaceWriter,
     apply_operations,
 )
+from atlas.capabilities.ide.git import GitEngine, parse_git_status, parse_numstat
 from atlas.capabilities.ide.persistence import IDESessionStore, SqliteIDESessionStore
 from atlas.capabilities.ide.project import analyze_project
 from atlas.capabilities.ide.service import IDEService, IDEServiceError
@@ -68,6 +71,7 @@ __all__ = [
     "DebugSessionId",
     "DebugStatus",
     "DevProcess",
+    "DiffStat",
     "DocumentId",
     "DocumentSnapshot",
     "DocumentStatus",
@@ -77,6 +81,8 @@ __all__ = [
     "EditorGroup",
     "FileChange",
     "FileNode",
+    "GitDiff",
+    "GitEngine",
     "GitFileChange",
     "GitFileState",
     "GitStatus",
@@ -105,4 +111,6 @@ __all__ = [
     "apply_operations",
     "hash_content",
     "open_workspace",
+    "parse_git_status",
+    "parse_numstat",
 ]

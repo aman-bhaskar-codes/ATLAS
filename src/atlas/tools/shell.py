@@ -21,6 +21,20 @@ _log = get_logger("atlas.tools.shell")
 _SHELL_OPERATORS = frozenset({"|", "||", "&&", ";", "`", "$(", ">>", ">", "<"})
 
 
+def _matches_prefix(argv: list[str], entries: list[str]) -> bool:
+    """True if `argv` starts with any allowlist entry's tokens.
+
+    Entries may be multi-word (`"git status"`, `"npm install"`); a bare `git`
+    must NOT satisfy a `git status` entry, so we compare token *prefixes* rather
+    than the first token alone — otherwise every git subcommand would slip
+    through (or, as it did before, be wrongly denied)."""
+    for entry in entries:
+        toks = entry.split()
+        if toks and argv[: len(toks)] == toks:
+            return True
+    return False
+
+
 class ShellTool:
     name = "shell"
 
@@ -58,8 +72,7 @@ class ShellTool:
                 return False, f"shell operator {op!r} is not permitted"
 
         executable = argv[0]
-        allow = self._read_only + self._side_effect
-        if executable not in allow:
+        if not (_matches_prefix(argv, self._read_only) or _matches_prefix(argv, self._side_effect)):
             return False, f"executable {executable!r} not in allowlist"
 
         return True, ""
@@ -84,7 +97,7 @@ class ShellTool:
             network=network,
             timeout_s=120.0,
         )
-        is_side_effect = argv[0] in self._side_effect
+        is_side_effect = _matches_prefix(argv, self._side_effect)
         effects: tuple[SideEffect, ...] = ()
         if is_side_effect:
             effects = (SideEffect(kind="command", target=argv[0], detail=command, reversible=False),)

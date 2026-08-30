@@ -54,6 +54,7 @@ rules:
   - {tool: shell, operation: read_only,   tier: 1, constraint: cmd_in_read_only}
   - {tool: shell, operation: "read*",     tier: 1, constraint: cmd_in_read_only}
   - {tool: shell, operation: side_effect, tier: 2, constraint: cmd_in_side_effect}
+  - {tool: shell, operation: run,         tier: 1, constraint: cmd_in_read_only}  # IDE governed one-shot: read-only cmds allow; anything else → confirm (fails closed)
   # ── Code Execution (sandboxed) ──
   - {tool: code,       operation: execute,   tier: 1}
   # ── HTTP Requests ──

@@ -111,6 +111,38 @@ class CommandResultResponse(BaseModel):
     error: str | None = None
 
 
+class GitFileChangeResponse(BaseModel):
+    path: str
+    state: str
+    staged: bool
+    old_path: str | None = None
+
+
+class GitStatusResponse(BaseModel):
+    is_git_repo: bool
+    branch: str = ""
+    ahead: int = 0
+    behind: int = 0
+    detached: bool = False
+    has_conflicts: bool = False
+    changes: list[GitFileChangeResponse] = []
+
+
+class DiffStatResponse(BaseModel):
+    path: str
+    added: int = 0
+    removed: int = 0
+    binary: bool = False
+    old_path: str | None = None
+
+
+class GitDiffResponse(BaseModel):
+    is_git_repo: bool
+    staged: bool = False
+    files: list[DiffStatResponse] = []
+    patch: str = ""
+
+
 class ProjectModelResponse(BaseModel):
     root: str
     languages: list[str]
@@ -232,6 +264,55 @@ async def run_command(
         duration_ms=result.duration_ms,
         denied=result.denied,
         error=result.error,
+    )
+
+
+@router.get("/workspaces/{workspace_id}/git/status", response_model=GitStatusResponse)
+async def git_status(workspace_id: str, atlas: Atlas = Depends(get_atlas)) -> GitStatusResponse:
+    """Working-tree status through the governed funnel (read-only). A non-git root (or
+    no command tool wired) comes back as ``is_git_repo=False`` — never a fabricated
+    clean status, never a raised error for that expected case."""
+    svc = _service(atlas)
+    try:
+        status = await svc.git_status(workspace_id)
+    except IDEServiceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if status is None:
+        return GitStatusResponse(is_git_repo=False)
+    return GitStatusResponse(
+        is_git_repo=True,
+        branch=status.branch,
+        ahead=status.ahead,
+        behind=status.behind,
+        detached=status.detached,
+        has_conflicts=status.has_conflicts,
+        changes=[
+            GitFileChangeResponse(path=c.path, state=c.state.value, staged=c.staged, old_path=c.old_path)
+            for c in status.changes
+        ],
+    )
+
+
+@router.get("/workspaces/{workspace_id}/git/diff", response_model=GitDiffResponse)
+async def git_diff(workspace_id: str, staged: bool = False, atlas: Atlas = Depends(get_atlas)) -> GitDiffResponse:
+    """Working-tree diff (or the staged diff when ``staged=true``) through the
+    governed funnel (read-only). A non-git root comes back as ``is_git_repo=False``;
+    a clean tree is an honest empty diff, not a 404."""
+    svc = _service(atlas)
+    try:
+        diff = await svc.git_diff(workspace_id, staged=staged)
+    except IDEServiceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if diff is None:
+        return GitDiffResponse(is_git_repo=False, staged=staged)
+    return GitDiffResponse(
+        is_git_repo=True,
+        staged=diff.staged,
+        files=[
+            DiffStatResponse(path=f.path, added=f.added, removed=f.removed, binary=f.binary, old_path=f.old_path)
+            for f in diff.files
+        ],
+        patch=diff.patch,
     )
 
 

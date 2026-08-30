@@ -28,12 +28,15 @@ from atlas.capabilities.ide.contracts import (
     DocumentSnapshot,
     FileChange,
     FileNode,
+    GitDiff,
+    GitStatus,
     IDESession,
     IDESessionId,
     ProjectModel,
     WorkspaceId,
 )
 from atlas.capabilities.ide.editing import WorkspaceWriter
+from atlas.capabilities.ide.git import GitEngine
 from atlas.capabilities.ide.persistence import IDESessionStore
 from atlas.capabilities.ide.project import analyze_project
 from atlas.capabilities.ide.workspace import WorkspaceEngine, open_workspace
@@ -162,6 +165,31 @@ class IDEService:
             return CommandResult(command=command, error="command execution not available")
         cid = correlation_id or self._ids.correlation_id()
         return await self._runner.run(command, cwd=str(ow.engine.root), correlation_id=cid, timeout_s=timeout_s)
+
+    async def git_status(self, workspace_id: str, *, correlation_id: CorrelationId | None = None) -> GitStatus | None:
+        """Return the workspace's git working-tree status, or `None` when the root
+        is not a git repo (or command execution is unavailable). Read-only — runs
+        `git status` through the same governed funnel as any other command."""
+        ow = await self._require(workspace_id)
+        if self._runner is None:
+            return None
+        engine = GitEngine(self._runner, str(ow.engine.root))
+        cid = correlation_id or self._ids.correlation_id()
+        return await engine.status(correlation_id=cid)
+
+    async def git_diff(
+        self, workspace_id: str, *, staged: bool = False, correlation_id: CorrelationId | None = None
+    ) -> GitDiff | None:
+        """Return the workspace's working-tree diff (or the staged diff), or `None`
+        when the root is not a git repo (or command execution is unavailable).
+        Read-only — runs `git diff` through the same governed funnel as any command;
+        an empty diff is an honest empty `GitDiff`, not `None`."""
+        ow = await self._require(workspace_id)
+        if self._runner is None:
+            return None
+        engine = GitEngine(self._runner, str(ow.engine.root))
+        cid = correlation_id or self._ids.correlation_id()
+        return await engine.diff(staged=staged, correlation_id=cid)
 
     # ---- internals ------------------------------------------------------
     async def _require(self, workspace_id: str) -> _OpenWorkspace:

@@ -167,3 +167,102 @@ class TestRun:
             res = runner.invoke(app, ["ide", "run", _repo(tmp_path), "pytest"])
         assert res.exit_code == 1
         assert "not available" in res.stdout
+
+
+class _GitShellTool:
+    name = "shell"
+
+    def __init__(self, *, ok: bool, stdout: str = "") -> None:
+        self._ok = ok
+        self._stdout = stdout
+
+    def dry_run(self, args: dict[str, Any]) -> str:
+        return "RUN"
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        return ToolResult(
+            ok=self._ok,
+            output={"exit_code": 0 if self._ok else 128, "stdout": self._stdout, "stderr": "", "duration_ms": 2},
+            error=None if self._ok else "not a git repository",
+        )
+
+
+def _service_with_git(tool: _GitShellTool) -> IDEService:
+    return IDEService(
+        safety=FakeSafety(),  # type: ignore[arg-type]
+        filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
+        ids=FakeIds(),
+        clock=FakeClock(),
+        command_tool=tool,  # type: ignore[arg-type]
+    )
+
+
+class TestGit:
+    def test_git_prints_branch_and_changes(self, tmp_path: Path) -> None:
+        tool = _GitShellTool(ok=True, stdout="## main...origin/main [ahead 1]\n M a.py\nR  old.py -> new.py\n")
+        with _patch_atlas(_service_with_git(tool)):
+            res = runner.invoke(app, ["ide", "git", _repo(tmp_path)])
+        assert res.exit_code == 0
+        assert "main" in res.stdout
+        assert "old.py -> new.py" in res.stdout
+
+    def test_git_reports_non_repo(self, tmp_path: Path) -> None:
+        with _patch_atlas(_service_with_git(_GitShellTool(ok=False))):
+            res = runner.invoke(app, ["ide", "git", _repo(tmp_path)])
+        assert res.exit_code == 0
+        assert "not a git repo" in res.stdout
+
+    def test_git_clean_tree(self, tmp_path: Path) -> None:
+        with _patch_atlas(_service_with_git(_GitShellTool(ok=True, stdout="## main\n"))):
+            res = runner.invoke(app, ["ide", "git", _repo(tmp_path)])
+        assert res.exit_code == 0
+        assert "clean" in res.stdout
+
+
+class _DiffShellTool:
+    name = "shell"
+
+    def __init__(self, *, ok: bool, numstat: str = "", patch: str = "") -> None:
+        self._ok = ok
+        self._numstat = numstat
+        self._patch = patch
+
+    def dry_run(self, args: dict[str, Any]) -> str:
+        return "RUN"
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        cmd = str(args.get("command", ""))
+        stdout = self._numstat if "--numstat" in cmd else self._patch
+        return ToolResult(
+            ok=self._ok,
+            output={"exit_code": 0 if self._ok else 128, "stdout": stdout, "stderr": "", "duration_ms": 2},
+            error=None if self._ok else "not a git repository",
+        )
+
+
+class TestDiff:
+    def test_diff_prints_stats(self, tmp_path: Path) -> None:
+        tool = _DiffShellTool(ok=True, numstat="2\t1\ta.py\n", patch="diff --git a/a.py b/a.py\n+x\n")
+        with _patch_atlas(_service_with_git(tool)):  # type: ignore[arg-type]
+            res = runner.invoke(app, ["ide", "diff", _repo(tmp_path)])
+        assert res.exit_code == 0
+        assert "a.py" in res.stdout
+
+    def test_diff_with_patch_prints_raw(self, tmp_path: Path) -> None:
+        tool = _DiffShellTool(ok=True, numstat="2\t1\ta.py\n", patch="diff --git a/a.py b/a.py\n+x\n")
+        with _patch_atlas(_service_with_git(tool)):  # type: ignore[arg-type]
+            res = runner.invoke(app, ["ide", "diff", _repo(tmp_path), "--patch"])
+        assert res.exit_code == 0
+        assert "diff --git" in res.stdout
+
+    def test_diff_reports_non_repo(self, tmp_path: Path) -> None:
+        with _patch_atlas(_service_with_git(_DiffShellTool(ok=False))):  # type: ignore[arg-type]
+            res = runner.invoke(app, ["ide", "diff", _repo(tmp_path)])
+        assert res.exit_code == 0
+        assert "not a git repo" in res.stdout
+
+    def test_diff_no_changes(self, tmp_path: Path) -> None:
+        with _patch_atlas(_service_with_git(_DiffShellTool(ok=True, numstat="", patch=""))):  # type: ignore[arg-type]
+            res = runner.invoke(app, ["ide", "diff", _repo(tmp_path)])
+        assert res.exit_code == 0
+        assert "no changes" in res.stdout

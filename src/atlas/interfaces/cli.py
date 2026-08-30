@@ -1315,6 +1315,92 @@ def ide_edit(
     _run(go())
 
 
+@ide_app.command("git")
+def ide_git(root_path: str) -> None:
+    """Show git working-tree status for the workspace at ROOT_PATH.
+
+    Runs `git status` through the SafetyEngine funnel exactly like any other
+    command — the IDE never shells out on its own. A non-git directory prints a
+    plain "not a git repo" rather than a fabricated clean status.
+    """
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            service = _ide_or_exit(atlas)
+            try:
+                session = await service.open_workspace(root_path, "workspace")
+                status = await service.git_status(session.workspace.id)
+            except Exception as exc:
+                console.print(f"[red]{type(exc).__name__}[/] {exc}")
+                raise typer.Exit(code=1) from exc
+            if status is None:
+                console.print("[yellow]not a git repo[/] (or command execution unavailable)")
+                return
+            head = "[red]detached[/] " if status.detached else ""
+            tracking = ""
+            if status.ahead or status.behind:
+                tracking = f"  [dim](ahead {status.ahead}, behind {status.behind})[/]"
+            conflicts = "  [red]conflicts[/]" if status.has_conflicts else ""
+            console.print(f"{head}[cyan]{status.branch or '—'}[/]{tracking}{conflicts}")
+            if not status.changes:
+                console.print("[green]clean[/]")
+                return
+            table = Table(title=f"changes  ({len(status.changes)})")
+            table.add_column("state")
+            table.add_column("staged", justify="center")
+            table.add_column("path")
+            for c in status.changes:
+                path = f"{c.old_path} -> {c.path}" if c.old_path else c.path
+                table.add_row(c.state.value, "✓" if c.staged else "", path)
+            console.print(table)
+
+    _run(go())
+
+
+@ide_app.command("diff")
+def ide_diff(
+    root_path: str,
+    staged: bool = typer.Option(False, "--staged", help="Show the staged (index) diff instead of the worktree"),
+    patch: bool = typer.Option(False, "--patch", "-p", help="Also print the raw unified diff"),
+) -> None:
+    """Show the git diff for the workspace at ROOT_PATH — per-file line deltas.
+
+    Runs `git diff` through the SafetyEngine funnel (read-only). A non-git
+    directory prints "not a git repo"; a clean tree prints "no changes".
+    """
+
+    async def go() -> None:
+        async with build_atlas() as atlas:
+            service = _ide_or_exit(atlas)
+            try:
+                session = await service.open_workspace(root_path, "workspace")
+                diff = await service.git_diff(session.workspace.id, staged=staged)
+            except Exception as exc:
+                console.print(f"[red]{type(exc).__name__}[/] {exc}")
+                raise typer.Exit(code=1) from exc
+            if diff is None:
+                console.print("[yellow]not a git repo[/] (or command execution unavailable)")
+                return
+            if not diff.files:
+                console.print("[green]no changes[/]")
+                return
+            table = Table(title=f"{'staged ' if diff.staged else ''}diff  ({len(diff.files)} files)")
+            table.add_column("+added", justify="right", style="green")
+            table.add_column("-removed", justify="right", style="red")
+            table.add_column("path")
+            for f in diff.files:
+                path = f"{f.old_path} -> {f.path}" if f.old_path else f.path
+                if f.binary:
+                    table.add_row("bin", "bin", path)
+                else:
+                    table.add_row(str(f.added), str(f.removed), path)
+            console.print(table)
+            if patch and diff.patch:
+                console.print(diff.patch)
+
+    _run(go())
+
+
 # ---------------------------------------------------------------------------
 
 memory_app = typer.Typer(help="Inspect and monitor live memory (Phase 3)")

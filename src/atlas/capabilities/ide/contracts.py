@@ -198,6 +198,27 @@ class GitStatus(_Frozen):
     has_conflicts: bool = False
 
 
+class DiffStat(_Frozen):
+    """Per-file line-delta from `git diff --numstat`. `binary` files report no
+    counts (git prints `-`/`-`); a rename carries the pre-rename `old_path`."""
+
+    path: str
+    added: int = 0
+    removed: int = 0
+    binary: bool = False
+    old_path: str | None = None
+
+
+class GitDiff(_Frozen):
+    """A working-tree (or staged) diff: structured per-file stats plus the raw
+    unified patch text. `staged` distinguishes `git diff` from `git diff --staged`
+    so the review loop can present index vs worktree changes separately."""
+
+    staged: bool = False
+    files: tuple[DiffStat, ...] = ()
+    patch: str = ""
+
+
 # ── Debug (Phase 9) — DAP-shaped, adapter-agnostic ──────────────────────── #
 class DebugSession(_Frozen):
     id: DebugSessionId

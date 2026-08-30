@@ -99,3 +99,38 @@ class TestShellTool:
         await tool.execute({"command": "git clone https://example.com/repo.git"})
         call_args = mock_sandbox.run.call_args
         assert call_args[1]["network"] is True
+
+
+class TestMultiWordAllowlist:
+    """Locks the token-prefix allowlist match: entries may be multi-word
+    (`"git status"`), so a bare `git` must NOT satisfy `git status`, and a
+    non-allowlisted subcommand (`git push`) must be denied even though `git`
+    is the executable. Guards the regression where argv[0]-only matching
+    denied every git subcommand (or would let all of them through)."""
+
+    @pytest.fixture
+    def tool(self) -> ShellTool:
+        return ShellTool(
+            read_only=["git status", "git diff", "git log"],
+            side_effect=["git commit", "npm install"],
+            sandbox=AsyncMock(),
+            mounts={},
+        )
+
+    def test_read_only_subcommand_allowed(self, tool: ShellTool) -> None:
+        assert tool._allowed("git status -s")[0] is True
+        assert tool._allowed("git diff --numstat")[0] is True
+
+    def test_side_effect_subcommand_allowed(self, tool: ShellTool) -> None:
+        assert tool._allowed("git commit -m msg")[0] is True
+
+    def test_non_allowlisted_subcommand_denied(self, tool: ShellTool) -> None:
+        allowed, reason = tool._allowed("git push origin main")
+        assert allowed is False and "not in allowlist" in reason
+
+    def test_bare_executable_does_not_match_multiword(self, tool: ShellTool) -> None:
+        # `git` alone must not satisfy a `git status` entry.
+        assert tool._allowed("git")[0] is False
+
+    def test_unknown_executable_denied(self, tool: ShellTool) -> None:
+        assert tool._allowed("rm -rf /")[0] is False

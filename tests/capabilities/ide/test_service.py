@@ -170,3 +170,114 @@ class TestRunCommand:
         svc = _service_with_commands(FakeShellTool())
         with pytest.raises(IDEServiceError):
             await svc.run_command("nope", "pytest")
+
+
+class _GitShellTool:
+    """Shell tool that answers the git-status command with canned porcelain."""
+
+    name = "shell"
+
+    def __init__(self, *, ok: bool, stdout: str = "") -> None:
+        self._ok = ok
+        self._stdout = stdout
+        self.calls: list[dict[str, Any]] = []
+
+    def dry_run(self, args: dict[str, Any]) -> str:
+        return "RUN"
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        self.calls.append(args)
+        return ToolResult(
+            ok=self._ok,
+            output={"exit_code": 0 if self._ok else 128, "stdout": self._stdout, "stderr": "", "duration_ms": 3},
+            error=None if self._ok else "not a git repository",
+        )
+
+
+class TestGitStatus:
+    async def test_repo_returns_parsed_status_through_funnel(self, tmp_path: Path) -> None:
+        tool = _GitShellTool(ok=True, stdout="## main...origin/main [ahead 1]\n M a.py\n")
+        svc = IDEService(
+            safety=FakeSafety(),  # type: ignore[arg-type]
+            filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
+            ids=FakeIds(),
+            clock=FakeClock(),
+            command_tool=tool,  # type: ignore[arg-type]
+        )
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        status = await svc.git_status(session.workspace.id)
+        assert status is not None and status.branch == "main" and status.ahead == 1
+        assert len(status.changes) == 1
+        assert tool.calls[0]["cwd"] == str(tmp_path)
+        assert tool.calls[0]["command"].startswith("git status")
+
+    async def test_non_repo_returns_none(self, tmp_path: Path) -> None:
+        svc = IDEService(
+            safety=FakeSafety(),  # type: ignore[arg-type]
+            filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
+            ids=FakeIds(),
+            clock=FakeClock(),
+            command_tool=_GitShellTool(ok=False),  # type: ignore[arg-type]
+        )
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        assert await svc.git_status(session.workspace.id) is None
+
+    async def test_git_status_degrades_when_no_tool(self, tmp_path: Path) -> None:
+        svc = _service()  # no command_tool wired
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        assert await svc.git_status(session.workspace.id) is None
+
+
+class _DiffShellTool:
+    """Answers git-diff numstat + raw patch (and non-repo) for git_diff tests."""
+
+    name = "shell"
+
+    def __init__(self, *, ok: bool, numstat: str = "", patch: str = "") -> None:
+        self._ok = ok
+        self._numstat = numstat
+        self._patch = patch
+
+    def dry_run(self, args: dict[str, Any]) -> str:
+        return "RUN"
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        cmd = str(args.get("command", ""))
+        stdout = self._numstat if "--numstat" in cmd else self._patch
+        return ToolResult(
+            ok=self._ok,
+            output={"exit_code": 0 if self._ok else 128, "stdout": stdout, "stderr": "", "duration_ms": 1},
+            error=None if self._ok else "not a git repository",
+        )
+
+
+class TestGitDiff:
+    async def test_repo_returns_parsed_diff(self, tmp_path: Path) -> None:
+        tool = _DiffShellTool(ok=True, numstat="2\t1\ta.py\n", patch="diff --git a/a.py b/a.py\n")
+        svc = IDEService(
+            safety=FakeSafety(),  # type: ignore[arg-type]
+            filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
+            ids=FakeIds(),
+            clock=FakeClock(),
+            command_tool=tool,  # type: ignore[arg-type]
+        )
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        diff = await svc.git_diff(session.workspace.id)
+        assert diff is not None and len(diff.files) == 1 and diff.files[0].added == 2
+        assert diff.patch.startswith("diff --git")
+
+    async def test_non_repo_returns_none(self, tmp_path: Path) -> None:
+        svc = IDEService(
+            safety=FakeSafety(),  # type: ignore[arg-type]
+            filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
+            ids=FakeIds(),
+            clock=FakeClock(),
+            command_tool=_DiffShellTool(ok=False),  # type: ignore[arg-type]
+        )
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        assert await svc.git_diff(session.workspace.id) is None
+
+    async def test_git_diff_degrades_when_no_tool(self, tmp_path: Path) -> None:
+        svc = _service()
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        assert await svc.git_diff(session.workspace.id) is None
