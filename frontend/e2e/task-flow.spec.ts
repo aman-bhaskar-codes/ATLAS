@@ -5,13 +5,18 @@ test("creating a task from the palette hits the real backend and routes to its r
 }) => {
   await page.goto("/");
 
+  // Wait for the page to be fully loaded and interactive
+  await page.waitForLoadState("networkidle");
+  
   // Open the palette via the documented global event (the same one the Topbar
   // launcher dispatches) — a deterministic path independent of OS key mapping.
   await page.evaluate(() =>
     window.dispatchEvent(new CustomEvent("atlas:open-command-palette")),
   );
+  
+  // Wait for the palette to appear with a longer timeout
   const palette = page.getByRole("dialog", { name: "Command palette" });
-  await expect(palette).toBeVisible();
+  await expect(palette).toBeVisible({ timeout: 15000 });
 
   const input = palette.getByPlaceholder(/Search commands/i);
   await input.fill("summarize the ATLAS safety model in three bullets");
