@@ -84,7 +84,7 @@ class TestNtfyNotifier:
 class TestCliConfirmer:
     @pytest.mark.asyncio
     async def test_confirm_returns_true_for_yes(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        confirmer = CliConfirmer()
+        confirmer = CliConfirmer(allow_stdin=True)
         monkeypatch.setattr("builtins.input", lambda _: "y")
         req = make_tool_request()
         result = await confirmer.confirm("Confirm?", make_safety_decision(), req)
@@ -92,7 +92,7 @@ class TestCliConfirmer:
 
     @pytest.mark.asyncio
     async def test_confirm_returns_false_for_no(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        confirmer = CliConfirmer()
+        confirmer = CliConfirmer(allow_stdin=True)
         monkeypatch.setattr("builtins.input", lambda _: "n")
         req = make_tool_request()
         result = await confirmer.confirm("Confirm?", make_safety_decision(), req)
@@ -117,7 +117,7 @@ class TestCompositeConfirmer:
     @pytest.mark.asyncio
     async def test_falls_back_to_cli_when_no_notifier(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("builtins.input", lambda _: "y")
-        cli = CliConfirmer()
+        cli = CliConfirmer(allow_stdin=True)
         composite = CompositeConfirmer(None, cli, timeout_s=5.0)
         req = make_tool_request()
         result = await composite.confirm("Confirm?", make_safety_decision(), req)
