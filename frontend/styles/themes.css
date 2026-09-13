@@ -1,0 +1,609 @@
+/* frontend/styles/themes.css
+ *
+ * Every value that differs between themes, in one file, keyed on [data-theme].
+ *
+ * WHY the ramps are redefined per theme rather than pages being rewritten to use
+ * semantic names: ~540 inline `style={{ color: "var(--paper-500)" }}` sites exist
+ * across 24 pages. Remapping the ramp makes all of them theme-correct at once,
+ * with no edit and no risk of a missed site rendering black-on-black. New code
+ * should prefer the semantic roles at the bottom of each block (--text-muted,
+ * --surface-card, --accent), which say what a value is *for*.
+ *
+ * The attribute is written to <html> by lib/preferences/script.ts before first
+ * paint, so there is no flash and no hydration mismatch.
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * DARK — the default. :root carries it too, so a document with no data-theme
+ * (SSR before the script runs, or JS disabled) is already correct.
+ * ══════════════════════════════════════════════════════════════════════════ */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* surface ramp: furthest back → closest to the viewer */
+  --ink-950: oklch(10% 0.018 278);
+  --ink-900: oklch(14% 0.024 278);
+  --ink-850: oklch(18% 0.03 278);
+  --ink-800: oklch(22% 0.036 278);
+  --ink-700: oklch(29% 0.042 278);
+  --line: oklch(34% 0.035 278);
+  --line-strong: oklch(44% 0.04 278);
+
+  /* content ramp: highest contrast → lowest */
+  --paper-100: oklch(94% 0.012 82);
+  --paper-200: oklch(88% 0.016 82);
+  --paper-300: oklch(80% 0.02 82);
+  --paper-400: oklch(71% 0.022 82);
+  --paper-500: oklch(62% 0.025 82);
+  --paper-600: oklch(52% 0.024 82);
+  --paper-700: oklch(43% 0.022 82);
+
+  /* accent + status families */
+  --royal-300: oklch(78% 0.11 292);
+  --royal-400: oklch(68% 0.14 292);
+  --royal-500: oklch(58% 0.16 292);
+  --royal-600: oklch(48% 0.15 292);
+  --royal-700: oklch(38% 0.12 292);
+
+  --gold-300: oklch(90% 0.09 82);
+  --gold-400: oklch(84% 0.12 82);
+  --gold-500: oklch(76% 0.13 82);
+  --gold-600: oklch(64% 0.12 82);
+  --gold-700: oklch(52% 0.1 82);
+
+  --jade-300: oklch(83% 0.1 162);
+  --jade-400: oklch(73% 0.13 162);
+  --jade-500: oklch(64% 0.13 162);
+  --jade-600: oklch(54% 0.12 162);
+  --jade-700: oklch(43% 0.1 162);
+
+  --ember-300: oklch(80% 0.12 35);
+  --ember-400: oklch(70% 0.16 35);
+  --ember-500: oklch(62% 0.16 35);
+  --ember-600: oklch(52% 0.15 35);
+  --ember-700: oklch(42% 0.12 35);
+
+  --danger-300: oklch(78% 0.14 22);
+  --danger-400: oklch(68% 0.18 22);
+  --danger-500: oklch(59% 0.19 22);
+  --danger-600: oklch(49% 0.18 22);
+  --danger-700: oklch(39% 0.15 22);
+
+  --cyan-300: oklch(85% 0.1 210);
+  --cyan-400: oklch(76% 0.12 210);
+  --cyan-500: oklch(66% 0.13 210);
+  --cyan-600: oklch(55% 0.12 210);
+
+  --indigo-300: oklch(80% 0.1 268);
+  --indigo-400: oklch(70% 0.13 268);
+  --indigo-500: oklch(60% 0.15 268);
+  --indigo-600: oklch(50% 0.15 268);
+
+  --rose-300: oklch(84% 0.11 350);
+  --rose-400: oklch(74% 0.15 350);
+  --rose-500: oklch(64% 0.17 350);
+  --rose-600: oklch(54% 0.16 350);
+
+  /* page canvas — a theme owns its own background, gradient included. Only the
+   * hue travels with [data-accent]; the lightness/chroma/alpha stay as designed
+   * for this theme. Picking the `royal` accent restores the original violet
+   * wash exactly, since that family's hue is 292. */
+  --canvas: radial-gradient(
+      circle at 76% 0%,
+      oklch(26% 0.08 var(--accent-hue, 82) / 0.25),
+      transparent 34rem
+    ),
+    var(--ink-950);
+
+  --shadow-1: 0 1px 2px oklch(5% 0.02 278 / 0.4);
+  --shadow-2: 0 8px 24px oklch(5% 0.02 278 / 0.45);
+  --shadow-3: 0 20px 60px oklch(5% 0.02 278 / 0.5);
+  --scrim: oklch(6% 0.02 278 / 0.72);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * SEMANTIC ROLES — what a value is *for*, defined once against the active ramp.
+ *
+ * Custom properties resolve at use time, so these pick up whichever theme block
+ * won for --ink-* or --paper-*. That is why this layer is written once rather than
+ * copied into every theme. A theme that needs to bend a role (contrast does)
+ * overrides it in its own block below, which comes later and therefore wins.
+ *
+ * The selector includes [data-theme] as well as :root so the roles re-resolve
+ * on any nested element that carries its own theme. Custom properties inherit
+ * their *substituted* value, so a nested div would otherwise get the parent
+ * theme's colours through --surface-card even though its own --ink-850 changed.
+ * Re-declaring here is what makes the live theme previews in Settings — and
+ * scoped theming in general — show the theme they claim to.
+ * ══════════════════════════════════════════════════════════════════════════ */
+:root,
+[data-theme] {
+  --surface-base: var(--ink-950);
+  --surface-sunken: var(--ink-900);
+  --surface-card: var(--ink-850);
+  --surface-raised: var(--ink-800);
+  --surface-hover: var(--ink-700);
+  --surface-overlay: var(--ink-900);
+
+  --text-primary: var(--paper-100);
+  --text-secondary: var(--paper-300);
+  --text-muted: var(--paper-500);
+  --text-faint: var(--paper-600);
+  --text-disabled: var(--paper-700);
+  --text-on-accent: var(--ink-950);
+
+  --border-subtle: var(--line);
+  --border-strong: var(--line-strong);
+
+  --status-ok: var(--jade-400);
+  --status-ok-dim: var(--jade-600);
+  --status-warn: var(--gold-400);
+  --status-warn-dim: var(--gold-600);
+  --status-danger: var(--danger-400);
+  --status-danger-dim: var(--danger-600);
+  --status-info: var(--cyan-400);
+  --status-busy: var(--ember-400);
+  --status-idle: var(--paper-500);
+
+  /* Tinted fills derived from the role colour, so a status chip never needs a
+   * second hand-picked background that drifts out of sync with its text. */
+  --status-ok-soft: color-mix(in oklab, var(--status-ok) 14%, transparent);
+  --status-warn-soft: color-mix(in oklab, var(--status-warn) 14%, transparent);
+  --status-danger-soft: color-mix(in oklab, var(--status-danger) 14%, transparent);
+  --status-info-soft: color-mix(in oklab, var(--status-info) 14%, transparent);
+  --status-busy-soft: color-mix(in oklab, var(--status-busy) 14%, transparent);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * LIGHT — the ramps inverted, not a tint of dark.
+ *
+ * Every variable the dark block sets is re-set here. That is mandatory, not
+ * tidiness: the dark block's selector list includes `:root`, which matches
+ * <html> whatever data-theme says, so any variable this block omits keeps its
+ * dark value and renders near-black on near-white. styles/__tests__ asserts
+ * parity so an omission fails a test instead of shipping.
+ *
+ * Accent families do NOT simply mirror the dark lightnesses: 300/400/500 all
+ * stay dark enough to read as text on white, while 600/700 go light for the
+ * "dim"/"soft" roles. The role of each step survives the inversion.
+ * ══════════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --ink-950: oklch(98.5% 0.004 278);
+  --ink-900: oklch(96.5% 0.006 278);
+  --ink-850: oklch(100% 0 0);
+  --ink-800: oklch(99% 0.003 278);
+  --ink-700: oklch(94% 0.008 278);
+  --line: oklch(89% 0.008 278);
+  --line-strong: oklch(78% 0.012 278);
+
+  --paper-100: oklch(22% 0.02 278);
+  --paper-200: oklch(30% 0.02 278);
+  --paper-300: oklch(38% 0.018 278);
+  --paper-400: oklch(46% 0.016 278);
+  --paper-500: oklch(53% 0.014 278);
+  --paper-600: oklch(61% 0.012 278);
+  --paper-700: oklch(70% 0.01 278);
+
+  --royal-300: oklch(48% 0.19 292);
+  --royal-400: oklch(52% 0.18 292);
+  --royal-500: oklch(57% 0.17 292);
+  --royal-600: oklch(66% 0.13 292);
+  --royal-700: oklch(78% 0.09 292);
+
+  --gold-300: oklch(48% 0.11 72);
+  --gold-400: oklch(54% 0.12 75);
+  --gold-500: oklch(62% 0.13 78);
+  --gold-600: oklch(72% 0.12 80);
+  --gold-700: oklch(83% 0.09 82);
+
+  --jade-300: oklch(42% 0.12 162);
+  --jade-400: oklch(48% 0.13 162);
+  --jade-500: oklch(55% 0.13 162);
+  --jade-600: oklch(65% 0.11 162);
+  --jade-700: oklch(78% 0.08 162);
+  --ember-300: oklch(48% 0.16 35);
+  --ember-400: oklch(54% 0.17 35);
+  --ember-500: oklch(61% 0.17 35);
+  --ember-600: oklch(70% 0.14 35);
+  --ember-700: oklch(81% 0.1 35);
+
+  --danger-300: oklch(45% 0.19 22);
+  --danger-400: oklch(51% 0.21 22);
+  --danger-500: oklch(57% 0.21 22);
+  --danger-600: oklch(67% 0.17 22);
+  --danger-700: oklch(79% 0.12 22);
+
+  --cyan-300: oklch(45% 0.12 210);
+  --cyan-400: oklch(51% 0.13 210);
+  --cyan-500: oklch(58% 0.13 210);
+  --cyan-600: oklch(68% 0.11 210);
+
+  --indigo-300: oklch(45% 0.16 268);
+  --indigo-400: oklch(50% 0.17 268);
+  --indigo-500: oklch(57% 0.16 268);
+  --indigo-600: oklch(67% 0.13 268);
+
+  --rose-300: oklch(47% 0.18 350);
+  --rose-400: oklch(53% 0.19 350);
+  --rose-500: oklch(59% 0.18 350);
+  --rose-600: oklch(69% 0.14 350);
+
+  --canvas: radial-gradient(
+      circle at 76% 0%,
+      oklch(72% 0.09 var(--accent-hue, 82) / 0.18),
+      transparent 34rem
+    ),
+    var(--ink-950);
+
+  /* Light-theme shadows are near-neutral and low-alpha; a dark-theme shadow
+   * alpha on white reads as dirt rather than depth. */
+  --shadow-1: 0 1px 2px oklch(50% 0.02 278 / 0.1);
+  --shadow-2: 0 8px 24px oklch(45% 0.02 278 / 0.13);
+  --shadow-3: 0 20px 60px oklch(40% 0.02 278 / 0.17);
+  --scrim: oklch(30% 0.02 278 / 0.35);
+
+  /* --text-on-accent resolves to --ink-950 (near-white here), which is correct
+   * against the darkened accent fills above — no override needed. */
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * MIDNIGHT — true-black OLED variant. Deeper and cooler than DARK: surfaces
+ * bottom out at 4% lightness, the content ramp swings to a cool hue (250) from
+ * dark's warm 82, and accents gain ~2% lightness to hold their punch against
+ * the lower floor.
+ * ══════════════════════════════════════════════════════════════════════════ */
+[data-theme="midnight"] {
+  color-scheme: dark;
+
+  --ink-950: oklch(4% 0.008 265);
+  --ink-900: oklch(8% 0.012 265);
+  --ink-850: oklch(11% 0.016 265);
+  --ink-800: oklch(15% 0.02 265);
+  --ink-700: oklch(21% 0.024 265);
+  --line: oklch(26% 0.022 265);
+  --line-strong: oklch(38% 0.028 265);
+
+  --paper-100: oklch(96% 0.008 250);
+  --paper-200: oklch(90% 0.01 250);
+  --paper-300: oklch(83% 0.012 250);
+  --paper-400: oklch(74% 0.014 250);
+  --paper-500: oklch(65% 0.016 250);
+  --paper-600: oklch(55% 0.016 250);
+  --paper-700: oklch(45% 0.014 250);
+
+  --royal-300: oklch(80% 0.11 292);
+  --royal-400: oklch(70% 0.15 292);
+  --royal-500: oklch(60% 0.17 292);
+  --royal-600: oklch(50% 0.16 292);
+  --royal-700: oklch(40% 0.13 292);
+
+  --gold-300: oklch(91% 0.09 88);
+  --gold-400: oklch(85% 0.12 88);
+  --gold-500: oklch(77% 0.13 88);
+  --gold-600: oklch(65% 0.12 88);
+  --gold-700: oklch(53% 0.1 88);
+
+  --jade-300: oklch(85% 0.1 168);
+  --jade-400: oklch(75% 0.13 168);
+  --jade-500: oklch(66% 0.14 168);
+  --jade-600: oklch(55% 0.12 168);
+  --jade-700: oklch(44% 0.1 168);
+  --ember-300: oklch(82% 0.12 38);
+  --ember-400: oklch(72% 0.16 38);
+  --ember-500: oklch(63% 0.17 38);
+  --ember-600: oklch(53% 0.15 38);
+  --ember-700: oklch(43% 0.12 38);
+
+  --danger-300: oklch(80% 0.14 24);
+  --danger-400: oklch(70% 0.18 24);
+  --danger-500: oklch(61% 0.2 24);
+  --danger-600: oklch(50% 0.18 24);
+  --danger-700: oklch(40% 0.15 24);
+
+  --cyan-300: oklch(87% 0.1 212);
+  --cyan-400: oklch(78% 0.12 212);
+  --cyan-500: oklch(68% 0.13 212);
+  --cyan-600: oklch(56% 0.12 212);
+
+  --indigo-300: oklch(82% 0.1 270);
+  --indigo-400: oklch(72% 0.13 270);
+  --indigo-500: oklch(62% 0.16 270);
+  --indigo-600: oklch(51% 0.16 270);
+
+  --rose-300: oklch(86% 0.11 352);
+  --rose-400: oklch(76% 0.15 352);
+  --rose-500: oklch(66% 0.17 352);
+  --rose-600: oklch(55% 0.16 352);
+
+  --canvas: radial-gradient(
+      circle at 78% -4%,
+      oklch(20% 0.07 var(--accent-hue, 82) / 0.3),
+      transparent 32rem
+    ),
+    var(--ink-950);
+
+  --shadow-1: 0 1px 2px oklch(0% 0 0 / 0.55);
+  --shadow-2: 0 8px 24px oklch(0% 0 0 / 0.6);
+  --shadow-3: 0 20px 60px oklch(0% 0 0 / 0.68);
+  --scrim: oklch(2% 0.01 265 / 0.8);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * CONTRAST — high-contrast accessibility theme, aimed at WCAG AAA body text.
+ *
+ * Three things separate it from a darker DARK:
+ *   1. Surfaces are pure achromatic (chroma 0). Tinted greys cost contrast and
+ *      confuse users relying on high-contrast OS modes.
+ *   2. The content ramp is compressed near white — --paper-700, the *lowest*
+ *      step, is still 70% lightness. There is no "faint" text in this theme.
+ *   3. It overrides semantic roles at the bottom, because the roles chosen for
+ *      dark deliberately use dim steps that this theme must refuse.
+ * ══════════════════════════════════════════════════════════════════════════ */
+[data-theme="contrast"] {
+  color-scheme: dark;
+
+  --ink-950: oklch(0% 0 0);
+  --ink-900: oklch(6% 0 0);
+  --ink-850: oklch(10% 0 0);
+  --ink-800: oklch(15% 0 0);
+  --ink-700: oklch(22% 0 0);
+  --line: oklch(55% 0 0);
+  --line-strong: oklch(75% 0 0);
+
+  --paper-100: oklch(100% 0 0);
+  --paper-200: oklch(97% 0 0);
+  --paper-300: oklch(93% 0 0);
+  --paper-400: oklch(88% 0 0);
+  --paper-500: oklch(84% 0 0);
+  --paper-600: oklch(78% 0 0);
+  --paper-700: oklch(70% 0 0);
+
+  --royal-300: oklch(88% 0.1 292);
+  --royal-400: oklch(82% 0.13 292);
+  --royal-500: oklch(74% 0.15 292);
+  --royal-600: oklch(64% 0.15 292);
+  --royal-700: oklch(54% 0.13 292);
+
+  --gold-300: oklch(96% 0.07 88);
+  --gold-400: oklch(92% 0.11 88);
+  --gold-500: oklch(86% 0.13 88);
+  --gold-600: oklch(76% 0.13 88);
+  --gold-700: oklch(66% 0.11 88);
+
+  --jade-300: oklch(93% 0.09 165);
+  --jade-400: oklch(87% 0.13 165);
+  --jade-500: oklch(79% 0.15 165);
+  --jade-600: oklch(68% 0.14 165);
+  --jade-700: oklch(57% 0.12 165);
+  --ember-300: oklch(90% 0.1 40);
+  --ember-400: oklch(83% 0.14 40);
+  --ember-500: oklch(76% 0.16 40);
+  --ember-600: oklch(66% 0.16 40);
+  --ember-700: oklch(56% 0.14 40);
+
+  --danger-300: oklch(88% 0.11 24);
+  --danger-400: oklch(80% 0.15 24);
+  --danger-500: oklch(72% 0.18 24);
+  --danger-600: oklch(63% 0.19 24);
+  --danger-700: oklch(53% 0.17 24);
+
+  --cyan-300: oklch(94% 0.08 210);
+  --cyan-400: oklch(88% 0.11 210);
+  --cyan-500: oklch(80% 0.13 210);
+  --cyan-600: oklch(70% 0.13 210);
+
+  --indigo-300: oklch(90% 0.08 268);
+  --indigo-400: oklch(83% 0.11 268);
+  --indigo-500: oklch(75% 0.14 268);
+  --indigo-600: oklch(65% 0.15 268);
+
+  --rose-300: oklch(92% 0.09 350);
+  --rose-400: oklch(85% 0.13 350);
+  --rose-500: oklch(77% 0.16 350);
+  --rose-600: oklch(67% 0.16 350);
+
+  /* Flat, not a gradient: an ambient wash moves the effective background
+   * lightness under text, which is exactly what this theme exists to pin. */
+  --canvas: var(--ink-950);
+
+  --shadow-1: 0 1px 2px oklch(0% 0 0 / 0.7);
+  --shadow-2: 0 8px 24px oklch(0% 0 0 / 0.75);
+  --shadow-3: 0 20px 60px oklch(0% 0 0 / 0.8);
+  --scrim: oklch(0% 0 0 / 0.85);
+
+  /* Role overrides — later in the file than the semantic layer, so these win.
+   * Every "quiet" role is pulled up the ramp, and borders become visible
+   * structure rather than a hint. */
+  --text-secondary: var(--paper-100);
+  --text-muted: var(--paper-200);
+  --text-faint: var(--paper-300);
+  --text-disabled: var(--paper-500);
+  --border-subtle: var(--line);
+  --border-strong: var(--line-strong);
+  --status-ok-dim: var(--jade-500);
+  --status-warn-dim: var(--gold-500);
+  --status-danger-dim: var(--danger-500);
+  --status-idle: var(--paper-300);
+
+  /* Soft fills carry a real edge here instead of a 14% whisper. */
+  --status-ok-soft: color-mix(in oklab, var(--status-ok) 26%, transparent);
+  --status-warn-soft: color-mix(in oklab, var(--status-warn) 26%, transparent);
+  --status-danger-soft: color-mix(in oklab, var(--status-danger) 26%, transparent);
+  --status-info-soft: color-mix(in oklab, var(--status-info) 26%, transparent);
+  --status-busy-soft: color-mix(in oklab, var(--status-busy) 26%, transparent);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * ACCENT FAMILIES — [data-accent] picks which hue family fills the --accent-*
+ * roles. Orthogonal to [data-theme]: each family points at ramp steps, and the
+ * active theme decides what those steps mean, so six accents × four themes is
+ * 24 correct combinations from ten short blocks.
+ *
+ * --accent-hue is the one raw number here. The page canvas needs a hue for its
+ * ambient wash but must keep the lightness/chroma/alpha its theme designed, so
+ * the theme writes oklch(L C var(--accent-hue) / A) and only the hue travels.
+ * ══════════════════════════════════════════════════════════════════════════ */
+:root,
+[data-accent="gold"] {
+  --accent-hue: 82;
+  --accent-bright: var(--gold-300);
+  --accent: var(--gold-400);
+  --accent-strong: var(--gold-500);
+  --accent-dim: var(--gold-600);
+  --accent-faint: var(--gold-700);
+}
+
+[data-accent="royal"] {
+  --accent-hue: 292;
+  --accent-bright: var(--royal-300);
+  --accent: var(--royal-400);
+  --accent-strong: var(--royal-500);
+  --accent-dim: var(--royal-600);
+  --accent-faint: var(--royal-700);
+}
+
+[data-accent="jade"] {
+  --accent-hue: 162;
+  --accent-bright: var(--jade-300);
+  --accent: var(--jade-400);
+  --accent-strong: var(--jade-500);
+  --accent-dim: var(--jade-600);
+  --accent-faint: var(--jade-700);
+}
+
+[data-accent="ember"] {
+  --accent-hue: 35;
+  --accent-bright: var(--ember-300);
+  --accent: var(--ember-400);
+  --accent-strong: var(--ember-500);
+  --accent-dim: var(--ember-600);
+  --accent-faint: var(--ember-700);
+}
+/* cyan and rose stop at 600 in every theme (they were only ever used as data
+ * colours). Rather than add a 700 step to four theme blocks for one role, the
+ * faint step is mixed toward the page background — which darkens in the dark
+ * themes and lightens in LIGHT, i.e. the correct direction in both. */
+[data-accent="cyan"] {
+  --accent-hue: 210;
+  --accent-bright: var(--cyan-300);
+  --accent: var(--cyan-400);
+  --accent-strong: var(--cyan-500);
+  --accent-dim: var(--cyan-600);
+  --accent-faint: color-mix(in oklab, var(--cyan-600) 62%, var(--surface-base));
+}
+
+[data-accent="rose"] {
+  --accent-hue: 350;
+  --accent-bright: var(--rose-300);
+  --accent: var(--rose-400);
+  --accent-strong: var(--rose-500);
+  --accent-dim: var(--rose-600);
+  --accent-faint: color-mix(in oklab, var(--rose-600) 62%, var(--surface-base));
+}
+
+/* Derived accent tokens — written once, against whichever family won above.
+ * Fills and rings are mixed from --accent rather than hand-picked so a new
+ * accent family cannot ship a background that disagrees with its own text.
+ * [data-accent] and [data-theme] are in the selector for the same nested-scope
+ * reason as the semantic layer. */
+:root,
+[data-accent],
+[data-theme] {
+  --accent-soft: color-mix(in oklab, var(--accent) 14%, transparent);
+  --accent-softer: color-mix(in oklab, var(--accent) 7%, transparent);
+  --accent-border: color-mix(in oklab, var(--accent) 38%, transparent);
+  --accent-ring: color-mix(in oklab, var(--accent) 55%, transparent);
+
+  /* Two-stop ring: an inner band in the page colour keeps the outer band
+   * legible when the focused control sits directly on a busy surface. */
+  --focus-ring: 0 0 0 2px var(--surface-base), 0 0 0 4px var(--accent-ring);
+  --focus-ring-tight: 0 0 0 2px var(--accent-ring);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * DENSITY — one number rescales every spacing token and control height, because
+ * tokens.css writes them as calc(Npx * var(--density-scale)). No component
+ * branches on density and there is no second stylesheet.
+ * ══════════════════════════════════════════════════════════════════════════ */
+[data-density="compact"] {
+  --density-scale: 0.82;
+}
+[data-density="comfortable"] {
+  --density-scale: 1;
+}
+[data-density="spacious"] {
+  --density-scale: 1.16;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * FONT SCALE — same mechanism over the type ramp. Values are multipliers on
+ * rem-based sizes, so a user's own browser font size still compounds normally
+ * instead of being overridden.
+ * ══════════════════════════════════════════════════════════════════════════ */
+[data-font-scale="sm"] {
+  --font-scale: 0.92;
+}
+[data-font-scale="md"] {
+  --font-scale: 1;
+}
+[data-font-scale="lg"] {
+  --font-scale: 1.08;
+}
+[data-font-scale="xl"] {
+  --font-scale: 1.18;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * MOTION — --motion-scale: 0 collapses every duration token to 0s at once.
+ *
+ * Order matters here. The media query comes FIRST so that an explicit
+ * data-motion="full" (equal specificity, later in the file) can still win: a
+ * user who set reduce at the OS level and then deliberately turned animation
+ * back on in ATLAS gets what they asked for. With no attribute at all — which
+ * is what the "system" preference writes — only the media rule matches, so the
+ * OS preference is honoured by default.
+ * ══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-scale: 0;
+  }
+}
+
+[data-motion="full"] {
+  --motion-scale: 1;
+}
+[data-motion="reduced"] {
+  --motion-scale: 0;
+}
+/* The token collapse only reaches durations that read a token. Keyframe
+ * animations declared with literal times — spinners especially — need a hard
+ * stop, so reduced motion also clamps them globally. 1ms rather than 0s keeps
+ * transitionend/animationend firing, so components waiting on those events do
+ * not hang. A frozen spinner is the intended outcome: continuous rotation is a
+ * known vestibular trigger, and the accessible substitute is a static state. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) *,
+  :root:not([data-motion="full"]) *::before,
+  :root:not([data-motion="full"]) *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[data-motion="reduced"] *,
+[data-motion="reduced"] *::before,
+[data-motion="reduced"] *::after {
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important;
+  scroll-behavior: auto !important;
+}
+
+
+
+

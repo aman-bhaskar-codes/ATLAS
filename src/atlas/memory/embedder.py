@@ -259,9 +259,18 @@ class EmbeddingWorker:
                 )
 
             except Exception as exc:
-                _log.error(
-                    "embedding_worker.embed_error",
-                    event_type="memory",
-                    episode_id=episode_id,
-                    error=str(exc),
-                )
+                err_str = str(exc)
+                if "404" in err_str:
+                    _log.warning(
+                        "embedding_worker.embed_unavailable",
+                        event_type="memory",
+                        episode_id=episode_id,
+                        error="Provider returned 404. Embeddings skipped.",
+                    )
+                else:
+                    _log.error(
+                        "embedding_worker.embed_error",
+                        event_type="memory",
+                        episode_id=episode_id,
+                        error=err_str,
+                    )

@@ -80,26 +80,17 @@ def run_task(
             else:
                 state = final_task["state"]
                 if state == "completed":
-                    payload = final_task.get("payload", {})
-                    if isinstance(payload, str):
-                        import json
-
-                        try:
-                            payload = json.loads(payload)
-                        except Exception:
-                            pass
-
-                    if isinstance(payload, dict) and "answer" in payload:
+                    if "answer" in final_task and final_task["answer"]:
                         from rich.markdown import Markdown
 
                         console.print("\n[bold green]Result:[/]")
-                        console.print(Markdown(payload["answer"]))
+                        console.print(Markdown(final_task["answer"]))
                     else:
                         console.print("\n[bold green]Task completed successfully.[/]")
                 elif state == "failed":
                     console.print(f"\n[bold red]Task failed with state: {state}[/]")
-                    if isinstance(final_task.get("payload"), dict):
-                        error = final_task["payload"].get("error", "Unknown error")
+                    error = final_task.get("error", "Unknown error")
+                    if error:
                         console.print(f"[red]Error:[/] {error}")
                 else:
                     console.print(f"\n[yellow]Task state:[/] {state}")

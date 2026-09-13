@@ -1,28 +1,92 @@
-/* frontend/styles/tokens.css */
+/* frontend/styles/tokens.css
+ *
+ * THEME-INVARIANT tokens only. Anything whose value changes between light and
+ * dark lives in themes.css, keyed on [data-theme]. Keeping the two apart is what
+ * makes a theme a ~40-line block instead of a fork of the whole design system.
+ *
+ * Scales are ramps, not palettes — the number is a position, not a name:
+ *   --ink-*    surface ramp, 950 (furthest back) → 700 (closest to the viewer)
+ *   --paper-*  content ramp, 100 (highest contrast) → 700 (lowest)
+ * In a light theme those ramps hold near-white surfaces and near-black content.
+ * The *role* of each step is stable, which is the only property theming needs.
+ */
 :root {
-  --ink-950: oklch(10% .018 278);
-  --ink-900: oklch(14% .024 278);
-  --ink-850: oklch(18% .030 278);
-  --ink-800: oklch(22% .036 278);
-  --ink-700: oklch(29% .042 278);
-  --line: oklch(34% .035 278);
-  --paper-100: oklch(94% .012 82);
-  --paper-300: oklch(80% .020 82);
-  --paper-500: oklch(62% .025 82);
-  --royal-500: oklch(58% .16 292);
-  --royal-400: oklch(68% .14 292);
-  --gold-500: oklch(76% .13 82);
-  --gold-400: oklch(84% .12 82);
-  --jade-400: oklch(73% .13 162);
-  --ember-400: oklch(70% .16 35);
-  --danger-400: oklch(68% .18 22);
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 32px;
-  --space-2xl: 48px;
+  /* ── spacing ─────────────────────────────────────────────────────────────
+   * Scaled by [data-density] so "compact" is one attribute, not a second
+   * stylesheet. Never hardcode a px gap in a component; read these. */
+  --space-2xs: calc(2px * var(--density-scale, 1));
+  --space-xs: calc(4px * var(--density-scale, 1));
+  --space-sm: calc(8px * var(--density-scale, 1));
+  --space-md: calc(16px * var(--density-scale, 1));
+  --space-lg: calc(24px * var(--density-scale, 1));
+  --space-xl: calc(32px * var(--density-scale, 1));
+  --space-2xl: calc(48px * var(--density-scale, 1));
+  --space-3xl: calc(64px * var(--density-scale, 1));
+
+  /* Control heights — the reason buttons/inputs/pills line up on a row. */
+  --control-sm: calc(28px * var(--density-scale, 1));
+  --control-md: calc(36px * var(--density-scale, 1));
+  --control-lg: calc(44px * var(--density-scale, 1));
+
+  /* ── radius ─────────────────────────────────────────────────────────── */
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 10px;
-  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* ── typography ──────────────────────────────────────────────────────────
+   * Font stacks list real local fallbacks first-class: the webfonts load over
+   * the network, and when that fails (offline, blocked, slow) the UI must still
+   * read as designed rather than falling back to Times. */
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Cormorant Garamond", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* Scaled by [data-font-scale] for users who want larger UI text. */
+  --text-2xs: calc(0.62rem * var(--font-scale, 1));
+  --text-xs: calc(0.72rem * var(--font-scale, 1));
+  --text-sm: calc(0.82rem * var(--font-scale, 1));
+  --text-md: calc(0.92rem * var(--font-scale, 1));
+  --text-base: calc(1rem * var(--font-scale, 1));
+  --text-lg: calc(1.15rem * var(--font-scale, 1));
+  --text-xl: calc(1.4rem * var(--font-scale, 1));
+  --text-2xl: calc(1.85rem * var(--font-scale, 1));
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+  --tracking-wide: 0.08em;
+  --tracking-wider: 0.14em;
+
+  /* ── motion ──────────────────────────────────────────────────────────────
+   * --motion-scale is set to 0 by [data-motion="reduced"] and by the
+   * prefers-reduced-motion media query, which collapses every duration below to
+   * 0s at once. Components multiply by it instead of branching. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: calc(120ms * var(--motion-scale, 1));
+  --dur-md: calc(200ms * var(--motion-scale, 1));
+  --dur-slow: calc(320ms * var(--motion-scale, 1));
+
+  /* ── layering ────────────────────────────────────────────────────────────
+   * Named so a new overlay cannot be introduced with a guessed z-index that
+   * happens to sit under the command palette. */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-nav: 20;
+  --z-dropdown: 40;
+  --z-overlay: 60;
+  --z-modal: 70;
+  --z-toast: 90;
+  --z-tooltip: 100;
+
+  /* ── layout ─────────────────────────────────────────────────────────── */
+  --rail-width: 244px;
+  --rail-width-collapsed: 76px;
+  --content-max: 1560px;
 }

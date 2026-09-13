@@ -491,8 +491,12 @@ class Orchestrator:
             plan_confidence=getattr(plan, "confidence", 0.5),
             actions=result.actions,
             observations=result.observations,
-            decision_traces=result.decision_traces,
-            failure_records=result.failure_records,
+            decision_traces=tuple(
+                t.id if hasattr(t, "id") else str(t) for t in result.decision_traces
+            ),
+            failure_records=tuple(
+                r.id if hasattr(r, "id") else str(r) for r in result.failure_records
+            ),
             replan_count=result.replan_count,
             verification_passed=result.verification_passed,
             verification_score=result.verification_score,

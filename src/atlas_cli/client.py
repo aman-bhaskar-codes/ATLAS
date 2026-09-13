@@ -13,6 +13,12 @@ class AtlasClient:
         self.base_url = base_url.rstrip("/")
         self.ws_url = self.base_url.replace("http://", "ws://").replace("https://", "wss://")
 
+    async def _get(self, path: str) -> Any:
+        async with httpx.AsyncClient() as c:
+            resp = await c.get(f"{self.base_url}{path}")
+            resp.raise_for_status()
+            return resp.json()
+
     async def create_task(self, request: str, source: str = "api") -> dict[str, Any]:
         """Start a new task and return the task_id."""
         import uuid

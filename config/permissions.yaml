@@ -10,7 +10,7 @@ allowed_paths:
   write: ["~/projects/scratch/**", "~/atlas/outbox/**", "/tmp/atlas/**"]
 
 allowed_commands:
-  read_only:   ["ls", "cat", "grep", "find", "git status", "git log", "git diff"]
+  read_only:   ["ls", "cat", "grep", "find", "git status", "git log", "git diff", "curl", "wget", "head", "tail", "wc", "python3 -c"]
   side_effect: ["git add", "git commit", "npm install", "python"]
 
 whatsapp:

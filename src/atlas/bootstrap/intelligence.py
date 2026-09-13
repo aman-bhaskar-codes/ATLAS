@@ -237,12 +237,19 @@ async def build_intelligence(
     cap_router = CapabilityRouter()
     selector = ModelSelector(capability_index, health)
 
-    embedder = CloudEmbedder(
-        base_url=settings.embed_base_url,
-        api_key=settings.effective_embed_api_key(),
-        model=settings.embed_model,
-        timeout_s=config.models.cloud_timeout_s,
-    )
+    if settings.embed_provider == "ollama":
+        from atlas.memory.embedder import OllamaEmbedder
+        embedder = OllamaEmbedder(
+            settings=settings,
+            timeout_s=config.models.local_timeout_s,
+        )
+    else:
+        embedder = CloudEmbedder(
+            base_url=settings.embed_base_url,
+            api_key=settings.effective_embed_api_key(),
+            model=settings.embed_model,
+            timeout_s=config.models.cloud_timeout_s,
+        )
     cache_vectors = ChromaVectorStore(str(settings.data_dir / "chroma"), collection="atlas_cache")
     semantic_cache = SemanticCache(db, cache_vectors, embedder)
 

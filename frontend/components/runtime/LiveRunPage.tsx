@@ -1,6 +1,6 @@
 "use client";
 import { Badge } from "../primitives/Badge";
-import { Panel } from "../primitives/Panel";
+
 import { ConnectionState, elapsedSeconds, isTerminal, Task, TaskEvent, CancelTaskResponse } from "../../lib/api/contracts";
 import { formatDistanceToNowStrict } from "date-fns";
 
@@ -142,6 +142,12 @@ export function RuntimeHeader({
       </div>
       {cancelResult && !cancelResult.accepted && (
         <div style={{ fontSize: '0.85rem', color: 'var(--danger-400)' }}>{cancelResult.message}</div>
+      )}
+      {task.answer && (
+        <div className="panel" style={{ marginTop: '0.5rem', padding: '1rem', background: 'var(--ink-900)', border: '1px solid var(--jade-500)', borderRadius: '4px' }}>
+          <h3 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--jade-400)', margin: '0 0 0.5rem 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Final Answer</h3>
+          <p style={{ fontSize: '0.95rem', color: 'var(--paper-100)', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{task.answer}</p>
+        </div>
       )}
     </div>
   );

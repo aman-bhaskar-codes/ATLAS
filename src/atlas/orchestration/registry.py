@@ -63,7 +63,10 @@ class ToolRegistry:
     def catalog(self) -> str:
         lines = ["Available tools:"]
         for name, ops in self._operations.items():
-            lines.append(f"- {name}: {', '.join(ops)}")
+            desc = ""
+            if name in self._metadata and self._metadata[name].description:
+                desc = self._metadata[name].description
+            lines.append(f"- {name}: {', '.join(ops)}\n  Description: {desc}")
         return "\n".join(lines)
 
     def tool_call_specs(self) -> tuple[object, ...]:

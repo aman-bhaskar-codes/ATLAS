@@ -63,13 +63,8 @@ export function CommandWorkspace() {
     if (!state.text.trim() && !isCameraActive && !isScreenShared && state.attachments.length === 0) {
       return;
     }
-    // Straight to the confirmation gate. What was here: a 1500ms setTimeout that
-    // moved through an "analyzing" state rendering "Analyzing request & classifying
-    // safety…" with a spinner — while nothing was analysed and nothing was
-    // classified. There is no pre-flight endpoint to await, so the honest version
-    // does not pretend to be waiting on one.
     resetSubmit();
-    dispatch({ type: "SET_PREFLIGHT_STATUS", payload: "ready" });
+    submitCommand();
   };
 
   const confirmAndExecute = () => {

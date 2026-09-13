@@ -1,48 +1,242 @@
+/* app/globals.css — the single stylesheet entry point.
+ *
+ * Import order is load-bearing:
+ *   1. fonts       — a webfont @import must precede any rule that uses the family
+ *   2. tailwindcss — emits @layer theme / base / utilities
+ *   3. tokens      — theme-INVARIANT scales. Unlayered, so they outrank @layer
+ *                    theme; that is what makes the `--radius-sm: var(--radius-sm)`
+ *                    style aliases below resolve to the token instead of cycling.
+ *   4. themes      — everything that changes per [data-theme] / [data-accent]
+ *   5. primitives  — component classes built on 3 and 4
+ *   6. trust/atlas — the existing shell and widget styles
+ * Anything that reads a token has to come after 3 and 4.
+ */
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
 @import "tailwindcss";
 @import "../styles/tokens.css";
+@import "../styles/themes.css";
+@import "../styles/primitives.css";
 @import "../styles/trust.css";
 @import "../styles/atlas.css";
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Tailwind v4 namespace mappings.
+ *
+ * Every entry points at a custom property rather than a literal colour, so a
+ * utility class like `bg-ink-850` follows [data-theme] for free. Mapping a
+ * literal here would produce utilities that silently ignore the active theme —
+ * which is the single most likely way this design system could regress.
+ * ────────────────────────────────────────────────────────────────────────── */
 @theme {
+  /* surface ramp */
   --color-ink-950: var(--ink-950);
   --color-ink-900: var(--ink-900);
   --color-ink-850: var(--ink-850);
   --color-ink-800: var(--ink-800);
   --color-ink-700: var(--ink-700);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  /* content ramp */
   --color-paper-100: var(--paper-100);
+  --color-paper-200: var(--paper-200);
   --color-paper-300: var(--paper-300);
+  --color-paper-400: var(--paper-400);
   --color-paper-500: var(--paper-500);
-  --color-royal-500: var(--royal-500);
+  --color-paper-600: var(--paper-600);
+  --color-paper-700: var(--paper-700);
+  /* accent + status families, full ramps */
+  --color-royal-300: var(--royal-300);
   --color-royal-400: var(--royal-400);
-  --color-gold-500: var(--gold-500);
+  --color-royal-500: var(--royal-500);
+  --color-royal-600: var(--royal-600);
+  --color-royal-700: var(--royal-700);
+  --color-gold-300: var(--gold-300);
   --color-gold-400: var(--gold-400);
+  --color-gold-500: var(--gold-500);
+  --color-gold-600: var(--gold-600);
+  --color-gold-700: var(--gold-700);
+  --color-jade-300: var(--jade-300);
   --color-jade-400: var(--jade-400);
+  --color-jade-500: var(--jade-500);
+  --color-jade-600: var(--jade-600);
+  --color-jade-700: var(--jade-700);
+  --color-ember-300: var(--ember-300);
   --color-ember-400: var(--ember-400);
+  --color-ember-500: var(--ember-500);
+  --color-ember-600: var(--ember-600);
+  --color-ember-700: var(--ember-700);
+  --color-danger-300: var(--danger-300);
   --color-danger-400: var(--danger-400);
-  
+  --color-danger-500: var(--danger-500);
+  --color-danger-600: var(--danger-600);
+  --color-danger-700: var(--danger-700);
+  --color-cyan-300: var(--cyan-300);
+  --color-cyan-400: var(--cyan-400);
+  --color-cyan-500: var(--cyan-500);
+  --color-cyan-600: var(--cyan-600);
+  --color-indigo-300: var(--indigo-300);
+  --color-indigo-400: var(--indigo-400);
+  --color-indigo-500: var(--indigo-500);
+  --color-indigo-600: var(--indigo-600);
+  --color-rose-300: var(--rose-300);
+  --color-rose-400: var(--rose-400);
+  --color-rose-500: var(--rose-500);
+  --color-rose-600: var(--rose-600);
+
+  /* Semantic roles as utilities — `bg-surface-card`, `text-fg-muted`,
+   * `border-border`, `bg-accent-soft`, `text-ok`. New markup should reach for
+   * these before the ramp names: they survive a palette change. */
+  --color-surface: var(--surface-base);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-card: var(--surface-card);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-fg: var(--text-primary);
+  --color-fg-secondary: var(--text-secondary);
+  --color-fg-muted: var(--text-muted);
+  --color-fg-faint: var(--text-faint);
+  --color-fg-disabled: var(--text-disabled);
+  --color-fg-on-accent: var(--text-on-accent);
+
+  --color-border: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-faint: var(--accent-faint);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-border: var(--accent-border);
+
+  --color-ok: var(--status-ok);
+  --color-ok-soft: var(--status-ok-soft);
+  --color-warn: var(--status-warn);
+  --color-warn-soft: var(--status-warn-soft);
+  --color-danger: var(--status-danger);
+  --color-danger-soft: var(--status-danger-soft);
+  --color-info: var(--status-info);
+  --color-info-soft: var(--status-info-soft);
+  --color-busy: var(--status-busy);
+  --color-busy-soft: var(--status-busy-soft);
+  --color-idle: var(--status-idle);
+
+  /* spacing / radius / motion aliases so `p-md`, `rounded-lg`, `ease-out`
+   * resolve to the same tokens the hand-written CSS uses */
+  --spacing-2xs: var(--space-2xs);
   --spacing-xs: var(--space-xs);
   --spacing-sm: var(--space-sm);
   --spacing-md: var(--space-md);
   --spacing-lg: var(--space-lg);
   --spacing-xl: var(--space-xl);
   --spacing-2xl: var(--space-2xl);
+  --spacing-3xl: var(--space-3xl);
 
+  --radius-xs: var(--radius-xs);
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
 
   --ease-out: var(--ease-out);
+  --ease-in-out: var(--ease-in-out);
 
-  --font-sans: "Inter", var(--font-geist-sans), sans-serif;
+  /* Was `"Inter", var(--font-geist-sans), sans-serif` — Inter is never loaded
+   * and --font-geist-sans was never defined, so `font-sans` silently fell back
+   * to a bare sans-serif while <body> rendered IBM Plex. One source now. */
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Base layer
+ * ────────────────────────────────────────────────────────────────────────── */
+html {
+  /* Themes set color-scheme, which is what makes native form controls and the
+   * default scrollbar match the theme instead of staying dark on a light page. */
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   margin: 0;
-  color: var(--paper-100);
-  font: 400 16px/1.5 'IBM Plex Sans', system-ui, sans-serif;
-  letter-spacing: 0.012em;
-  background: radial-gradient(circle at 76% 0%, oklch(26% 0.08 292 / 0.25), transparent 34rem), var(--ink-950);
   min-height: 100vh;
+  color: var(--text-primary);
+  background: var(--canvas);
+  background-attachment: fixed;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 400;
+  line-height: var(--leading-normal);
+  letter-spacing: 0.012em;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* One focus ring for the whole app, on :focus-visible only so a mouse click
+ * never paints one. Anything that needs a different shape overrides
+ * box-shadow, not outline, so the ring cannot be removed by accident. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-xs);
+}
+
+::selection {
+  background: var(--accent-ring);
+  color: var(--text-on-accent);
+}
+
+/* Scrollbars follow the theme. Firefox gets the standard properties; WebKit and
+ * Blink get the pseudo-elements. Width is deliberately not scaled by density —
+ * a 6px scrollbar is a hit-target problem, not a spacing choice. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--paper-600);
+  background-clip: content-box;
+}
+
+/* Keyboard-only escape from the 8-group sidebar straight to page content.
+ * Off-screen until focused rather than display:none, which would take it out of
+ * the tab order and defeat the point. */
+.skip-link {
+  position: fixed;
+  top: var(--space-sm);
+  left: var(--space-sm);
+  z-index: var(--z-tooltip);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--shadow-2);
+  transform: translateY(-200%);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+

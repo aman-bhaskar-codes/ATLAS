@@ -17,7 +17,7 @@ models:
   # ── 1. GLM 5.2 (free) — primary reasoning + agentic (DEEP tier lead) ──
   - id: glm-5.2-free
     provider: openrouter
-    provider_model: z-ai/glm-5.2:free
+    provider_model: z-ai/glm-5.2
     context_length: 128000
     usd_per_1m_input: 0.0
     usd_per_1m_output: 0.0
@@ -46,7 +46,7 @@ models:
   # ── 2. MiniMax M3 (free) — general agent, long-context, multimodal ──
   - id: minimax-m3-free
     provider: openrouter
-    provider_model: minimax/minimax-m3:free
+    provider_model: minimax/minimax-m3
     context_length: 1000000
     usd_per_1m_input: 0.0
     usd_per_1m_output: 0.0

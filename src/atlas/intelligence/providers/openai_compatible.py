@@ -111,6 +111,8 @@ class OpenAICompatibleProvider:
             raise ProviderError(f"{self.name} transport: {exc}") from exc
 
         data = r.json()
+        if "error" in data and "choices" not in data:
+            raise ProviderError(f"{self.name} returned error in body: {data['error']}")
         text = data["choices"][0]["message"].get("content")
         if not text:
             import logging

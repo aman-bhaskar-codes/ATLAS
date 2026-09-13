@@ -176,7 +176,8 @@ class ReasoningLoop:
             try:
                 self._monitor.check_may_continue(token)
                 counter.tick_step()
-                machine.transition(TaskState.REASONING)
+                if machine.state != TaskState.REASONING:
+                    machine.transition(TaskState.REASONING)
 
                 thought, action, model_trace = await self._reason_once(
                     task_id,

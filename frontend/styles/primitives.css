@@ -1,0 +1,1209 @@
+/* frontend/styles/primitives.css
+ *
+ * The component layer. Every class here is built only from tokens.css and
+ * themes.css, so a primitive is theme-, density-, font-scale- and motion-aware
+ * without knowing that any of those systems exist.
+ *
+ * WHY the `ui-` prefix: styles/atlas.css already owns unprefixed `.panel`,
+ * `.primary`, `.chip`, `.badge` and `.icon-btn` for the app shell, and `.panel`
+ * there means "a rule above a block of content" while the <Panel> React
+ * component means "a bordered card". Prefixing ends that collision without
+ * touching the shell, and makes it obvious in markup which system a class
+ * belongs to.
+ *
+ * Interaction states are mandatory, not decorative: every interactive class
+ * below defines :hover, :focus-visible, :active and :disabled. A control that
+ * only styles its resting state is the most common way this UI felt unfinished.
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * PANEL — the bordered card everything sits in.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-1);
+}
+
+.ui-panel--flush {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  box-shadow: none;
+}
+
+.ui-panel--raised {
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-2);
+}
+
+/* Hover lift is opt-in: a panel that is not a link must not pretend to be one. */
+.ui-panel--interactive {
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.ui-panel--interactive:hover {
+  border-color: var(--accent-border);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+}
+.ui-panel--interactive:active {
+  transform: translateY(0);
+}
+.ui-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ui-panel__title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+}
+
+.ui-panel__eyebrow {
+  margin: 0 0 var(--space-2xs);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  color: var(--accent);
+}
+
+.ui-panel__body {
+  padding: var(--space-lg);
+}
+.ui-panel__body--tight {
+  padding: var(--space-md);
+}
+.ui-panel__body--none {
+  padding: 0;
+}
+
+.ui-panel__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--border-subtle);
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * BUTTON — one base, five intents, three sizes.
+ *
+ * Height comes from --control-*, so density rescales buttons and inputs by the
+ * same factor and they keep lining up on a row. `min-width: 0` and the flex
+ * layout let a long label truncate instead of stretching the row.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.ui-btn:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+.ui-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* :disabled covers <button>; [aria-disabled] covers <a> and anything that must
+ * stay focusable so a screen reader can announce why it is unavailable. */
+.ui-btn:disabled,
+.ui-btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+}
+.ui-btn--primary {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.ui-btn--primary:hover:not(:disabled) {
+  background: var(--accent-bright);
+}
+.ui-btn--primary:active:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.ui-btn--secondary {
+  border-color: var(--border-subtle);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+.ui-btn--secondary:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
+.ui-btn--ghost {
+  color: var(--text-secondary);
+}
+.ui-btn--ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* Quieter than ghost: no hover fill, for dense rows where a filled hover on
+ * every cell would strobe as the pointer crosses the table. */
+.ui-btn--subtle {
+  color: var(--text-muted);
+}
+.ui-btn--subtle:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.ui-btn--danger {
+  border-color: var(--status-danger-soft);
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
+}
+.ui-btn--danger:hover:not(:disabled) {
+  border-color: var(--status-danger);
+  background: var(--status-danger);
+  color: var(--text-on-accent);
+}
+.ui-btn--sm {
+  height: var(--control-sm);
+  padding: 0 var(--space-sm);
+  font-size: var(--text-xs);
+  gap: var(--space-xs);
+}
+.ui-btn--lg {
+  height: var(--control-lg);
+  padding: 0 var(--space-lg);
+  font-size: var(--text-md);
+}
+.ui-btn--block {
+  width: 100%;
+}
+
+/* Square, label-less. Width is pinned to the height so the icon stays centred
+ * at every density; an aria-label is required on the element, not optional. */
+.ui-btn--icon {
+  width: var(--control-md);
+  padding: 0;
+}
+.ui-btn--icon.ui-btn--sm {
+  width: var(--control-sm);
+}
+.ui-btn--icon.ui-btn--lg {
+  width: var(--control-lg);
+}
+
+/* Icons inherit the text colour and never carry their own size. `flex-shrink: 0`
+ * stops a long label from squashing the glyph into an ellipse. */
+.ui-btn svg,
+.ui-icon {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+}
+.ui-icon--lg {
+  width: 1.25em;
+  height: 1.25em;
+}
+
+/* Segmented row of buttons that reads as one control. */
+.ui-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * BADGE — status as a pill. Text and fill are both derived from one status
+ * role, so a variant cannot end up with a background that fights its label.
+ * This replaces the old <Badge> variants, which used Tailwind's own palette
+ * (bg-emerald-950, bg-amber-950 …) and therefore ignored the active theme.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0 var(--space-sm);
+  min-height: calc(20px * var(--density-scale, 1));
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ui-badge--ok {
+  background: var(--status-ok-soft);
+  border-color: var(--status-ok-soft);
+  color: var(--status-ok);
+}
+.ui-badge--warn {
+  background: var(--status-warn-soft);
+  border-color: var(--status-warn-soft);
+  color: var(--status-warn);
+}
+.ui-badge--danger {
+  background: var(--status-danger-soft);
+  border-color: var(--status-danger-soft);
+  color: var(--status-danger);
+}
+.ui-badge--info {
+  background: var(--status-info-soft);
+  border-color: var(--status-info-soft);
+  color: var(--status-info);
+}
+.ui-badge--busy {
+  background: var(--status-busy-soft);
+  border-color: var(--status-busy-soft);
+  color: var(--status-busy);
+}
+.ui-badge--accent {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+.ui-badge--neutral {
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+}
+.ui-badge--plain {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+/* Status dot. Colour is set by the caller via --dot, defaulting to idle, so one
+ * class covers every state without a variant per status. */
+.ui-dot {
+  display: inline-block;
+  width: calc(7px * var(--density-scale, 1));
+  height: calc(7px * var(--density-scale, 1));
+  border-radius: 50%;
+  background: var(--dot, var(--status-idle));
+  flex-shrink: 0;
+}
+
+/* Live states get a halo instead of a size change: a pulsing dot that grows
+ * shifts the text next to it, and the animation collapses under reduced motion
+ * while the halo — the part that actually carries the meaning — remains. */
+.ui-dot--live {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--dot, var(--status-idle)) 24%, transparent);
+  animation: ui-pulse 2s var(--ease-in-out) infinite;
+}
+
+@keyframes ui-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * FORM CONTROLS
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.ui-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Help text, not error text. Errors use .ui-hint--error so the colour change is
+ * an explicit decision at the call site rather than a state to remember. */
+.ui-hint {
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--text-faint);
+}
+.ui-hint--error {
+  color: var(--status-danger);
+}
+
+.ui-input,
+.ui-textarea,
+.ui-select {
+  width: 100%;
+  padding: 0 var(--space-md);
+  height: var(--control-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  transition: border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.ui-input::placeholder,
+.ui-textarea::placeholder {
+  color: var(--text-disabled);
+}
+
+.ui-input:hover:not(:disabled),
+.ui-textarea:hover:not(:disabled),
+.ui-select:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+.ui-input:focus-visible,
+.ui-textarea:focus-visible,
+.ui-select:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface-base);
+  box-shadow: var(--focus-ring-tight);
+}
+
+.ui-input:disabled,
+.ui-textarea:disabled,
+.ui-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ui-input[aria-invalid="true"],
+.ui-textarea[aria-invalid="true"] {
+  border-color: var(--status-danger);
+}
+
+.ui-textarea {
+  height: auto;
+  min-height: calc(var(--control-lg) * 2);
+  padding: var(--space-sm) var(--space-md);
+  line-height: var(--leading-normal);
+  resize: vertical;
+}
+
+.ui-input--mono,
+.ui-textarea--mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* Native <select> keeps its own arrow on some platforms and drops it on others.
+ * Resetting appearance and drawing one chevron as a background image is the only
+ * way the control looks identical everywhere; the colour is baked per theme via
+ * currentColor being unavailable in url(), so a CSS mask is used instead. */
+.ui-select {
+  appearance: none;
+  padding-right: var(--space-2xl);
+  background-image: none;
+  cursor: pointer;
+}
+.ui-select-wrap {
+  position: relative;
+  display: block;
+}
+.ui-select-wrap::after {
+  content: "";
+  position: absolute;
+  right: var(--space-md);
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-top: -5px;
+  border-right: 1.5px solid var(--text-muted);
+  border-bottom: 1.5px solid var(--text-muted);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * SWITCH — a real <button role="switch" aria-checked>. State is read from
+ * aria-checked rather than a class, so the visual and the accessibility tree
+ * cannot disagree: styling it wrong requires getting the ARIA wrong too.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: calc(38px * var(--density-scale, 1));
+  height: calc(22px * var(--density-scale, 1));
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.ui-switch::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: calc(3px * var(--density-scale, 1));
+  width: calc(14px * var(--density-scale, 1));
+  height: calc(14px * var(--density-scale, 1));
+  margin-top: calc(-7px * var(--density-scale, 1));
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+.ui-switch[aria-checked="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.ui-switch[aria-checked="true"]::after {
+  background: var(--text-on-accent);
+  transform: translateX(calc(16px * var(--density-scale, 1)));
+}
+.ui-switch:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+.ui-switch:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+.ui-switch:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * SEGMENTED CONTROL — the picker used for theme, density, font size and motion.
+ * Selection is read from aria-checked, same contract as the switch.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-segmented {
+  display: inline-flex;
+  padding: calc(3px * var(--density-scale, 1));
+  gap: calc(2px * var(--density-scale, 1));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.ui-segmented__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  flex: 1 1 auto;
+  min-width: 0;
+  height: calc(var(--control-sm) - 2px);
+  padding: 0 var(--space-md);
+  border: 0;
+  border-radius: calc(var(--radius-md) - 4px);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.ui-segmented__btn:hover:not([aria-checked="true"]):not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.ui-segmented__btn[aria-checked="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.ui-segmented__btn:focus-visible {
+  box-shadow: var(--focus-ring-tight);
+}
+.ui-segmented__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ui-segmented--stretch {
+  display: flex;
+  width: 100%;
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * SWATCH + THEME PREVIEW — the two pickers in Settings › Appearance.
+ *
+ * The preview is not a painted approximation. Because themes.css keys on
+ * [data-theme] rather than :root[data-theme], and re-declares the semantic
+ * roles on that selector, a nested <div data-theme="light"> genuinely computes
+ * the light theme's own variables. What you see in the card is the theme.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-swatch {
+  position: relative;
+  width: var(--control-md);
+  height: var(--control-md);
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.ui-swatch::after {
+  content: "";
+  position: absolute;
+  inset: calc(5px * var(--density-scale, 1));
+  border-radius: var(--radius-xs);
+  background: var(--swatch, var(--accent));
+}
+.ui-swatch:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+}
+.ui-swatch:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+.ui-swatch[aria-checked="true"] {
+  border-color: var(--swatch, var(--accent));
+  box-shadow: 0 0 0 1px var(--swatch, var(--accent));
+}
+
+.ui-swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+.ui-theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.ui-theme-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+}
+.ui-theme-card:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+.ui-theme-card[aria-checked="true"] {
+  border-color: var(--accent);
+}
+
+/* The swatch strip lives in the previewed theme's own scope. `background:
+ * var(--canvas)` here paints that theme's real page background, gradient and
+ * all — which is why a preview cannot drift from the theme it names. */
+.ui-theme-card__preview {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(3px * var(--density-scale, 1));
+  height: calc(52px * var(--density-scale, 1));
+  padding: var(--space-sm);
+  background: var(--canvas);
+}
+.ui-theme-card__bar {
+  flex: 1 1 0;
+  border-radius: var(--radius-xs);
+}
+.ui-theme-card__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * TABLE — wrap in .ui-table-scroll so a wide table scrolls itself instead of
+ * widening the page and producing a horizontal scrollbar on <body>.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+/* Sticky header so column meaning survives scrolling a long event log. It needs
+ * an opaque background — a translucent one lets rows show through as they pass
+ * underneath. */
+.ui-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ui-table tbody td {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+
+.ui-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.ui-table tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+.ui-table--fixed {
+  table-layout: fixed;
+}
+.ui-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * TABS — role="tablist" / role="tab", selection from aria-selected.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-tabs {
+  display: flex;
+  gap: var(--space-xs);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ui-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.ui-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.ui-tab:hover:not([aria-selected="true"]) {
+  color: var(--text-primary);
+}
+.ui-tab:focus-visible {
+  box-shadow: var(--focus-ring-tight);
+}
+.ui-tab[aria-selected="true"] {
+  color: var(--accent);
+}
+
+/* The indicator is a pseudo-element pinned to the tab, offset by 1px so it sits
+ * on top of the tablist's own border rather than below it. */
+.ui-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: var(--space-sm);
+  right: var(--space-sm);
+  bottom: -1px;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * LOADING, EMPTY, ERROR — the three states every data view needs and the old
+ * pages mostly rendered as a bare "Loading…" string.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* Skeletons are sized by the caller. The sweep is a moving gradient rather than
+ * an opacity pulse so it reads as "content arriving" instead of "broken", and it
+ * is a background animation, so reduced motion freezes it into a flat block
+ * that still communicates layout. */
+.ui-skeleton {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--surface-raised) 0%,
+    var(--surface-hover) 40%,
+    var(--surface-raised) 80%
+  );
+  background-size: 240% 100%;
+  animation: ui-shimmer 1.6s var(--ease-in-out) infinite;
+}
+.ui-skeleton--text {
+  height: var(--text-md);
+  margin-bottom: var(--space-sm);
+}
+.ui-skeleton--title {
+  height: var(--text-xl);
+  width: 42%;
+  margin-bottom: var(--space-md);
+}
+.ui-skeleton--block {
+  height: calc(96px * var(--density-scale, 1));
+}
+.ui-skeleton--pill {
+  height: calc(20px * var(--density-scale, 1));
+  width: calc(72px * var(--density-scale, 1));
+  border-radius: var(--radius-pill);
+}
+
+@keyframes ui-shimmer {
+  from {
+    background-position: 140% 0;
+  }
+  to {
+    background-position: -40% 0;
+  }
+}
+
+.ui-spinner {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  border: 2px solid var(--accent-border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ui-spin 720ms linear infinite;
+}
+
+@keyframes ui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ui-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-2xl) var(--space-lg);
+  text-align: center;
+}
+.ui-state__icon {
+  display: grid;
+  place-items: center;
+  width: calc(44px * var(--density-scale, 1));
+  height: calc(44px * var(--density-scale, 1));
+  margin-bottom: var(--space-xs);
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  color: var(--text-muted);
+}
+.ui-state__title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ui-state__body {
+  margin: 0;
+  max-width: 46ch;
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+.ui-state__actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+/* Error variant tints only the icon. Tinting the whole block makes a recoverable
+ * fetch failure look like a system-wide fault. */
+.ui-state--error .ui-state__icon {
+  border-color: var(--status-danger-soft);
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
+}
+.ui-state--warn .ui-state__icon {
+  border-color: var(--status-warn-soft);
+  background: var(--status-warn-soft);
+  color: var(--status-warn);
+}
+
+/* Inline error strip for a failure inside an otherwise-working panel. */
+.ui-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
+}
+.ui-alert--error {
+  border-color: var(--status-danger-soft);
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
+}
+.ui-alert--warn {
+  border-color: var(--status-warn-soft);
+  background: var(--status-warn-soft);
+  color: var(--status-warn);
+}
+.ui-alert--info {
+  border-color: var(--status-info-soft);
+  background: var(--status-info-soft);
+  color: var(--status-info);
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * STAT, PROGRESS, KBD, DIVIDER
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+.ui-stat__label {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+/* tabular-nums stops a live-updating counter from reflowing its neighbours as
+ * digit widths change. */
+.ui-stat__value {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.ui-stat__delta {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.ui-progress {
+  width: 100%;
+  height: calc(6px * var(--density-scale, 1));
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.ui-progress__bar {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  transition: width var(--dur-md) var(--ease-out);
+}
+.ui-progress__bar--ok {
+  background: var(--status-ok);
+}
+.ui-progress__bar--warn {
+  background: var(--status-warn);
+}
+.ui-progress__bar--danger {
+  background: var(--status-danger);
+}
+
+.ui-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: calc(20px * var(--density-scale, 1));
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--border-subtle);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: calc(18px * var(--density-scale, 1));
+}
+
+.ui-divider {
+  height: 1px;
+  border: 0;
+  margin: var(--space-md) 0;
+  background: var(--border-subtle);
+}
+.ui-divider--vertical {
+  width: 1px;
+  height: auto;
+  margin: 0 var(--space-sm);
+  align-self: stretch;
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * TOOLTIP — CSS-only, driven by :hover and :focus-visible on the wrapper.
+ *
+ * No JS and no portal, which means no positioning library and nothing to get
+ * out of sync on scroll. The trade-off is that it cannot escape an
+ * overflow: hidden ancestor; anything that needs to should use a popover.
+ * pointer-events: none keeps the tip from eating the hover it depends on.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-tip {
+  position: relative;
+  display: inline-flex;
+}
+.ui-tip__body {
+  position: absolute;
+  bottom: calc(100% + var(--space-xs));
+  left: 50%;
+  z-index: var(--z-tooltip);
+  transform: translateX(-50%) translateY(4px);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-overlay);
+  color: var(--text-primary);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  line-height: var(--leading-normal);
+  white-space: nowrap;
+  box-shadow: var(--shadow-2);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out), visibility var(--dur-fast);
+}
+.ui-tip:hover .ui-tip__body,
+.ui-tip:focus-within .ui-tip__body {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+.ui-tip__body--right {
+  left: auto;
+  right: 0;
+  transform: translateY(4px);
+}
+.ui-tip:hover .ui-tip__body--right,
+.ui-tip:focus-within .ui-tip__body--right {
+  transform: translateY(0);
+}
+/* ══════════════════════════════════════════════════════════════════════════
+ * TOAST + DIALOG
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-toast-region {
+  position: fixed;
+  right: var(--space-lg);
+  bottom: var(--space-lg);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: min(380px, calc(100vw - var(--space-xl)));
+  /* The region must not swallow clicks over the page it floats above; each toast
+   * turns pointer events back on for itself. */
+  pointer-events: none;
+}
+
+.ui-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-3);
+  pointer-events: auto;
+  animation: ui-toast-in var(--dur-md) var(--ease-spring);
+}
+.ui-toast--ok {
+  border-left-color: var(--status-ok);
+}
+.ui-toast--warn {
+  border-left-color: var(--status-warn);
+}
+.ui-toast--error {
+  border-left-color: var(--status-danger);
+}
+.ui-toast__title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ui-toast__body {
+  margin: var(--space-2xs) 0 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+@keyframes ui-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.ui-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  animation: ui-fade-in var(--dur-fast) var(--ease-out);
+}
+
+.ui-dialog {
+  position: fixed;
+  z-index: var(--z-modal);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - var(--space-xl)));
+  /* Cap the height and scroll the body, so a long dialog on a short viewport
+   * still shows its footer actions instead of pushing them off-screen. */
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-3);
+  animation: ui-dialog-in var(--dur-md) var(--ease-out);
+}
+.ui-dialog__body {
+  padding: var(--space-lg);
+  overflow-y: auto;
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-secondary);
+}
+
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ui-dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 12px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * LAYOUT HELPERS — auto-fit grids that need no breakpoints. The min track width
+ * is a variable so a caller can widen it without writing its own grid.
+ * ══════════════════════════════════════════════════════════════════════════ */
+.ui-autogrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--min-col, 240px), 1fr));
+  gap: var(--space-md);
+}
+.ui-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+.ui-row--between {
+  justify-content: space-between;
+}
+.ui-row--wrap {
+  flex-wrap: wrap;
+}
+.ui-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+.ui-stack--tight {
+  gap: var(--space-sm);
+}
+/* Truncation needs min-width: 0 on every flex ancestor; this pairs with
+ * .ui-row/.ui-stack which both set it. */
+.ui-truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

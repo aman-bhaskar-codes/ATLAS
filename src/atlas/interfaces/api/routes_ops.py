@@ -132,7 +132,7 @@ async def list_providers(request: Request) -> list[ProviderOut]:
 @router.get("/ops/schedules", response_model=list[ScheduleOut])
 async def list_schedules(request: Request) -> list[ScheduleOut]:
     atlas = request.app.state.atlas
-    rows = await atlas.db.conn.execute("SELECT * FROM schedules ORDER BY name")
+    rows = await atlas.db.conn.execute("SELECT * FROM schedules ORDER BY description")
     schedules = await rows.fetchall()
     return [
         ScheduleOut(

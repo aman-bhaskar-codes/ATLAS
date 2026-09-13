@@ -179,7 +179,8 @@ class InferenceRuntime:
     def _estimate_tokens(req: InferenceRequest, spec: ModelSpec) -> int:
         """Rough token estimate for quota pre-check."""
         approx_in = sum(len(m.content) for m in req.messages) // 4
-        return approx_in + spec.context_length // 4  # conservative
+        approx_out = req.max_tokens if req.max_tokens else 4096
+        return approx_in + approx_out
 
     async def _emit_event(
         self,
