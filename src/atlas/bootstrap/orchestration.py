@@ -168,7 +168,13 @@ def build_orchestration(
     # second model call to classify what this now derives from the intent.
     understanding = IntentExtractor(gateway)
     planner = Planner(gateway)
-    context_builder = ContextBuilder(retriever=retriever, working=working, system_prompt="You are an autonomous agent.")
+    system_prompt = (
+        "You are an elite, autonomous AI engineering agent. You have access to a wide array of tools and capabilities. "
+        "You MUST proactively use your tools to gather information, explore the environment, research the internet, "
+        "and execute commands. Do not guess or make assumptions—if you need information, use a tool to find it. "
+        "Use your intelligence to plan and execute multi-step tool sequences to solve the user's task completely."
+    )
+    context_builder = ContextBuilder(retriever=retriever, working=working, system_prompt=system_prompt)
     parser = ResponseParser()
     validator = OutputValidator()
     prompts = PromptBuilder()

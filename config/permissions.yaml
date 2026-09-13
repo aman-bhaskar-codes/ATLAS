@@ -7,7 +7,7 @@ allowed_paths:
     - "~/Agentic & AI Agent Projects/**"
     - "~/Agentic*/**"
     - "~/**"   # reads are tier-0; path is a belt-and-suspenders guard, not the primary gate
-  write: ["~/projects/scratch/**", "~/atlas/outbox/**", "/tmp/atlas/**"]
+  write: ["~/projects/scratch/**", "~/atlas/outbox/**", "/tmp/atlas/**", "~/Agentic & AI Agent Projects/**"]
 
 allowed_commands:
   read_only:   ["ls", "cat", "grep", "find", "git status", "git log", "git diff", "curl", "wget", "head", "tail", "wc", "python3 -c"]
