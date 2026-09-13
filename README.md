@@ -1,5 +1,5 @@
 <!--
-  ATLAS README — regenerated 2026-08-30 directly against the live tree.
+  ATLAS README — updated 2026-09-13 against the live tree.
   Every number, path, flag and command below was verified from source, not
   from memory. Motion graphics are self-hosted animated SVGs (no third-party
   badge/animation services), each paired with a prefers-reduced-motion
@@ -51,8 +51,7 @@ configuration resolves to five free OpenRouter models behind a single API key.
 
 ## At a glance
 
-Everything in this table was measured against the working tree on branch `main`
-(`672e33e`).
+Everything in this table was measured against the working tree on branch `main`.
 
 | | |
 |---|---|
@@ -60,7 +59,7 @@ Everything in this table was measured against the working tree on branch `main`
 | **Tests** | 1,687 collected across 201 test files · ~70% line coverage |
 | **Coverage floors** | 63% global · 70% `safety/` · 83% `orchestration/` (CI-enforced) |
 | **Layering** | 14 layers, 3 import-linter contracts, 0 broken |
-| **Database** | SQLite (`.atlas/atlas.db`), 30 forward-only migrations, versioned in-band |
+| **Database** | SQLite (`.atlas/atlas.db`) for core data, 30 forward-only migrations · **Supabase Postgres** for IDE session persistence |
 | **Model fleet** | 5 OpenRouter `:free` models, 1 `OPENROUTER_API_KEY`, `$0.00` per run |
 | **Embeddings** | `qwen/qwen3-embedding-0.6b`, 1024-dim, same key and base URL as chat |
 | **HTTP surface** | 19 routers under `/api/v1` + WebSocket routes (events, voice) |
@@ -445,8 +444,11 @@ project, read and edit it under content-hash versioning, run commands, and repor
 git state — all **through the safety funnel**, never around it. It lives low in the
 layer graph (it may import `infra`/`safety`/`tools` but **not** `orchestration` or
 `interfaces`); the HTTP/WS surface and the `atlas ide` commands live up in
-`interfaces/`. Workspaces persist behind an `IDESessionStore` protocol (shared
-SQLite today) so a session survives a restart.
+`interfaces/`. Workspaces persist behind an `IDESessionStore` protocol with **two
+implementations**: the default `SqliteIDESessionStore` for local-first use, and a
+`PostgresIDESessionStore` that connects to **Supabase** for cloud-backed session
+persistence. The bootstrap logic in `bootstrap/ide.py` selects the backend
+automatically based on whether `SUPABASE_DB_CONNECTION_STRING` is set in `.env`.
 
 What works today, end to end:
 
@@ -692,6 +694,9 @@ Precedence: code defaults **<** `config/settings.yaml` **<** `.env` / real envir
 | `DEEPGRAM_API_KEY` / `FISH_AUDIO_API_KEY` | no | optional voice vendors |
 | `ATLAS_SAFE_BROWSING_API_KEY` / `ATLAS_VIRUSTOTAL_API_KEY` | no | URL scanners; empty ⇒ that scanner is skipped, the rest of the funnel still applies |
 | `ATLAS_ANTHROPIC_API_KEY` / `ATLAS_GEMINI_API_KEY` / `ATLAS_GROQ_API_KEY` | no | extra chat vendors **outside** the free fleet; still blocked by `cost_policy` |
+| `SUPABASE_URL` | no | your Supabase project URL (e.g. `https://xxx.supabase.co`) |
+| `SUPABASE_SERVICE_KEY` | no | your Supabase service role key |
+| `SUPABASE_DB_CONNECTION_STRING` | no | Postgres connection string for Supabase; when set, IDE sessions persist to Postgres instead of local SQLite |
 
 <details>
 <summary><b>Config files</b></summary>
@@ -750,20 +755,20 @@ product with an SLA. Here is what that actually means, per subsystem:
 |---|:---:|---|
 | Safety engine, tiers, audit chain | ✅ live | the most-tested layer; 70% coverage floor |
 | Orchestration + OTAR loop | ✅ live | 83% coverage floor; bounded steps/time/cost |
-| Memory: working, episodic, semantic, curated | ✅ live | 29 migrations, provenance-constrained |
-| Two-lane recall | ✅ live | newest work; Lane 1 is the default path |
+| Memory: working, episodic, semantic, curated | ✅ live | 30 migrations, provenance-constrained; **Clear All Memories** button in the dashboard |
+| Two-lane recall | ✅ live | Lane 1 is the default path |
 | Model fleet + routing | ✅ live | 5 free models, `$0.00`, one key |
-| Knowledge & research | ✅ live | BM25 + vector fusion, citations, confidence |
+| Knowledge & research | ✅ live | BM25 + vector fusion, citations, confidence; **Knowledge dashboard UI** with ingest, search, and document management |
 | HTTP + WebSocket API | ✅ live | 19 routers, auth-gated except health |
 | CLI (both surfaces) | ✅ live | client + in-process operator CLI |
-| ADE / IDE subsystem | 🧪 foundational | open/tree/read, hash-versioned edits, governed run, `git status`/`diff`, project model — all funnel-gated; full agentic build-loop in progress |
-| Web UI | ✅ builds | Next 16 / React 19, own CI job |
+| ADE / IDE subsystem | 🧪 foundational | open/tree/read, hash-versioned edits, governed run, `git status`/`diff`, project model — all funnel-gated; **Supabase Postgres session persistence** implemented |
+| Web UI | ✅ live | Next 16 / React 19; **Memory**, **Knowledge**, **Workspaces**, and **Settings** dashboards fully interactive |
 | Learning & adaptation | 🧪 works, evolving | trajectories → experiences → skill promotion |
 | Multi-agent delegation | ⚠️ off | `agents.enabled: false` |
 | Browser automation | ⚠️ off | `browser.enabled: false`; needs Playwright browsers |
 | Voice pipeline | ⚠️ off | built + unit-tested against provider fakes; **not yet validated against live vendor APIs** |
 | Perception / computer use | 🧪 experimental | macOS only, needs the `macos` extra + Accessibility grant |
-| Postgres backend | 🛠 seam only | `PostgresConnection` exists and is never constructed; `ATLAS_DATABASE_URL` is read by nothing |
+| Supabase Postgres backend | ✅ live | `PostgresIDESessionStore` for IDE sessions; `PostgresConnection` with `asyncpg` pool; auto-selected when `SUPABASE_DB_CONNECTION_STRING` is set |
 
 Two things worth calling out explicitly rather than burying:
 
@@ -790,9 +795,9 @@ Ordered by what would most improve the system, not by what is easiest:
    to fast recall. The hint function is pure, so one `UPDATE` sweep fixes it.
 4. **Turn learning on by default** — enough evaluation evidence that skill promotion
    improves outcomes rather than just changing them.
-5. **Decide the storage question deliberately** — the vendor-neutral SQLite layer is the
-   right default; a Postgres/cloud migration should be an explicit choice with a
-   migration story, not a half-wired seam.
+5. **Expand Postgres migration scope** — the IDE session store now runs on Supabase
+   Postgres; evaluate whether additional subsystems (memory, knowledge) benefit from
+   cloud persistence while keeping the local-first default for privacy and speed.
 6. **Harden multi-agent delegation** to the point it can ship enabled.
 
 <img src="assets/divider.svg" width="100%" alt="">

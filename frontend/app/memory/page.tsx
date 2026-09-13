@@ -8,8 +8,8 @@
  * aggregate stats and a pulsing "LIVE" indicator driven by the WS stream.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Database, BookOpen, Brain, User, Activity, Zap, Clock } from 'lucide-react';
+import React, { useState, useCallback, useMemo } from 'react';
+import { Search, BookOpen, Brain, User, Activity, Clock, Trash2 } from 'lucide-react';
 
 import { ErrorRow } from '@/components/primitives/ErrorState';
 import { useMemoryLive, useLiveCounts } from '../../features/memory/useMemoryLive';
@@ -466,31 +466,71 @@ function EmptyLayer({ label }: { label: string }) {
 
 export default function MemoryPage() {
   const [activeLayer, setActiveLayer] = useState<Layer>('episodes');
+  const [isClearing, setIsClearing] = useState(false);
   const { events, snapshot, status, updateCount, clearEvents } = useMemoryLive(200);
   const liveCounts = useLiveCounts(events);
   // No isError branch here on purpose: each card already falls back to the WS
   // snapshot and then to '—', which is the honest rendering of "unknown". The
   // failure itself is reported by the panel below and by the connection state
   // beside the breadcrumb, so a third copy would be noise, not information.
-  const { data: stats } = useMemoryStats();
+  const { data: stats, refetch: refetchStats } = useMemoryStats();
 
   const isLive = status === 'connected';
+
+  const handleClearMemories = useCallback(async () => {
+    if (!confirm("Are you sure you want to permanently delete ALL memories, facts, preferences, and knowledge documents? This cannot be undone.")) return;
+    
+    setIsClearing(true);
+    try {
+      const res = await fetch('/api/v1/memory', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to clear memories');
+      await refetchStats();
+      clearEvents();
+      alert("All memories cleared.");
+      // Hard reload to reset all react-query caches for facts/episodes/docs
+      window.location.reload();
+    } catch (e) {
+      alert("Error clearing memories.");
+      console.error(e);
+    } finally {
+      setIsClearing(false);
+    }
+  }, [refetchStats, clearEvents]);
 
   return (
     <>
       {/* Breadcrumb */}
-      <div className="crumb mb-6">
-        ATLAS / <strong>Memory</strong>
-        <span style={{ marginLeft: '0.75rem', fontSize: '0.75rem', display: 'inline-flex',
-          alignItems: 'center', color: isLive ? '#22c55e' : 'var(--paper-500)' }}>
-          <PulsingDot active={isLive} />
-          {isLive ? 'LIVE' : status.toUpperCase()}
-          {updateCount > 0 && (
-            <span style={{ marginLeft: '0.5rem', color: 'var(--paper-500)' }}>
-              · {updateCount} update{updateCount !== 1 ? 's' : ''}
-            </span>
-          )}
-        </span>
+      <div className="crumb mb-6" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          ATLAS / <strong>Memory</strong>
+          <span style={{ marginLeft: '0.75rem', fontSize: '0.75rem', display: 'inline-flex',
+            alignItems: 'center', color: isLive ? '#22c55e' : 'var(--paper-500)' }}>
+            <PulsingDot active={isLive} />
+            {isLive ? 'LIVE' : status.toUpperCase()}
+            {updateCount > 0 && (
+              <span style={{ marginLeft: '0.5rem', color: 'var(--paper-500)' }}>
+                · {updateCount} update{updateCount !== 1 ? 's' : ''}
+              </span>
+            )}
+          </span>
+        </div>
+        <button 
+          onClick={handleClearMemories}
+          disabled={isClearing}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            padding: '0.4rem 0.75rem', borderRadius: '4px',
+            fontSize: '0.8rem', fontWeight: 500,
+            background: 'rgba(239, 68, 68, 0.1)',
+            color: '#ef4444',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            cursor: isClearing ? 'wait' : 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Trash2 size={14} />
+          {isClearing ? 'Clearing...' : 'Clear All Memories'}
+        </button>
       </div>
 
       {/* Stat cards (clicking switches layer) */}

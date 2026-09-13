@@ -23,6 +23,7 @@ dependencies = [
     "python-multipart>=0.0.32",
     "websockets>=16.0",
     "prompt-toolkit>=3.0.53",
+    "asyncpg>=0.31.0",
 ]
 
 [project.optional-dependencies]

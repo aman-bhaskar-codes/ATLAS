@@ -15,9 +15,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from atlas.capabilities.ide.persistence import SqliteIDESessionStore
+from atlas.capabilities.ide.persistence import IDESessionStore, PostgresIDESessionStore, SqliteIDESessionStore
 from atlas.capabilities.ide.service import IDEService
 from atlas.infra.clock import Clock
+from atlas.infra.backends import PostgresConnection
 from atlas.infra.config import AppConfig
 from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
@@ -58,9 +59,12 @@ def build_ide(
 
     # Durable, resumable workspaces (Phase 17/42) when the shared DB is wired —
     # the SAME SQLite substrate the rest of the runtime uses (Constitution: one
-    # persistence layer). Without a db the service runs in-memory-only. A future
-    # Neon/Supabase backend is a second `IDESessionStore` impl behind this seam.
-    store = SqliteIDESessionStore(db) if db is not None else None
+    # persistence layer). Without a db the service runs in-memory-only.
+    store: IDESessionStore | None = None
+    if getattr(config, "supabase_db_connection_string", None):
+        store = PostgresIDESessionStore(PostgresConnection(config.supabase_db_connection_string))
+    elif db is not None:
+        store = SqliteIDESessionStore(db)
     service = IDEService(
         safety=safety,
         filesystem_tool=filesystem_tool,
@@ -73,7 +77,7 @@ def build_ide(
         "ide.ready",
         event_type="lifecycle",
         allowed_roots=list(config.ide.allowed_roots) or ["<any>"],
-        persistence="sqlite" if store is not None else "memory",
+        persistence="postgres" if isinstance(store, PostgresIDESessionStore) else ("sqlite" if store is not None else "memory"),
         commands="enabled" if command_tool is not None else "disabled",
     )
     return IDEComponents(service=service)

@@ -30,6 +30,7 @@ from atlas.capabilities.ide.contracts import (
     WorkspaceRef,
 )
 from atlas.infra.db import Database
+from atlas.infra.backends import PostgresConnection
 from atlas.infra.logging import get_logger
 
 _log = get_logger("atlas.ide.persistence")
@@ -142,4 +143,87 @@ class SqliteIDESessionStore:
             (str(workspace_id),),
         )
         rows = await cur.fetchall()
+        return tuple(IDESession.model_validate_json(r["payload"]) for r in rows)
+
+
+class PostgresIDESessionStore:
+    """`IDESessionStore` over a dedicated Postgres backend (Supabase/Neon). Upserts
+    use Postgres `ON CONFLICT` syntax (identical to SQLite).
+    """
+
+    def __init__(self, conn: PostgresConnection) -> None:
+        self._conn = conn
+
+    # ---- workspaces -----------------------------------------------------
+    async def save_workspace(self, ref: WorkspaceRef) -> None:
+        await self._conn.execute(
+            """
+            INSERT INTO ide_workspaces (id, name, root_paths, payload, created_ts, last_opened_ts)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name,
+                root_paths=excluded.root_paths,
+                payload=excluded.payload,
+                last_opened_ts=excluded.last_opened_ts
+            """,
+            (
+                str(ref.id),
+                ref.name,
+                json.dumps(list(ref.root_paths)),
+                ref.model_dump_json(),
+                ref.created_ts,
+                ref.last_opened_ts,
+            ),
+        )
+        await self._conn.commit()
+        _log.info("ide.workspace.persisted", event_type="db", backend="postgres", workspace_id=str(ref.id))
+
+    async def load_workspace(self, workspace_id: WorkspaceId) -> WorkspaceRef | None:
+        row = await self._conn.fetchone("SELECT payload FROM ide_workspaces WHERE id=?", (str(workspace_id),))
+        if row is None:
+            return None
+        return WorkspaceRef.model_validate_json(row["payload"])
+
+    async def list_workspaces(self) -> tuple[WorkspaceRef, ...]:
+        rows = await self._conn.fetchall("SELECT payload FROM ide_workspaces ORDER BY last_opened_ts DESC")
+        return tuple(WorkspaceRef.model_validate_json(r["payload"]) for r in rows)
+
+    async def delete_workspace(self, workspace_id: WorkspaceId) -> None:
+        await self._conn.execute("DELETE FROM ide_sessions WHERE workspace_id=?", (str(workspace_id),))
+        await self._conn.execute("DELETE FROM ide_workspaces WHERE id=?", (str(workspace_id),))
+        await self._conn.commit()
+        _log.info("ide.workspace.deleted", event_type="db", backend="postgres", workspace_id=str(workspace_id))
+
+    # ---- sessions -------------------------------------------------------
+    async def save_session(self, session: IDESession) -> None:
+        await self._conn.execute(
+            """
+            INSERT INTO ide_sessions (id, workspace_id, payload, created_ts, updated_ts)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                payload=excluded.payload,
+                updated_ts=excluded.updated_ts
+            """,
+            (
+                str(session.id),
+                str(session.workspace.id),
+                session.model_dump_json(),
+                session.created_ts,
+                session.updated_ts,
+            ),
+        )
+        await self._conn.commit()
+        _log.info("ide.session.persisted", event_type="db", backend="postgres", session_id=str(session.id))
+
+    async def load_session(self, session_id: IDESessionId) -> IDESession | None:
+        row = await self._conn.fetchone("SELECT payload FROM ide_sessions WHERE id=?", (str(session_id),))
+        if row is None:
+            return None
+        return IDESession.model_validate_json(row["payload"])
+
+    async def sessions_for_workspace(self, workspace_id: WorkspaceId) -> tuple[IDESession, ...]:
+        rows = await self._conn.fetchall(
+            "SELECT payload FROM ide_sessions WHERE workspace_id=? ORDER BY updated_ts DESC",
+            (str(workspace_id),)
+        )
         return tuple(IDESession.model_validate_json(r["payload"]) for r in rows)

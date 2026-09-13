@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     # SUPABASE_SERVICE_ROLE_KEY is a secret — never logged/echoed, by key name only.
     supabase_url: str = Field(default="", validation_alias="SUPABASE_URL")
     supabase_service_role_key: str = Field(default="", validation_alias="SUPABASE_SERVICE_ROLE_KEY")
+    supabase_db_connection_string: str = Field(default="", validation_alias="SUPABASE_DB_CONNECTION_STRING")
     # ── Zero-cost-first policy ────────────────────────────────────────
     profile: str = "free_hybrid"  # local_free | free_hybrid | free_demo | production
     cost_policy: str = "free_only"  # zero_cost | free_only | free_preferred | balanced | unrestricted
