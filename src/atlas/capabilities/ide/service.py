@@ -125,6 +125,12 @@ class IDEService:
     def sessions(self) -> tuple[IDESession, ...]:
         return tuple(ow.session for ow in self._workspaces.values())
 
+    async def list_workspaces(self) -> tuple[Any, ...]:
+        """List all durable workspaces."""
+        if self._store is None:
+            return tuple(ow.session.workspace for ow in self._workspaces.values())
+        return await self._store.list_workspaces()
+
     # ---- operations -----------------------------------------------------
     async def tree(self, workspace_id: str) -> tuple[FileNode, ...]:
         return (await self._require(workspace_id)).engine.tree()

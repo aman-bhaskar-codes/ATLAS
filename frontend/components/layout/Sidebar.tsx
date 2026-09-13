@@ -53,14 +53,14 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/memory", label: "Memory", icon: Brain },
       { href: "/capabilities", label: "Capabilities", icon: Boxes },
-      { label: "Knowledge", icon: Library, reason: "Knowledge fabric UI not yet available" },
+      { href: "/knowledge", label: "Knowledge", icon: Library },
     ],
   },
   {
     title: "RESEARCH",
     items: [
       { href: "/research", label: "Research", icon: FlaskConical },
-      { label: "Workspaces", icon: LayoutGrid, reason: "Workspaces not yet available" },
+      { href: "/workspaces", label: "Workspaces", icon: LayoutGrid },
     ],
   },
   {

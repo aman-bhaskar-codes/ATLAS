@@ -45,6 +45,9 @@ class WorkspaceResponse(BaseModel):
     name: str
     root_paths: list[str]
 
+class WorkspaceListResponse(BaseModel):
+    workspaces: list[WorkspaceResponse]
+
 
 class FileNodeResponse(BaseModel):
     path: str
@@ -159,6 +162,22 @@ class ProjectModelResponse(BaseModel):
 
 
 # ── Routes ───────────────────────────────────────────────────────────── #
+@router.get("/workspaces", response_model=WorkspaceListResponse)
+async def list_workspaces(atlas: Atlas = Depends(get_atlas)) -> WorkspaceListResponse:
+    """List all durable workspaces."""
+    svc = _service(atlas)
+    workspaces = await svc.list_workspaces()
+    return WorkspaceListResponse(
+        workspaces=[
+            WorkspaceResponse(
+                workspace_id=w.id,
+                session_id="", # List doesn't strictly need session ID or we can populate it if needed
+                name=w.name,
+                root_paths=list(w.root_paths)
+            ) for w in workspaces
+        ]
+    )
+
 @router.post("/workspaces", response_model=WorkspaceResponse)
 async def open_workspace(req: OpenWorkspaceRequest, atlas: Atlas = Depends(get_atlas)) -> WorkspaceResponse:
     """Open a workspace at ``root_path``. 400 if the root is not a directory."""
