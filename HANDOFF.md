@@ -1,4 +1,4 @@
-# HANDOFF — one-week pause (2026-08-30)
+# HANDOFF — one-week pause (2026-09-30)
 
 A clean stopping point so work can resume after a week away without re-deriving state.
 Everything here was verified against the live tree, not memory.
