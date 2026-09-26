@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "description": "Routing benchmark (Part 3 §85): domain/strategy/candidate/fallback/recovery cases, easy and ambiguous. Expected values reflect ATLAS's deterministic fast-path rules and honest domain availability.",
+  "cases": [
+    {"case_id": "dom-001", "category": "domain", "objective": "Research latest papers on agent memory and compare approaches", "expected": "research"},
+    {"case_id": "dom-002", "category": "domain", "objective": "what is 2+2", "expected": "general"},
+    {"case_id": "dom-003", "category": "domain", "objective": "read the readme file", "expected": "general"},
+    {"case_id": "dom-004", "category": "domain", "objective": "Fix the failing tests in this repository", "expected": "agentic_ide", "ambiguous": true},
+    {"case_id": "dom-005", "category": "domain", "objective": "Run tests and prepare a patch for the bug in the repo", "expected": "agentic_ide", "ambiguous": true},
+    {"case_id": "dom-006", "category": "domain", "objective": "Find recent survey papers about long-term memory", "expected": "research"},
+    {"case_id": "dom-007", "category": "domain", "objective": "List the files in the current directory", "expected": "general"},
+    {"case_id": "dom-008", "category": "domain", "objective": "Help me plan a birthday party", "expected": "general", "ambiguous": true},
+    {"case_id": "str-001", "category": "strategy", "objective": "Quickly look up a single fact", "expected": "DIRECT"},
+    {"case_id": "str-002", "category": "strategy", "objective": "Investigate the repo, implement fixes, run tests", "expected": "SOFTWARE_ENGINEERING"},
+    {"case_id": "str-003", "category": "strategy", "objective": "Deep multi-source research with citations", "expected": "RESEARCH"},
+    {"case_id": "fb-001", "category": "fallback", "objective": "After a timeout on the primary tool, what is the first recovery step?", "expected": "retry"},
+    {"case_id": "fb-002", "category": "fallback", "objective": "After an auth failure with no alternate credential, what happens?", "expected": "escalate_human"},
+    {"case_id": "rec-001", "category": "recovery", "objective": "The task drifted from the original goal", "expected": "replan"}
+  ]
+}

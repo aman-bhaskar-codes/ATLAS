@@ -9,11 +9,12 @@ raw shell string from the model is ever executed unsplit.
 from __future__ import annotations
 
 import shlex
-from typing import Any
+from typing import Any, cast
 
 from atlas.infra.logging import get_logger
 from atlas.infra.types import SideEffect, ToolResult
-from atlas.safety.sandbox import Sandbox
+from atlas.safety.sandbox import Sandbox, SandboxChunk, SandboxResult, StreamingSandbox
+from atlas.tools.command_stream import current_sink
 
 _log = get_logger("atlas.tools.shell")
 
@@ -91,12 +92,31 @@ class ShellTool:
             return ToolResult(ok=False, error=f"unparseable command: {exc}")
 
         network = argv[0] in {"npm", "pip"} or " ".join(argv[:2]) in {"git clone", "git pull"}
-        result = await self._sandbox.run(
-            argv,
-            mounts=self._mounts,
-            network=network,
-            timeout_s=120.0,
-        )
+
+        # Callers may extend the wall-clock budget via args (the interactive
+        # terminal passes 120s; a long-lived dev server passes a much larger
+        # bound). Absent/invalid → the historical 120s default. The value is a
+        # plain arg on the audited ToolRequest, so the funnel still sees it.
+        raw_timeout = args.get("timeout_s", 120.0)
+        try:
+            timeout_s = float(raw_timeout)
+        except (TypeError, ValueError):
+            timeout_s = 120.0
+
+        # If a streaming sink is bound in the ambient context (the interactive
+        # terminal path) AND the sandbox can stream, push output as it arrives and
+        # assemble the final result from the terminal SandboxResult. Otherwise the
+        # ordinary one-shot path — unchanged for every agent run and API command.
+        sink = current_sink()
+        if sink is not None and isinstance(self._sandbox, StreamingSandbox):
+            result = await self._run_streaming(argv, network=network, sink=sink, timeout_s=timeout_s)
+        else:
+            result = await self._sandbox.run(
+                argv,
+                mounts=self._mounts,
+                network=network,
+                timeout_s=timeout_s,
+            )
         is_side_effect = _matches_prefix(argv, self._side_effect)
         effects: tuple[SideEffect, ...] = ()
         if is_side_effect:
@@ -112,3 +132,23 @@ class ShellTool:
             side_effects=effects,
             error=None if result.exit_code == 0 else (result.stderr_tail or "non-zero exit"),
         )
+
+    async def _run_streaming(
+        self, argv: list[str], *, network: bool, sink: Any, timeout_s: float = 120.0
+    ) -> SandboxResult:
+        """Drive the streaming sandbox, forwarding each chunk to `sink`, and return
+        the terminal SandboxResult. Isolation/policy is identical to one-shot `run`
+        — only the delivery differs. Only reached after `execute` has narrowed the
+        sandbox to a `StreamingSandbox`, so the cast is sound."""
+        streaming = cast(StreamingSandbox, self._sandbox)
+        final: SandboxResult | None = None
+        async for item in streaming.run_stream(argv, mounts=self._mounts, network=network, timeout_s=timeout_s):
+            if isinstance(item, SandboxChunk):
+                await sink(item)
+            else:
+                final = item
+        if final is None:  # defensive: a well-behaved stream always ends in a result
+            final = SandboxResult(
+                exit_code=-1, stdout_tail="", stderr_tail="stream ended without result", duration_ms=0
+            )
+        return final

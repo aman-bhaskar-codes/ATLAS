@@ -38,7 +38,7 @@ from atlas.intelligence.runtime.fallback import FallbackEngine
 from atlas.intelligence.runtime.inference import InferenceRuntime
 from atlas.intelligence.selection.router import CapabilityRouter
 from atlas.intelligence.selection.selector import ModelSelector
-from atlas.memory.embedder import CloudEmbedder
+from atlas.memory.embedder import CloudEmbedder, Embedder
 from atlas.memory.vectorstore import ChromaVectorStore
 from atlas.safety.audit import AuditLog
 
@@ -51,7 +51,7 @@ _log = get_logger("atlas.bootstrap.intelligence")
 @dataclass
 class IntelligenceComponents:
     gateway: ModelGateway
-    embedder: CloudEmbedder
+    embedder: Embedder
     llm_tracker: LLMCallTracker
     quota_governor: FreeQuotaGovernor
     profile: ProfileConfig
@@ -239,7 +239,8 @@ async def build_intelligence(
 
     if settings.embed_provider == "ollama":
         from atlas.memory.embedder import OllamaEmbedder
-        embedder = OllamaEmbedder(
+
+        embedder: Embedder = OllamaEmbedder(
             settings=settings,
             timeout_s=config.models.local_timeout_s,
         )

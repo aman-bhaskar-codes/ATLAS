@@ -286,6 +286,138 @@ class IDECfg(BaseModel):
     max_open_file_bytes: int = 2_000_000  # refuse to open files larger than this
 
 
+class AgentEngineCfg(BaseModel):
+    """Optional autonomous agent-run surface (M2.1).
+
+    Disabled by default (mirrors ``IDECfg``/``VoiceCfg``). Enabling it mounts the
+    ``/api/v1/agent`` routes and wires the M0.2 ``AgentEngine`` + M0.5 run store into
+    the composition root as a governed, persisted use-case. Every tool the agent
+    drives still flows through the SAME ``ToolDispatcher -> SafetyEngine.guard`` funnel
+    and the SAME ``ExecutionLimits`` seatbelts as any other dispatch, so the agent
+    surface can never become a side door around ATLAS policy (Constitution).
+
+    The bounds mirror ``ExecutionLimits`` (whole-run seatbelts); ``max_output_tokens``
+    is the per-model-call cap, ``max_tools`` the Tool-RAG shortlist size fed to the
+    model each turn, and ``system_prompt`` empty means the built-in default
+    (``orchestration.agent_engine.DEFAULT_AGENT_SYSTEM_PROMPT``).
+    """
+
+    model_config = {"frozen": True}
+    enabled: bool = False
+    max_steps: int = 15  # model turns before a graceful, audited stop
+    max_tool_calls: int = 40  # total tool dispatches across a run
+    max_tokens: int = 40_000  # cumulative token budget (LimitCounter)
+    max_output_tokens: int = 2048  # per model-call output cap
+    max_tools: int = 8  # Tool-RAG shortlist size
+    system_prompt: str = ""  # "" -> DEFAULT_AGENT_SYSTEM_PROMPT
+
+
+class ResearchCfg(BaseModel):
+    """Optional Perplexity-class research surface (Phase 1).
+
+    Disabled by default (mirrors ``IDECfg``/``AgentEngineCfg``). Enabling it mounts
+    the ``/api/v1/research`` routes and wires ``ResearchService`` — a governed,
+    persisted research use-case — into the composition root. The service owns no
+    retrieval and no safety of its own: every research action flows through the
+    SAME ``ToolDispatcher -> SafetyEngine.guard`` funnel driving the SAME
+    ``knowledge`` tool over the SAME knowledge fabric as any other dispatch, so the
+    surface can never become a second execution path or a second RAG system
+    (Constitution).
+
+    ``default_mode`` is the depth a bare session uses (``search`` = one fabric
+    query, ``research`` = one bounded round, ``deep_research`` = a multi-round
+    supervised investigation); the fabric/supervisor own their own budgets, so
+    these bounds are surface-level guardrails, not the retrieval budget.
+    """
+
+    model_config = {"frozen": True}
+    enabled: bool = False
+    default_mode: str = "deep_research"  # search | research | deep_research
+    max_question_chars: int = 4000  # question length ceiling before truncation
+    max_sessions_listed: int = 50  # session-list page ceiling
+
+
+class ScoringWeightsCfg(BaseModel):
+    """Deterministic routing-ranking weights (Part 3 §33). Scores are
+    normalized by the total weight; edit here or in settings.yaml."""
+
+    model_config = {"frozen": True}
+
+    capability_fit: float = 1.0
+    operation_fit: float = 0.8
+    availability: float = 0.8
+    latency: float = 0.4
+    cost: float = 0.7
+    locality: float = 0.6
+    privacy: float = 0.8
+    trust: float = 0.8
+    idempotency: float = 0.2
+    judgment: float = 0.9  # the bounded judgment signal (§34)
+
+
+class JudgmentThresholdsCfg(BaseModel):
+    """Risk-dependent judgment acceptance thresholds (Part 3 §29) — starting
+    points to be calibrated against ATLAS evaluation data (§59)."""
+
+    model_config = {"frozen": True}
+
+    low_risk_routing: float = 0.60
+    medium_risk: float = 0.75
+    high_risk: float = 0.90
+    destructive: float = 0.99  # judgment never routes destructive decisions alone
+
+
+class RoutingCfg(BaseModel):
+    """Routing fabric settings (Part 3). External judgment providers default
+    OFF (zero-cost-first; no decorative Jev, §88): flipping them on activates
+    the cascade rung only when deterministic rules are inconclusive."""
+
+    model_config = {"frozen": True}
+
+    enabled: bool = True
+    enable_jev: bool = False
+    enable_llm_judgment: bool = False
+    weights: ScoringWeightsCfg = Field(default_factory=ScoringWeightsCfg)
+    thresholds: JudgmentThresholdsCfg = Field(default_factory=JudgmentThresholdsCfg)
+    max_candidates: int = 30
+    judgment_top_n: int = 12
+    max_recovery_retries: int = 3
+    max_replans: int = 3
+    stall_window: int = 5
+    max_identical_actions: int = 3
+    privacy_class: str = "public"
+    # Routing-layer policy defaults for candidate filtering; they mirror the
+    # profile-level cost/network policy (Settings) and can be tightened here
+    # but never widened beyond what Settings enforces at execution time.
+    cost_policy: str = "free_only"  # zero_cost | free_only | free_preferred | balanced | unrestricted
+    network_policy: str = "free_cloud"  # offline | local_only | free_cloud | unrestricted
+    fast_path_budget_ms: float = 5.0
+    judgment_budget_ms: float = 500.0
+    full_classification_budget_ms: float = 2000.0
+
+
+class ExecutionCfg(BaseModel):
+    """Durable execution fabric settings (Part 4). Adapts §91 to the existing
+    config system; global task budgets stay owned by ExecutionLimits — these
+    govern the EXECUTION layer only (concurrency, checkpoints, retry defaults,
+    recovery bounds, step timeout)."""
+
+    model_config = {"frozen": True}
+
+    enabled: bool = True
+    max_concurrent_steps: int = 8
+    max_parallel_group: int = 8
+    checkpoint_enabled: bool = True
+    retry_max_attempts: int = 3
+    retry_initial_delay_s: float = 0.5
+    retry_max_delay_s: float = 10.0
+    retry_jitter: bool = True
+    max_fallback_hops: int = 3
+    max_replans: int = 3
+    max_nested_workflows: int = 2
+    default_step_timeout_s: float = 120.0
+
+
 class AppConfig(BaseModel):
     model_config = {"frozen": True}
     logging: LoggingCfg = Field(default_factory=LoggingCfg)
@@ -302,6 +434,10 @@ class AppConfig(BaseModel):
     agents: AgentsCfg = Field(default_factory=AgentsCfg)
     voice: VoiceCfg = Field(default_factory=VoiceCfg)
     ide: IDECfg = Field(default_factory=lambda: IDECfg())
+    agent_engine: AgentEngineCfg = Field(default_factory=AgentEngineCfg)
+    research: ResearchCfg = Field(default_factory=ResearchCfg)
+    routing: RoutingCfg = Field(default_factory=RoutingCfg)
+    execution: ExecutionCfg = Field(default_factory=ExecutionCfg)
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:

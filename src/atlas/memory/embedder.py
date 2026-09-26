@@ -33,6 +33,7 @@ _log = get_logger("atlas.memory.embedder")
 
 class Embedder(Protocol):
     async def embed(self, text: str) -> list[float]: ...
+    async def close(self) -> None: ...
 
 
 class EmbeddingError(Exception):

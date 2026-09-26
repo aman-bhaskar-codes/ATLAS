@@ -17,9 +17,9 @@ from dataclasses import dataclass
 
 from atlas.capabilities.ide.persistence import IDESessionStore, PostgresIDESessionStore, SqliteIDESessionStore
 from atlas.capabilities.ide.service import IDEService
-from atlas.infra.clock import Clock
 from atlas.infra.backends import PostgresConnection
-from atlas.infra.config import AppConfig
+from atlas.infra.clock import Clock
+from atlas.infra.config import AppConfig, Settings
 from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
@@ -35,6 +35,7 @@ class IDEComponents:
 
 
 def build_ide(
+    settings: Settings,
     config: AppConfig,
     *,
     safety: SafetyEngine,
@@ -61,8 +62,8 @@ def build_ide(
     # the SAME SQLite substrate the rest of the runtime uses (Constitution: one
     # persistence layer). Without a db the service runs in-memory-only.
     store: IDESessionStore | None = None
-    if getattr(config, "supabase_db_connection_string", None):
-        store = PostgresIDESessionStore(PostgresConnection(config.supabase_db_connection_string))
+    if settings.supabase_db_connection_string:
+        store = PostgresIDESessionStore(PostgresConnection(settings.supabase_db_connection_string))
     elif db is not None:
         store = SqliteIDESessionStore(db)
     service = IDEService(
@@ -77,7 +78,9 @@ def build_ide(
         "ide.ready",
         event_type="lifecycle",
         allowed_roots=list(config.ide.allowed_roots) or ["<any>"],
-        persistence="postgres" if isinstance(store, PostgresIDESessionStore) else ("sqlite" if store is not None else "memory"),
+        persistence=(
+            "postgres" if isinstance(store, PostgresIDESessionStore) else ("sqlite" if store is not None else "memory")
+        ),
         commands="enabled" if command_tool is not None else "disabled",
     )
     return IDEComponents(service=service)

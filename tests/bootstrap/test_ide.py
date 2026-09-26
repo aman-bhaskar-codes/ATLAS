@@ -13,7 +13,7 @@ from typing import Any
 
 from atlas.bootstrap.ide import build_ide
 from atlas.capabilities.ide.service import IDEService
-from atlas.infra.config import AppConfig, IDECfg
+from atlas.infra.config import AppConfig, IDECfg, Settings
 from atlas.infra.ids import CorrelationId, ExecutionId, TaskId
 
 
@@ -54,6 +54,7 @@ def _config(*, enabled: bool) -> AppConfig:
 
 def test_disabled_returns_none() -> None:
     comps = build_ide(
+        Settings(),
         _config(enabled=False),
         safety=FakeSafety(),  # type: ignore[arg-type]
         filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
@@ -65,6 +66,7 @@ def test_disabled_returns_none() -> None:
 
 def test_enabled_without_filesystem_degrades_to_none() -> None:
     comps = build_ide(
+        Settings(),
         _config(enabled=True),
         safety=FakeSafety(),  # type: ignore[arg-type]
         filesystem_tool=None,
@@ -76,6 +78,7 @@ def test_enabled_without_filesystem_degrades_to_none() -> None:
 
 def test_enabled_with_filesystem_builds_service() -> None:
     comps = build_ide(
+        Settings(),
         _config(enabled=True),
         safety=FakeSafety(),  # type: ignore[arg-type]
         filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]

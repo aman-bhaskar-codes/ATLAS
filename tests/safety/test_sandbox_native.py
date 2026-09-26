@@ -78,3 +78,56 @@ class TestNativeSandbox:
     async def test_health_returns_true(self, tmp_path: Path) -> None:
         sandbox = NativeSandbox(env="dev")
         assert await sandbox.health() is True
+
+
+class TestNativeSandboxStreaming:
+    @pytest.mark.asyncio
+    async def test_run_stream_yields_chunks_then_result(self, tmp_path: Path) -> None:
+        from atlas.safety.sandbox import SandboxChunk, SandboxResult
+
+        sandbox = NativeSandbox(env="dev")
+        chunks: list[SandboxChunk] = []
+        final: SandboxResult | None = None
+        async for item in sandbox.run_stream(["printf", "a\\nb\\nc\\n"], mounts={}, network=False, timeout_s=5.0):
+            if isinstance(item, SandboxChunk):
+                chunks.append(item)
+            else:
+                final = item
+        assert final is not None and final.exit_code == 0
+        # Output arrived as one-or-more chunks, and the joined stdout is complete.
+        assert chunks, "expected at least one streamed chunk"
+        joined = "".join(c.data for c in chunks if c.stream == "stdout")
+        assert "a" in joined and "b" in joined and "c" in joined
+
+    @pytest.mark.asyncio
+    async def test_run_stream_timeout_yields_124(self, tmp_path: Path) -> None:
+        from atlas.safety.sandbox import SandboxResult
+
+        sandbox = NativeSandbox(env="dev")
+        final: SandboxResult | None = None
+        async for item in sandbox.run_stream(["sleep", "10"], mounts={}, network=False, timeout_s=0.1):
+            if isinstance(item, SandboxResult):
+                final = item
+        assert final is not None and final.exit_code == 124
+
+    @pytest.mark.asyncio
+    async def test_run_stream_early_close_kills_child(self, tmp_path: Path) -> None:
+        """Breaking out of the stream (a `stop`) must kill the child, not let it
+        run to completion in the background — the Slice 7 cancellation contract."""
+        import asyncio
+
+        sandbox = NativeSandbox(env="dev")
+        marker = tmp_path / "done.txt"
+        gen = sandbox.run_stream(
+            ["sh", "-c", f"echo started; sleep 0.5; echo done > {marker}"],
+            mounts={},
+            network=False,
+            timeout_s=5.0,
+        )
+        # Enter the generator far enough to spawn the child (first chunk = "started"),
+        # then close it early.
+        await gen.__anext__()
+        await gen.aclose()
+        # Past the child's own delay: if it were still alive it would have written.
+        await asyncio.sleep(1.0)
+        assert not marker.exists(), "child kept running after the stream was closed"

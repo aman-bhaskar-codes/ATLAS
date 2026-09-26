@@ -68,6 +68,7 @@ class OrchestrationComponents:
     events: EventPublisher
     orchestrator: Orchestrator
     checkpoints: CheckpointStore
+    dispatcher: ToolDispatcher
 
 
 def build_orchestration(
@@ -299,6 +300,7 @@ def build_orchestration(
         events=events,
         orchestrator=orchestrator,
         checkpoints=checkpoint_store,
+        dispatcher=dispatcher,
     )
 
 

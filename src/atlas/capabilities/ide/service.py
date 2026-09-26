@@ -21,24 +21,40 @@ surface is identical either way.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Sequence
+from typing import Any
+
+from atlas.capabilities.ide.checkpoints import GitCheckpoints
 from atlas.capabilities.ide.commands import CommandRunner
 from atlas.capabilities.ide.contracts import (
     ChangeResult,
+    CheckpointRef,
+    CheckpointResult,
     CommandResult,
+    DevProcess,
+    DiagnosticReport,
     DocumentSnapshot,
     FileChange,
     FileNode,
     GitDiff,
+    GitOpResult,
     GitStatus,
     IDESession,
     IDESessionId,
     ProjectModel,
+    TerminalId,
+    TestReport,
     WorkspaceId,
 )
+from atlas.capabilities.ide.diagnostics import DiagnosticsCollector
 from atlas.capabilities.ide.editing import WorkspaceWriter
 from atlas.capabilities.ide.git import GitEngine
+from atlas.capabilities.ide.git_ops import GitOps
 from atlas.capabilities.ide.persistence import IDESessionStore
+from atlas.capabilities.ide.process import ProcessSupervisor
 from atlas.capabilities.ide.project import analyze_project
+from atlas.capabilities.ide.terminal import TerminalEvent, TerminalSessionManager
+from atlas.capabilities.ide.tests import TestRunner
 from atlas.capabilities.ide.workspace import WorkspaceEngine, open_workspace
 from atlas.infra.clock import Clock
 from atlas.infra.ids import CorrelationId, IdGenerator
@@ -90,6 +106,16 @@ class IDEService:
         # reads/writes, it just cannot run tests/builds. Stateless runner, so one
         # instance serves every workspace.
         self._runner = CommandRunner(safety, command_tool) if command_tool is not None else None
+        # Interactive streaming terminals reuse the same governed command tool —
+        # same funnel, only the delivery is incremental (Slice 6).
+        self._terminal = TerminalSessionManager(safety, command_tool, ids=ids) if command_tool is not None else None
+        # Managed long-lived dev processes ride on top of the terminal service —
+        # same funnel, plus lifecycle + port detection + stop (Slice 7).
+        self._processes = ProcessSupervisor(self._terminal, clock=clock) if self._terminal is not None else None
+        # Tests + diagnostics are parsing layers over the SAME governed runner —
+        # structured pass/fail and normalized problems, no second exec path (Slice 8).
+        self._tests = TestRunner(self._runner) if self._runner is not None else None
+        self._diagnostics = DiagnosticsCollector(self._runner) if self._runner is not None else None
         self._workspaces: dict[WorkspaceId, _OpenWorkspace] = {}
 
     # ---- lifecycle ------------------------------------------------------
@@ -196,6 +222,229 @@ class IDEService:
         engine = GitEngine(self._runner, str(ow.engine.root))
         cid = correlation_id or self._ids.correlation_id()
         return await engine.diff(staged=staged, correlation_id=cid)
+
+    # ---- git write operations (Slice 9) ---------------------------------
+    async def git_stage(
+        self,
+        workspace_id: str,
+        paths: Sequence[str],
+        *,
+        all_changes: bool = False,
+        correlation_id: CorrelationId | None = None,
+    ) -> GitOpResult | None:
+        """Stage paths (or all changes) through the governed funnel. Returns `None`
+        when command execution is unavailable (route → 503); a policy refusal comes
+        back with `denied=True`, a git failure with an honest `error`."""
+        ow = await self._require(workspace_id)
+        if self._runner is None:
+            return None
+        ops = GitOps(self._runner, str(ow.engine.root))
+        cid = correlation_id or self._ids.correlation_id()
+        return await ops.stage(paths, all_changes=all_changes, correlation_id=cid)
+
+    async def git_unstage(
+        self,
+        workspace_id: str,
+        paths: Sequence[str],
+        *,
+        all_changes: bool = False,
+        correlation_id: CorrelationId | None = None,
+    ) -> GitOpResult | None:
+        """Unstage paths (or all) through the governed funnel — index only, the
+        worktree is untouched. `None` when command execution is unavailable."""
+        ow = await self._require(workspace_id)
+        if self._runner is None:
+            return None
+        ops = GitOps(self._runner, str(ow.engine.root))
+        cid = correlation_id or self._ids.correlation_id()
+        return await ops.unstage(paths, all_changes=all_changes, correlation_id=cid)
+
+    async def git_commit(
+        self, workspace_id: str, message: str, *, correlation_id: CorrelationId | None = None
+    ) -> GitOpResult | None:
+        """Commit the staged index through the governed funnel. `None` when command
+        execution is unavailable; committing with nothing staged is git's own
+        non-zero exit surfaced honestly (`ok=False`), never a fabricated success."""
+        ow = await self._require(workspace_id)
+        if self._runner is None:
+            return None
+        ops = GitOps(self._runner, str(ow.engine.root))
+        cid = correlation_id or self._ids.correlation_id()
+        return await ops.commit(message, correlation_id=cid)
+
+    async def git_branch(
+        self,
+        workspace_id: str,
+        name: str,
+        *,
+        checkout_existing: bool = False,
+        correlation_id: CorrelationId | None = None,
+    ) -> GitOpResult | None:
+        """Create-and-switch to a new branch (default) or switch to an existing one
+        (`checkout_existing=True`), through the governed funnel. `None` when command
+        execution is unavailable; a bad name is git's honest non-zero exit."""
+        ow = await self._require(workspace_id)
+        if self._runner is None:
+            return None
+        ops = GitOps(self._runner, str(ow.engine.root))
+        cid = correlation_id or self._ids.correlation_id()
+        if checkout_existing:
+            return await ops.checkout_branch(name, correlation_id=cid)
+        return await ops.create_branch(name, correlation_id=cid)
+
+    # ---- checkpoints (Slice 10) -----------------------------------------
+    async def checkpoint_snapshot(
+        self, workspace_id: str, *, label: str = "", correlation_id: CorrelationId | None = None
+    ) -> CheckpointResult | None:
+        """Capture the workspace's working tree as a restorable checkpoint through
+        the governed funnel. Returns `None` when command execution is unavailable
+        (route → 503); a policy refusal comes back with `denied=True`. The id is
+        minted here so the caller need not supply one."""
+        ow = await self._require(workspace_id)
+        if self._runner is None:
+            return None
+        cps = GitCheckpoints(self._runner, str(ow.engine.root))
+        cid = correlation_id or self._ids.correlation_id()
+        return await cps.snapshot(self._ids.task_id(), label=label, correlation_id=cid)
+
+    async def checkpoint_restore(
+        self, workspace_id: str, checkpoint_id: str, *, correlation_id: CorrelationId | None = None
+    ) -> CheckpointResult | None:
+        """Restore the workspace's working tree to a previously captured checkpoint
+        through the governed funnel. `None` when command execution is unavailable; an
+        unknown id is an honest `ok=False`, never a fabricated success."""
+        ow = await self._require(workspace_id)
+        if self._runner is None:
+            return None
+        cps = GitCheckpoints(self._runner, str(ow.engine.root))
+        cid = correlation_id or self._ids.correlation_id()
+        return await cps.restore(checkpoint_id, correlation_id=cid)
+
+    async def checkpoint_list(
+        self, workspace_id: str, *, correlation_id: CorrelationId | None = None
+    ) -> tuple[CheckpointRef, ...] | None:
+        """List the workspace's stored checkpoints through the governed funnel.
+        `None` when command execution is unavailable; a non-git root / no
+        checkpoints is an honest empty tuple."""
+        ow = await self._require(workspace_id)
+        if self._runner is None:
+            return None
+        cps = GitCheckpoints(self._runner, str(ow.engine.root))
+        cid = correlation_id or self._ids.correlation_id()
+        return await cps.list(correlation_id=cid)
+
+    async def run_tests(
+        self,
+        workspace_id: str,
+        command: str,
+        *,
+        timeout_s: float = 300.0,
+        correlation_id: CorrelationId | None = None,
+    ) -> TestReport | None:
+        """Run a test command in the workspace root through the governed funnel and
+        return a structured `TestReport` (framework, pass/fail/skip counts, parsed
+        failures). Returns `None` when command execution is unavailable — the route
+        maps that to a 503. Counts are honestly `None` when the framework's summary
+        could not be parsed; a policy refusal comes back with `denied=True`."""
+        ow = await self._require(workspace_id)
+        if self._tests is None:
+            return None
+        cid = correlation_id or self._ids.correlation_id()
+        return await self._tests.run(command, cwd=str(ow.engine.root), correlation_id=cid, timeout_s=timeout_s)
+
+    async def collect_diagnostics(
+        self,
+        workspace_id: str,
+        command: str,
+        *,
+        timeout_s: float = 180.0,
+        correlation_id: CorrelationId | None = None,
+    ) -> DiagnosticReport | None:
+        """Run a lint/type-check command in the workspace root through the governed
+        funnel and return normalized `Diagnostic`s. Returns `None` when command
+        execution is unavailable (route → 503). A linter exiting non-zero WITH
+        findings is not an error; `error` is set only for a real failure to run."""
+        ow = await self._require(workspace_id)
+        if self._diagnostics is None:
+            return None
+        cid = correlation_id or self._ids.correlation_id()
+        return await self._diagnostics.collect(
+            command, cwd=str(ow.engine.root), correlation_id=cid, timeout_s=timeout_s
+        )
+
+    # ---- interactive terminals (Slice 6) --------------------------------
+    async def open_terminal(self, workspace_id: str) -> TerminalId | None:
+        """Open a streaming terminal session rooted at the workspace, or `None`
+        when command execution is unavailable. The session is a governed output
+        buffer; commands run into it through the same funnel as any command."""
+        ow = await self._require(workspace_id)
+        if self._terminal is None:
+            return None
+        return self._terminal.open(str(ow.engine.root))
+
+    async def run_terminal_command(
+        self, workspace_id: str, terminal_id: str, command: str, *, correlation_id: CorrelationId | None = None
+    ) -> bool:
+        """Start `command` in an existing terminal session as a background task so
+        its output can be streamed live. Returns False when execution is
+        unavailable, the session is unknown, or it is already busy."""
+        await self._require(workspace_id)
+        if self._terminal is None or not self._terminal.exists(terminal_id):
+            return False
+        cid = correlation_id or self._ids.correlation_id()
+        return self._terminal.start(terminal_id, command, correlation_id=cid)
+
+    async def terminal_stream(
+        self, workspace_id: str, terminal_id: str, *, after_seq: int = 0
+    ) -> AsyncIterator[TerminalEvent]:
+        """Yield a terminal session's ordered output events, resuming after
+        `after_seq`. Raises `IDEServiceError` for an unknown workspace/session so
+        the route can 404 before the SSE head is on the wire."""
+        await self._require(workspace_id)
+        if self._terminal is None or not self._terminal.exists(terminal_id):
+            raise IDEServiceError(f"terminal not open: {terminal_id!r}")
+        async for event in self._terminal.stream(terminal_id, after_seq=after_seq):
+            yield event
+
+    async def terminal_exists_in(self, workspace_id: str, terminal_id: str) -> bool:
+        """True when `workspace_id` resolves and `terminal_id` names a live session
+        in it. Lets the SSE route validate before the response head is on the wire
+        (an honest 404), without opening a stream just to discover a bad id."""
+        try:
+            await self._require(workspace_id)
+        except IDEServiceError:
+            return False
+        return self._terminal is not None and self._terminal.exists(terminal_id)
+
+    # ---- managed dev processes (Slice 7) --------------------------------
+    async def start_process(
+        self, workspace_id: str, command: str, *, correlation_id: CorrelationId | None = None
+    ) -> DevProcess | None:
+        """Launch a long-lived dev process in the workspace root through the funnel,
+        watching its output for ports/exit. Returns None when command execution is
+        unavailable or the process could not start; its output streams over the
+        existing terminal SSE endpoint (the process id IS a terminal id)."""
+        ow = await self._require(workspace_id)
+        if self._processes is None:
+            return None
+        cid = correlation_id or self._ids.correlation_id()
+        return self._processes.start(workspace_id, str(ow.engine.root), command, correlation_id=cid)
+
+    async def list_processes(self, workspace_id: str) -> tuple[DevProcess, ...]:
+        """All managed dev processes for the workspace (empty when execution is
+        unavailable)."""
+        await self._require(workspace_id)
+        if self._processes is None:
+            return ()
+        return self._processes.list(workspace_id)
+
+    async def stop_process(self, workspace_id: str, process_id: str) -> bool:
+        """Stop a managed dev process. Returns False when execution is unavailable,
+        the process is unknown to this workspace, or nothing is running."""
+        await self._require(workspace_id)
+        if self._processes is None:
+            return False
+        return self._processes.stop(workspace_id, process_id)
 
     # ---- internals ------------------------------------------------------
     async def _require(self, workspace_id: str) -> _OpenWorkspace:

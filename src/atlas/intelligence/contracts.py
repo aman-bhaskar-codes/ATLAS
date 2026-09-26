@@ -22,13 +22,29 @@ class Role(StrEnum):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
+    TOOL = "tool"  # a tool-result turn; links back to a prior ASSISTANT tool call
 
 
 class Message(BaseModel):
+    """A single conversation turn.
+
+    WHY the tool fields (M0.1): multi-turn tool-calling loops must replay prior
+    turns to the provider so the model sees what it already asked for and what
+    came back. An ASSISTANT turn that chose tools carries them in ``tool_calls``;
+    the matching TOOL turn carries the serialized result in ``content`` plus the
+    ``tool_call_id``/``name`` that bind it to the request. Every provider adapter
+    is responsible for translating these into its own wire shape. All fields
+    default empty, so existing ``Message(role=..., content=...)`` callers are
+    unaffected.
+    """
+
     model_config = {"frozen": True}
     role: Role
     content: str
     reasoning_details: str | None = None
+    tool_calls: tuple[ProviderToolCall, ...] = ()  # set on ASSISTANT turns that chose tools
+    tool_call_id: str | None = None  # set on TOOL turns: which call this answers
+    name: str | None = None  # set on TOOL turns: the tool's name
 
 
 class Usage(BaseModel):

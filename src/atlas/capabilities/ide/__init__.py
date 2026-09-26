@@ -9,6 +9,13 @@ evaluation/adaptation/diagnostics/interfaces. The REST/WS surface and the
 
 from __future__ import annotations
 
+from atlas.capabilities.ide.agent_tool import (
+    IDE_OPERATIONS,
+    IDE_READ_OPERATIONS,
+    IDE_TOOL_DESCRIPTION,
+    IDE_WRITE_OPERATIONS,
+    IDEWorkspaceTool,
+)
 from atlas.capabilities.ide.commands import CommandRunner
 from atlas.capabilities.ide.contracts import (
     BrowserSessionRef,
@@ -63,6 +70,10 @@ from atlas.capabilities.ide.workspace import (
 )
 
 __all__ = [
+    "IDE_OPERATIONS",
+    "IDE_READ_OPERATIONS",
+    "IDE_TOOL_DESCRIPTION",
+    "IDE_WRITE_OPERATIONS",
     "BrowserSessionRef",
     "ChangeResult",
     "CommandResult",
@@ -94,6 +105,7 @@ __all__ = [
     "IDESession",
     "IDESessionId",
     "IDESessionStore",
+    "IDEWorkspaceTool",
     "ProcessId",
     "ProcessStatus",
     "ProjectModel",

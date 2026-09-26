@@ -456,6 +456,7 @@ async def _count_chunks(db: Database) -> int:
     row = await cur.fetchone()
     return int(row[0]) if row else 0
 
+
 # ---------------------------------------------------------------------------
 # REST: DELETE /api/v1/memory
 # ---------------------------------------------------------------------------
@@ -475,18 +476,17 @@ async def clear_memories(request: Request) -> dict[str, Any]:
     await db.conn.execute("DELETE FROM semantic_facts")
     await db.conn.execute("DELETE FROM knowledge_documents")
     await db.conn.execute("DELETE FROM knowledge_chunks")
-    
+
     # 2. Clear preferences (these are in memory map or dedicated table)
     # The user model holds preferences. In db.py it's likely 'user_preferences' or 'user_model'.
     # If the user_model methods don't have a clear all, we'll clear the table.
-    await db.conn.execute("DELETE FROM user_model") 
-    
+    await db.conn.execute("DELETE FROM user_model")
+
     await db.conn.commit()
 
     # Clear stats cache if any
     if _deps:
-        await _deps.stats_cache.delete()
+        await _deps.stats_cache.invalidate()
 
     _log.info("memory.cleared", event_type="memory")
     return {"status": "ok", "message": "All memories cleared."}
-

@@ -24,6 +24,7 @@ dependencies = [
     "websockets>=16.0",
     "prompt-toolkit>=3.0.53",
     "asyncpg>=0.31.0",
+    "mcp>=2.2.0,<3",
 ]
 
 [project.optional-dependencies]

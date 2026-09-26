@@ -4,8 +4,9 @@ implementing this exact protocol."""
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from atlas.infra.errors import SystemError_
 
@@ -18,6 +19,17 @@ class SandboxResult:
     duration_ms: int
 
 
+@dataclass(frozen=True)
+class SandboxChunk:
+    """One incremental slice of a running command's output. Emitted by the
+    streaming path (`run_stream`) as bytes arrive, BEFORE the process exits — the
+    substrate beneath the interactive terminal (Slice 6). ``stream`` is
+    ``"stdout"`` or ``"stderr"``; ``data`` is already-decoded text."""
+
+    stream: str  # "stdout" | "stderr"
+    data: str
+
+
 class Sandbox(Protocol):
     async def run(
         self,
@@ -28,6 +40,32 @@ class Sandbox(Protocol):
         timeout_s: float = 60.0,
         stdin: bytes | None = None,
     ) -> SandboxResult: ...
+
+
+@runtime_checkable
+class StreamingSandbox(Protocol):
+    """A sandbox that can also emit output INCREMENTALLY while a command runs.
+
+    WHY a separate protocol (not a new method on ``Sandbox``): streaming is an
+    added capability, not a replacement — one-shot ``run`` stays the primitive the
+    agent loop and every existing tool depend on, and fakes that only implement
+    ``run`` remain valid ``Sandbox``es. A caller that wants incremental output
+    checks ``isinstance(sandbox, StreamingSandbox)`` and degrades honestly (falls
+    back to one-shot ``run``) when it is absent.
+
+    ``run_stream`` yields zero or more :class:`SandboxChunk`s and then EXACTLY ONE
+    terminal :class:`SandboxResult` as its final item — the same authorization and
+    isolation policy as ``run``, only the delivery is incremental."""
+
+    def run_stream(
+        self,
+        command: list[str],
+        *,
+        mounts: dict[str, str],
+        network: bool = False,
+        timeout_s: float = 60.0,
+        stdin: bytes | None = None,
+    ) -> AsyncIterator[SandboxChunk | SandboxResult]: ...
 
 
 class NullSandbox:
@@ -44,3 +82,19 @@ class NullSandbox:
             "NullSandbox cannot execute commands — the Docker sandbox arrives in "
             "Phase 2. No host access is permitted until then."
         )
+
+    async def run_stream(
+        self,
+        command: list[str],
+        *,
+        mounts: dict[str, str],
+        network: bool = False,
+        timeout_s: float = 60.0,
+        stdin: bytes | None = None,
+    ) -> AsyncIterator[SandboxChunk | SandboxResult]:
+        # Refuse identically to `run`: streaming is delivery, not a policy bypass.
+        raise SystemError_(
+            "NullSandbox cannot execute commands — the Docker sandbox arrives in "
+            "Phase 2. No host access is permitted until then."
+        )
+        yield  # pragma: no cover — makes this an async generator, never reached

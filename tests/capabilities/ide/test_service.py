@@ -281,3 +281,367 @@ class TestGitDiff:
         svc = _service()
         session = await svc.open_workspace(_repo(tmp_path), "demo")
         assert await svc.git_diff(session.workspace.id) is None
+
+
+class _GitWriteShellTool:
+    """Shell tool for git WRITE verbs: canned ok/stdout, records the command+cwd
+    so we can assert the write went through the funnel in the workspace root."""
+
+    name = "shell"
+
+    def __init__(self, *, ok: bool = True, stdout: str = "", exit_code: int = 0) -> None:
+        self._ok = ok
+        self._stdout = stdout
+        self._exit = exit_code
+        self.calls: list[dict[str, Any]] = []
+
+    def dry_run(self, args: dict[str, Any]) -> str:
+        return "RUN"
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        self.calls.append(args)
+        return ToolResult(
+            ok=self._ok,
+            output={"exit_code": self._exit, "stdout": self._stdout, "stderr": "", "duration_ms": 2},
+            error=None if self._ok else "git failed",
+        )
+
+
+class TestGitWriteOps:
+    async def test_stage_routes_through_funnel(self, tmp_path: Path) -> None:
+        tool = _GitWriteShellTool(ok=True)
+        svc = IDEService(
+            safety=FakeSafety(),  # type: ignore[arg-type]
+            filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
+            ids=FakeIds(),
+            clock=FakeClock(),
+            command_tool=tool,  # type: ignore[arg-type]
+        )
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        res = await svc.git_stage(session.workspace.id, ["a.py"])
+        assert res is not None and res.ok is True and res.action == "stage"
+        assert tool.calls[0]["command"] == "git add -- a.py"
+        assert tool.calls[0]["cwd"] == str(tmp_path)
+
+    async def test_commit_parses_sha(self, tmp_path: Path) -> None:
+        tool = _GitWriteShellTool(ok=True, stdout="[main 1a2b3c4] msg\n")
+        svc = IDEService(
+            safety=FakeSafety(),  # type: ignore[arg-type]
+            filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
+            ids=FakeIds(),
+            clock=FakeClock(),
+            command_tool=tool,  # type: ignore[arg-type]
+        )
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        res = await svc.git_commit(session.workspace.id, "msg")
+        assert res is not None and res.ok is True and res.commit == "1a2b3c4" and res.branch == "main"
+
+    async def test_branch_create(self, tmp_path: Path) -> None:
+        tool = _GitWriteShellTool(ok=True)
+        svc = IDEService(
+            safety=FakeSafety(),  # type: ignore[arg-type]
+            filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
+            ids=FakeIds(),
+            clock=FakeClock(),
+            command_tool=tool,  # type: ignore[arg-type]
+        )
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        res = await svc.git_branch(session.workspace.id, "feature/x")
+        assert res is not None and res.branch == "feature/x"
+        assert tool.calls[0]["command"] == "git checkout -b feature/x"
+
+    async def test_git_write_degrades_when_no_tool(self, tmp_path: Path) -> None:
+        svc = _service()  # no command_tool wired
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        assert await svc.git_stage(session.workspace.id, ["a.py"]) is None
+        assert await svc.git_commit(session.workspace.id, "m") is None
+        assert await svc.git_branch(session.workspace.id, "b") is None
+
+    async def test_git_write_unknown_workspace_raises(self) -> None:
+        svc = _service_with_commands(FakeShellTool())
+        with pytest.raises(IDEServiceError):
+            await svc.git_stage("nope", ["a.py"])
+
+
+class TestCheckpoints:
+    async def test_snapshot_routes_through_funnel(self, tmp_path: Path) -> None:
+        tool = _GitWriteShellTool(ok=True, stdout="deadbeefcafe\n")
+        svc = IDEService(
+            safety=FakeSafety(),  # type: ignore[arg-type]
+            filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
+            ids=FakeIds(),
+            clock=FakeClock(),
+            command_tool=tool,  # type: ignore[arg-type]
+        )
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        res = await svc.checkpoint_snapshot(session.workspace.id, label="before edit")
+        assert res is not None and res.ok is True and res.action == "snapshot"
+        assert res.checkpoint_id is not None and res.commit == "deadbeefca"
+        assert tool.calls[0]["command"] == "git stash create"
+        assert tool.calls[0]["cwd"] == str(tmp_path)
+
+    async def test_restore_routes_through_funnel(self, tmp_path: Path) -> None:
+        tool = _GitWriteShellTool(ok=True, stdout="deadbeefcafe\n")
+        svc = IDEService(
+            safety=FakeSafety(),  # type: ignore[arg-type]
+            filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
+            ids=FakeIds(),
+            clock=FakeClock(),
+            command_tool=tool,  # type: ignore[arg-type]
+        )
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        res = await svc.checkpoint_restore(session.workspace.id, "cp1")
+        assert res is not None and res.ok is True and res.action == "restore"
+        assert tool.calls[-1]["command"] == "git checkout deadbeefcafe -- ."
+
+    async def test_checkpoint_degrades_when_no_tool(self, tmp_path: Path) -> None:
+        svc = _service()  # no command_tool wired
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        assert await svc.checkpoint_snapshot(session.workspace.id) is None
+        assert await svc.checkpoint_restore(session.workspace.id, "cp1") is None
+        assert await svc.checkpoint_list(session.workspace.id) is None
+
+    async def test_checkpoint_unknown_workspace_raises(self) -> None:
+        svc = _service_with_commands(FakeShellTool())
+        with pytest.raises(IDEServiceError):
+            await svc.checkpoint_snapshot("nope")
+
+
+class _StreamingShellTool:
+    """A shell tool that honors the ambient output sink (the terminal path).
+
+    Reads the contextvar sink the `TerminalSessionManager` binds and pushes a
+    couple of `SandboxChunk`s before returning — proving output is delivered
+    incrementally through the SAME `execute`, not a second path."""
+
+    name = "shell"
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def dry_run(self, args: dict[str, Any]) -> str:
+        return "RUN"
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        from atlas.safety.sandbox import SandboxChunk
+        from atlas.tools.command_stream import current_sink
+
+        self.calls.append(args)
+        sink = current_sink()
+        if sink is not None:
+            await sink(SandboxChunk(stream="stdout", data="line one\n"))
+            await sink(SandboxChunk(stream="stdout", data="line two\n"))
+        return ToolResult(ok=True, output={"exit_code": 0, "stdout": "", "stderr": "", "duration_ms": 7})
+
+
+class TestTerminal:
+    async def test_open_run_and_stream_delivers_chunks_then_exit(self, tmp_path: Path) -> None:
+        tool = _StreamingShellTool()
+        svc = _service_with_commands(tool)  # type: ignore[arg-type]
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        wid = session.workspace.id
+
+        tid = await svc.open_terminal(wid)
+        assert tid is not None
+
+        collected: list[Any] = []
+
+        async def _drain() -> None:
+            async for event in svc.terminal_stream(wid, str(tid)):
+                collected.append(event)
+
+        import asyncio
+
+        reader = asyncio.create_task(_drain())
+        started = await svc.run_terminal_command(wid, str(tid), "pytest -q")
+        assert started is True
+        await asyncio.wait_for(reader, timeout=5.0)
+
+        kinds = [e.kind for e in collected]
+        assert kinds[-1] == "exit"
+        chunks = [e for e in collected if e.kind == "chunk"]
+        assert [c.data for c in chunks] == ["line one\n", "line two\n"]
+        exit_event = collected[-1]
+        assert exit_event.exit_code == 0 and exit_event.denied is False
+        # Ran in the workspace root, through the funnel (recorded by the tool).
+        assert tool.calls[0]["cwd"] == str(tmp_path)
+        assert tool.calls[0]["command"] == "pytest -q"
+
+    async def test_run_terminal_unknown_session_is_false(self, tmp_path: Path) -> None:
+        svc = _service_with_commands(_StreamingShellTool())  # type: ignore[arg-type]
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        assert await svc.run_terminal_command(session.workspace.id, "nope", "pytest") is False
+
+    async def test_open_terminal_degrades_when_no_tool(self, tmp_path: Path) -> None:
+        svc = _service()  # no command_tool wired
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        assert await svc.open_terminal(session.workspace.id) is None
+
+    async def test_terminal_exists_in(self, tmp_path: Path) -> None:
+        svc = _service_with_commands(_StreamingShellTool())  # type: ignore[arg-type]
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        wid = session.workspace.id
+        tid = await svc.open_terminal(wid)
+        assert tid is not None
+        assert await svc.terminal_exists_in(wid, str(tid)) is True
+        assert await svc.terminal_exists_in(wid, "nope") is False
+        assert await svc.terminal_exists_in("badws", str(tid)) is False
+
+    async def test_stream_resumes_after_cursor(self, tmp_path: Path) -> None:
+        import asyncio
+
+        tool = _StreamingShellTool()
+        svc = _service_with_commands(tool)  # type: ignore[arg-type]
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        wid = session.workspace.id
+        tid = await svc.open_terminal(wid)
+        assert tid is not None
+
+        first: list[Any] = []
+
+        async def _drain_all() -> None:
+            async for event in svc.terminal_stream(wid, str(tid)):
+                first.append(event)
+
+        reader = asyncio.create_task(_drain_all())
+        await svc.run_terminal_command(wid, str(tid), "pytest -q")
+        await asyncio.wait_for(reader, timeout=5.0)
+
+        # Reattach after the first chunk's seq — must NOT replay it, and must still
+        # deliver the terminal exit so the consumer closes honestly.
+        after = first[0].seq
+        resumed: list[Any] = []
+        async for event in svc.terminal_stream(wid, str(tid), after_seq=after):
+            resumed.append(event)
+        assert all(e.seq > after for e in resumed)
+        assert resumed[-1].kind == "exit"
+
+
+class _PortShellTool:
+    """A streaming tool that announces a dev-server URL then exits cleanly —
+    exercises the supervisor's port detection over the terminal funnel."""
+
+    name = "shell"
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def dry_run(self, args: dict[str, Any]) -> str:
+        return "RUN"
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        from atlas.safety.sandbox import SandboxChunk
+        from atlas.tools.command_stream import current_sink
+
+        self.calls.append(args)
+        sink = current_sink()
+        if sink is not None:
+            await sink(SandboxChunk(stream="stdout", data="  ➜  Local: http://localhost:5173/\n"))
+        return ToolResult(ok=True, output={"exit_code": 0, "stdout": "", "stderr": "", "duration_ms": 3})
+
+
+class _ServerShellTool:
+    """A streaming tool that binds a port then blocks forever — a stand-in for a
+    dev server, so a `stop` can cancel it mid-run."""
+
+    name = "shell"
+
+    def __init__(self) -> None:
+        self.started = __import__("asyncio").Event()
+
+    def dry_run(self, args: dict[str, Any]) -> str:
+        return "RUN"
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        import asyncio
+
+        from atlas.safety.sandbox import SandboxChunk
+        from atlas.tools.command_stream import current_sink
+
+        sink = current_sink()
+        if sink is not None:
+            await sink(SandboxChunk(stream="stdout", data="listening on 8080\n"))
+        self.started.set()
+        await asyncio.Event().wait()  # never returns; a stop cancels this task
+        return ToolResult(ok=True, output={"exit_code": 0})  # pragma: no cover
+
+
+class TestProcessSupervisor:
+    async def test_start_detects_ports_and_records_exit(self, tmp_path: Path) -> None:
+        import asyncio
+
+        svc = _service_with_commands(_PortShellTool())  # type: ignore[arg-type]
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        wid = session.workspace.id
+
+        proc = await svc.start_process(wid, "npm run dev")
+        assert proc is not None
+        # The scanner consumes the session stream; give it a beat to fold events.
+        for _ in range(50):
+            procs = await svc.list_processes(wid)
+            if procs and procs[0].detected_ports and procs[0].status.value == "exited":
+                break
+            await asyncio.sleep(0.01)
+        procs = await svc.list_processes(wid)
+        assert procs[0].detected_ports == (5173,)
+        assert procs[0].status.value == "exited"
+        assert procs[0].exit_code == 0
+
+    async def test_stop_cancels_a_running_process(self, tmp_path: Path) -> None:
+        import asyncio
+
+        tool = _ServerShellTool()
+        svc = _service_with_commands(tool)  # type: ignore[arg-type]
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        wid = session.workspace.id
+
+        proc = await svc.start_process(wid, "npm run dev")
+        assert proc is not None
+        await asyncio.wait_for(tool.started.wait(), timeout=5.0)
+
+        assert await svc.stop_process(wid, str(proc.id)) is True
+        for _ in range(50):
+            got = (await svc.list_processes(wid))[0]
+            if got.status.value == "killed":
+                break
+            await asyncio.sleep(0.01)
+        assert (await svc.list_processes(wid))[0].status.value == "killed"
+
+    async def test_stop_unknown_process_is_false(self, tmp_path: Path) -> None:
+        svc = _service_with_commands(_PortShellTool())  # type: ignore[arg-type]
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        assert await svc.stop_process(session.workspace.id, "nope") is False
+
+    async def test_processes_degrade_when_no_tool(self, tmp_path: Path) -> None:
+        svc = _service()  # no command tool wired
+        session = await svc.open_workspace(_repo(tmp_path), "demo")
+        wid = session.workspace.id
+        assert await svc.start_process(wid, "npm run dev") is None
+        assert await svc.list_processes(wid) == ()
+        assert await svc.stop_process(wid, "x") is False
+
+    async def test_list_scoped_to_workspace(self, tmp_path: Path) -> None:
+        import asyncio
+
+        svc = _service_with_commands(_PortShellTool())  # type: ignore[arg-type]
+        (tmp_path / "a").mkdir()
+        (tmp_path / "b").mkdir()
+        s1 = await svc.open_workspace(_repo(tmp_path / "a"), "a")
+        s2 = await svc.open_workspace(_repo(tmp_path / "b"), "b")
+        p1 = await svc.start_process(s1.workspace.id, "npm run dev")
+        assert p1 is not None
+        await asyncio.sleep(0.05)
+        ids2 = [p.id for p in await svc.list_processes(s2.workspace.id)]
+        assert str(p1.id) not in [str(i) for i in ids2]
+        assert await svc.stop_process(s2.workspace.id, str(p1.id)) is False
+
+
+def test_detect_ports_is_conservative() -> None:
+    from atlas.capabilities.ide.process import detect_ports
+
+    assert detect_ports("Local: http://localhost:5173/") == {5173}
+    assert detect_ports("listening on 8080") == {8080}
+    assert detect_ports("Port: 3000 ready") == {3000}
+    assert detect_ports("running at http://127.0.0.1:8000") == {8000}
+    # No bare five-digit log noise without a port cue.
+    assert detect_ports("built 123456 modules in 900ms") == set()

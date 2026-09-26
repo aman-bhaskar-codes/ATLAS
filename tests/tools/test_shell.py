@@ -100,6 +100,20 @@ class TestShellTool:
         call_args = mock_sandbox.run.call_args
         assert call_args[1]["network"] is True
 
+    @pytest.mark.asyncio
+    async def test_execute_honors_args_timeout(self, tool: ShellTool, mock_sandbox: AsyncMock) -> None:
+        """A long-lived dev server (Slice 7) passes a large `timeout_s`; the tool
+        must forward it to the sandbox rather than the hardcoded 120s default."""
+        mock_sandbox.run.return_value = SandboxResult(exit_code=0, stdout_tail="", stderr_tail="", duration_ms=1)
+        await tool.execute({"command": "ls", "timeout_s": 86_400.0})
+        assert mock_sandbox.run.call_args[1]["timeout_s"] == 86_400.0
+
+    @pytest.mark.asyncio
+    async def test_execute_bad_timeout_falls_back_to_default(self, tool: ShellTool, mock_sandbox: AsyncMock) -> None:
+        mock_sandbox.run.return_value = SandboxResult(exit_code=0, stdout_tail="", stderr_tail="", duration_ms=1)
+        await tool.execute({"command": "ls", "timeout_s": "not-a-number"})
+        assert mock_sandbox.run.call_args[1]["timeout_s"] == 120.0
+
 
 class TestMultiWordAllowlist:
     """Locks the token-prefix allowlist match: entries may be multi-word
@@ -134,3 +148,49 @@ class TestMultiWordAllowlist:
 
     def test_unknown_executable_denied(self, tool: ShellTool) -> None:
         assert tool._allowed("rm -rf /")[0] is False
+
+
+class TestShellToolStreaming:
+    """The interactive-terminal seam: when an output sink is bound in the ambient
+    context AND the sandbox can stream, `execute` forwards chunks live through the
+    SAME code path (no second tool, no changed args) and still returns the buffered
+    ToolResult. Uses the real NativeSandbox so this is true incremental output."""
+
+    @pytest.mark.asyncio
+    async def test_bound_sink_receives_incremental_chunks(self) -> None:
+        from atlas.safety.sandbox import SandboxChunk
+        from atlas.safety.sandbox_native import NativeSandbox
+        from atlas.tools.command_stream import bind_sink, unbind
+
+        tool = ShellTool(
+            read_only=["printf", "echo"],
+            side_effect=[],
+            sandbox=NativeSandbox(env="dev"),
+            mounts={},
+        )
+        chunks: list[SandboxChunk] = []
+
+        async def _sink(chunk: SandboxChunk) -> None:
+            chunks.append(chunk)
+
+        token = bind_sink(_sink)
+        try:
+            result = await tool.execute({"command": "printf 'a\\nb\\nc\\n'"})
+        finally:
+            unbind(token)
+
+        assert result.ok is True and result.output["exit_code"] == 0
+        # Output was delivered as chunks (incrementally), not only in the tail.
+        assert chunks, "expected streamed chunks via the bound sink"
+        streamed = "".join(c.data for c in chunks if c.stream == "stdout")
+        assert "a" in streamed and "b" in streamed and "c" in streamed
+
+    @pytest.mark.asyncio
+    async def test_no_sink_uses_buffered_path(self) -> None:
+        from atlas.safety.sandbox_native import NativeSandbox
+        from atlas.tools.command_stream import current_sink
+
+        tool = ShellTool(read_only=["echo"], side_effect=[], sandbox=NativeSandbox(env="dev"), mounts={})
+        assert current_sink() is None  # no sink bound → ordinary one-shot path
+        result = await tool.execute({"command": "echo hello"})
+        assert result.ok is True and "hello" in result.output["stdout"]

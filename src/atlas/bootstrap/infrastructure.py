@@ -60,6 +60,17 @@ def build_infrastructure(settings: Settings, config: AppConfig) -> InfraComponen
     bus.register_type("planning", PlanningEvent)
     bus.register_type("memory", MemoryBusEvent)  # use infra type; memory layer publishes this
     bus.register_type("tool", ToolEvent)
+    from atlas.tooling.catalog.events import ToolCatalogEvent
+    from atlas.tooling.routing.events import RouteEvent
+
+    bus.register_type("tool.catalog", ToolCatalogEvent)  # Part 2: tool catalog lifecycle
+    bus.register_type("route", RouteEvent)  # Part 3: routing lifecycle
+    from atlas.tooling.execution.events import ExecutionEvent
+
+    bus.register_type("execution", ExecutionEvent)  # Part 4: execution lifecycle
+    from atlas.tooling.mcp.events import MCPEvent
+
+    bus.register_type("mcp", MCPEvent)  # Part 5: MCP lifecycle
 
     audit = AuditLog(db)
     killswitch = KillSwitch(config.safety.stop_flag_path)

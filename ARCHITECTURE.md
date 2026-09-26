@@ -146,6 +146,12 @@ schedules, tools, models.
 - `Verifier` protocol (goal.py) — add domain verifiers
 - `ReflectionHook` protocol — add pre/post action hooks
 - `Tool` protocol (tools/base.py) — new sandboxed tools
+- `ToolAdapter` protocol (tooling/adapters/base.py) — new tool sources (MCP, HTTP, …) bridged into the universal fabric; see `docs/tooling/foundation.md`
+- `CatalogSource` protocol (tooling/catalog/sync.py) — new discovery origins for the persistent tool catalog (native and capability exist; MCP arrives later with zero catalog changes); see `docs/tooling/catalog.md`
+- `DomainDefinition` / `StrategyDefinition` registries (tooling/routing/) — new routing domains and execution strategies register without touching the routing engine; see `docs/routing/architecture.md`
+- `JudgmentProvider` protocol (tooling/routing/judgment.py) — pluggable judgment rungs (deterministic rules are the default; Jev/LLM are config-gated)
+- `StepAdapter` protocol (tooling/execution/adapters.py) — new candidate types (agent/workflow runtimes) execute under the same governed semantics; see `docs/execution/architecture.md`
+- `MCPServerManager` (tooling/mcp/manager.py) — MCP servers are CONFIGURATION: add a stanza to `config/mcp.yaml`, connect, and its tools flow into the catalog/router/executor with zero ATLAS code; see `docs/tooling/mcp/architecture.md`
 - `KnowledgeProvider` — new retrieval sources
 - `Event` subclasses on the bus — new observability streams
 - `bootstrap/` builders — new bounded construction modules

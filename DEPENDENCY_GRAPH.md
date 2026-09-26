@@ -15,7 +15,10 @@ interfaces ──▶ diagnostics ──▶ orchestration ──▶ capabilities 
 ```
 
 Exact declared order (top may import down):
-`interfaces > diagnostics > orchestration > capabilities > memory > intelligence > safety > tools > perception > control > infra`
+`interfaces > diagnostics > adaptation > evaluation > tooling > orchestration > knowledge > capabilities > memory > intelligence > safety > tools > perception > control > infra`
+
+`atlas.tooling` (universal tooling fabric) sits ABOVE `orchestration` because it
+wraps the dispatchers — see `docs/tooling/foundation.md`.
 
 Three whitelisted exceptions exist (documented in `importlinter.ini`).
 
@@ -50,6 +53,20 @@ build()
  │                               ExecutionMonitor, RetryManager, SelfCritique,
  │                               ToolDispatcher, Replanner, Verifier,
  │                               ReasoningLoop, Orchestrator
+ ├── bootstrap.tooling ────────▶ ToolingFabric (ToolingRegistry + Native/Capability
+ │                               adapters + ToolingExecutor; SafetyEngine unchanged)
+ │                               + ToolCatalog (SQLite: sources→namespaces→tools→operations,
+ │                               fingerprints, sync engine, in-memory search index)
+ ├── bootstrap.routing ────────▶ RoutingEngine (TaskIR→domain→strategy→capabilities→
+ │                               candidates→hard filter→judgment→ranking→plan/graph→recovery;
+ │                               DomainRegistry, StrategyRegistry, judgment cascade, RouteStore)
+ ├── bootstrap.execution ──────▶ ExecutionEngine (scheduler, slots, adapters, retry,
+ │                               recovery controller, SQLite checkpoints/resume; tool steps
+ │                               flow through ToolingExecutor → SafetyEngine)
+ ├── bootstrap.mcp ────────────▶ MCPServerManager (official SDK behind an ATLAS boundary:
+ │                               stdio/HTTP transports, paginated discovery, normalization
+ │                               to UniversalToolDefinition, dynamic catalog sync, bounded
+ │                               reconnect, security policies)
  └── FeedbackStore, CronScheduler (2 AM consolidation), WorkflowStore
 ```
 
@@ -69,6 +86,21 @@ build()
 
 **Capability call:**
 `Action → ToolDispatcher → CapabilityDispatcher → SafetyEngine.guard() → platform provider → audit`
+
+**Universal tooling (foundation):**
+`UniversalToolInvocation → ToolingExecutor → {NativeToolAdapter → ToolDispatcher | CapabilityAdapter → CapabilityDispatcher} → SafetyEngine.guard() → backend → UniversalToolResult`
+
+**Tool catalog sync (Part 2):**
+`Atlas.start() → ToolingFabric.sync_catalog() → CatalogSource.discover() → validate+diff(fingerprints) → SQLite transaction (tool_definitions/tool_operations + catalog_version++) → tool.catalog events → in-memory index swap → find/search/inspect`
+
+**Routing decision (Part 3):**
+`request → TaskIR → domain (rules→judgment cascade) → strategy → capabilities → catalog candidates → hard policy filter → bounded judgment → ranking → RoutePlan/RouteGraph (validated, persisted, replayable) → recovery routing on failure`
+
+**Plan execution (Part 4):**
+`RoutePlan → ExecutionEngine (validate → StepScheduler → slots → staleness revalidation) → ToolingExecutor → SafetyEngine.guard() → backend → ExecutionObservation → retry/fallback/replan/human (bounded RecoveryController, SQLite checkpoints) → ExecutionRunResult`
+
+**MCP runtime (Part 5):**
+`config/mcp.yaml → MCPServerManager → official SDK (stdio/HTTP) → tools/list (paginated) → normalization → ToolingRegistry + ToolCatalog sync (no restart) → tools/call through the governed funnel → UniversalToolResult with MCP provenance`
 
 ## Known Coupling Debt
 

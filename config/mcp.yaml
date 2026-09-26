@@ -1,0 +1,29 @@
+# ── MCP servers (Part 5) ───────────────────────────────────────────────
+# Owner-configured MCP servers. Credential REFERENCES only — never secrets:
+#   env:
+#     GITHUB_PERSONAL_ACCESS_TOKEN:
+#       credential_ref: github:default
+# Servers are disabled by default; enabling + connecting is an owner action
+# (§28/§93). `trust_level` informs routing/policy metadata but NEVER replaces
+# the SafetyEngine (§29/§94).
+mcp:
+  servers:
+
+    filesystem:
+      enabled: false
+      transport: stdio
+      startup: lazy
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp/atlas"]
+      trust_level: local_user_configured
+      description: "Local filesystem tools (example; enable deliberately)"
+
+    remote_research:
+      enabled: false
+      transport: streamable_http
+      url: "https://mcp.example.com/mcp"
+      auth:
+        mode: oauth
+        credential_ref: mcp:remote_research
+      trust_level: trusted_remote
+      description: "Example remote research server (enable deliberately)"

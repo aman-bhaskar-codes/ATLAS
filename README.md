@@ -534,6 +534,17 @@ atlas runtime start
 | `atlas doctor` | verify environment, providers, models |
 | `atlas profile` | show or set the operating profile |
 | `atlas providers` | list · health · free · quota |
+| `atlas tools list` | every tool in the universal tooling registry (id, type, status, auth, tier) |
+| `atlas tools catalog` | persistent catalog overview: version, sources, namespaces, states |
+| `atlas tools search "<query>"` | lexical catalog search with match explanations |
+| `atlas tools inspect <tool-id>` | full tool inspection: schemas, fingerprints, timestamps |
+| `atlas tools namespaces` / `refresh` | namespace listing / re-sync sources |
+| `atlas route "<request>"` | route a request: domain → strategy → candidates → plan (explainable) |
+| `atlas route domains` / `strategies` | registered routing domains / strategies |
+| `atlas route explain <route-id>` / `replay <route-id>` | structured explanation / snapshot replay |
+| (execution fabric) | `Atlas.execution_engine` runs RoutePlans: `start/pause/resume/cancel/status/retry`; runs are visible at `GET /api/v1/execution/runs` |
+| `atlas mcp list` / `status` / `tools` | MCP servers (official SDK): state, negotiated protocol, discovered tools |
+| `atlas mcp connect` / `disconnect` / `refresh` | owner-controlled MCP lifecycle |
 | `atlas models` | list · doctor · pull |
 | `atlas memory` | consolidation and skill promotion |
 | `atlas cost` | view and manage cost controls |
@@ -809,7 +820,7 @@ build gate tells you immediately if you guessed wrong.
 
 | To add… | Put it in | And then |
 |---|---|---|
-| a **tool** | `tools/` implementing the `base.py` contract | register it in `orchestration/registry.py`; add safety rules so it is classified, not defaulted |
+| a **tool** | `tools/` implementing the `base.py` contract | register it in `orchestration/registry.py`; add safety rules so it is classified, not defaulted. It appears in the universal tooling fabric automatically (`bootstrap/tooling.py`) |
 | a **model provider** | `intelligence/providers/` | the `provider-sdk-containment` contract keeps the vendor SDK from leaking upward |
 | a **model** | `config/models.yaml` | declare `cost_class`; add the id to a tier list in `settings.yaml` |
 | a **capability** | `capabilities/<name>/` + a `bootstrap/<name>.py` builder | return `None` when disabled, and add an `enabled` flag defaulting to `false` |

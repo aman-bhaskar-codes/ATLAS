@@ -29,8 +29,8 @@ from atlas.capabilities.ide.contracts import (
     WorkspaceId,
     WorkspaceRef,
 )
-from atlas.infra.db import Database
 from atlas.infra.backends import PostgresConnection
+from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
 
 _log = get_logger("atlas.ide.persistence")
@@ -223,7 +223,6 @@ class PostgresIDESessionStore:
 
     async def sessions_for_workspace(self, workspace_id: WorkspaceId) -> tuple[IDESession, ...]:
         rows = await self._conn.fetchall(
-            "SELECT payload FROM ide_sessions WHERE workspace_id=? ORDER BY updated_ts DESC",
-            (str(workspace_id),)
+            "SELECT payload FROM ide_sessions WHERE workspace_id=? ORDER BY updated_ts DESC", (str(workspace_id),)
         )
         return tuple(IDESession.model_validate_json(r["payload"]) for r in rows)

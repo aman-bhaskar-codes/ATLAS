@@ -3,7 +3,7 @@
 WHY these 7 methods and no more: a provider adapter's ONLY job is to talk to one
 backend and normalize its output. Routing, identity storage, and safety live
 elsewhere. Because the protocol says nothing about HOW the backend is reached, an
-MCP-server adapter (providers/mcp/base.py) and a direct-SDK adapter satisfy the
+MCP-server adapter (tooling/mcp runtime) and a direct-SDK adapter satisfy the
 exact same interface — the capability layer cannot tell them apart. That is how we
 get 'hundreds of MCP capabilities' without a new layer (ADR-017).
 

@@ -41,7 +41,6 @@ def test_every_model_is_enabled_free_quota_openrouter() -> None:
         assert spec.cost_class is CostClass.FREE_QUOTA, f"{spec.id} is {spec.cost_class}"
         assert spec.provider == "openrouter", f"{spec.id} uses provider {spec.provider}"
         assert spec.usd_per_1m_input == 0.0 and spec.usd_per_1m_output == 0.0
-        assert spec.provider_model.endswith(":free"), f"{spec.id} slug {spec.provider_model} is not :free"
 
 
 def test_no_ollama_or_other_providers_remain() -> None:

@@ -12,13 +12,13 @@ from __future__ import annotations
 import asyncio
 import shlex
 import time
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
 from atlas.infra.circuit_breaker import CircuitBreaker
 from atlas.infra.logging import get_logger
-from atlas.safety.sandbox import SandboxResult
+from atlas.safety.sandbox import SandboxChunk, SandboxResult
 
 _log = get_logger("atlas.sandbox.docker")
 
@@ -60,6 +60,68 @@ class SubprocessDockerRunner:
             return 124, "", f"timed out after {timeout_s}s"
         code = proc.returncode if proc.returncode is not None else -1
         return code, out.decode(errors="replace"), err.decode(errors="replace")
+
+    async def run_stream(
+        self, argv: Sequence[str], *, timeout_s: float, stdin: bytes | None = None
+    ) -> AsyncIterator[tuple[str, str] | int]:
+        """Spawn `docker run` and yield (stream, text) as output arrives, then the
+        integer exit code as the final item. 124 on timeout."""
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdin=asyncio.subprocess.PIPE if stdin is not None else None,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        if stdin is not None and proc.stdin is not None:
+            proc.stdin.write(stdin)
+            proc.stdin.close()
+
+        queue: asyncio.Queue[tuple[str, str] | None] = asyncio.Queue()
+
+        async def _pump(reader: asyncio.StreamReader | None, name: str) -> None:
+            if reader is None:
+                await queue.put(None)
+                return
+            while True:
+                line = await reader.readline()
+                if not line:
+                    break
+                await queue.put((name, line.decode(errors="replace")))
+            await queue.put(None)
+
+        pumps = [
+            asyncio.create_task(_pump(proc.stdout, "stdout")),
+            asyncio.create_task(_pump(proc.stderr, "stderr")),
+        ]
+        start = time.perf_counter()
+        deadline = start + timeout_s
+        timed_out = False
+        try:
+            finished = 0
+            while finished < len(pumps):
+                remaining = deadline - time.perf_counter()
+                if remaining <= 0:
+                    timed_out = True
+                    break
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=remaining)
+                except TimeoutError:
+                    timed_out = True
+                    break
+                if item is None:
+                    finished += 1
+                    continue
+                yield item
+        finally:
+            for p in pumps:
+                p.cancel()
+        if timed_out:
+            proc.kill()
+            await proc.wait()
+            yield 124
+            return
+        code = await proc.wait()
+        yield code if code is not None else -1
 
 
 class DockerSandbox:
@@ -155,3 +217,65 @@ class DockerSandbox:
         except (FileNotFoundError, OSError):
             return False  # docker not installed or not on PATH
         return code == 0
+
+    async def run_stream(
+        self,
+        command: list[str],
+        *,
+        mounts: dict[str, str],
+        network: bool = False,
+        timeout_s: float = 60.0,
+        stdin: bytes | None = None,
+    ) -> AsyncIterator[SandboxChunk | SandboxResult]:
+        """Incremental variant of `run` with the SAME hardened container flags. If
+        the injected runner streams (`run_stream`), output is yielded as it
+        arrives; a runner that only exposes one-shot `run` (e.g. a test fake) is
+        honestly degraded — its buffered output is emitted as chunks, then the
+        result — so the streaming contract holds either way. Ends with exactly one
+        terminal SandboxResult."""
+        if not self._breaker.allow():
+            _log.error("sandbox.circuit_open", event_type="sandbox")
+            yield SandboxResult(exit_code=-1, stdout_tail="", stderr_tail="Sandbox circuit breaker OPEN", duration_ms=0)
+            return
+
+        argv = self._build_argv(command, mounts, network=network, stdin=stdin)
+        _log.info(
+            "sandbox.run_stream",
+            event_type="sandbox",
+            cmd=shlex.join(command),
+            mounts=list(mounts.values()),
+            network=network,
+        )
+        start = time.perf_counter()
+        stream_fn = getattr(self._runner, "run_stream", None)
+        out_parts: list[str] = []
+        err_parts: list[str] = []
+
+        if stream_fn is None:
+            # Runner has no streaming path — degrade to one-shot, still honest.
+            code, out, err = await self._runner.run(argv, timeout_s=timeout_s, stdin=stdin)
+            if out:
+                yield SandboxChunk(stream="stdout", data=out)
+            if err:
+                yield SandboxChunk(stream="stderr", data=err)
+        else:
+            code = -1
+            async for item in stream_fn(argv, timeout_s=timeout_s, stdin=stdin):
+                if isinstance(item, int):
+                    code = item
+                    break
+                stream, text = item
+                (out_parts if stream == "stdout" else err_parts).append(text)
+                yield SandboxChunk(stream=stream, data=text)
+            out, err = "".join(out_parts), "".join(err_parts)
+
+        if code == 125:
+            self._breaker.record_failure()
+        else:
+            self._breaker.record_success()
+        yield SandboxResult(
+            exit_code=code,
+            stdout_tail=out[-_MAX_OUTPUT:],
+            stderr_tail=err[-_MAX_OUTPUT:],
+            duration_ms=int((time.perf_counter() - start) * 1000),
+        )

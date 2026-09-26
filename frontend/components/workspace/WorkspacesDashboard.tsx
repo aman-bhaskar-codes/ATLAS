@@ -1,14 +1,62 @@
 "use client";
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useWorkspaces, useWorkspaceTree, useWorkspaceGitStatus, useOpenWorkspace } from '@/features/workspace/queries';
 import type { Workspace } from '@/features/workspace/contracts';
-import { Folder, GitBranch, Plus, FileCode, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Folder, GitBranch, Plus, FileCode, CheckCircle, AlertTriangle, ExternalLink } from 'lucide-react';
 import { ErrorRow } from '@/components/primitives/ErrorState';
 import { AtlasApiError } from '@/lib/api/client';
+import { openWorkbenchWindow, devWorkspacePath } from '@/lib/ide/openWindow';
 
 function isSubsystemDisabled(error: unknown): boolean {
   return error instanceof AtlasApiError && error.status === 503;
+}
+
+/**
+ * Launch the Development Workbench for a workspace in a separate window (spec §10).
+ * When the browser blocks the popup, fall back to same-window navigation so the
+ * action never silently does nothing.
+ */
+function OpenInIdeButton({ workspaceId }: { workspaceId: string }) {
+  const router = useRouter();
+  const [blocked, setBlocked] = useState(false);
+
+  const launch = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const result = openWorkbenchWindow(workspaceId);
+    if (!result.opened) setBlocked(true);
+  };
+
+  if (blocked) {
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); router.push(devWorkspacePath(workspaceId)); }}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+          background: 'var(--gold-500)', color: 'var(--ink-950)', fontWeight: 600,
+          border: 'none', padding: '0.4rem 0.7rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem',
+        }}
+        title="Popup was blocked — open in this window instead"
+      >
+        <ExternalLink size={13} /> Open in current window
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={launch}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+        background: 'transparent', color: 'var(--gold-400)', fontWeight: 600,
+        border: '1px solid var(--gold-500)', padding: '0.4rem 0.7rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem',
+      }}
+      title="Open the Development Workbench in a new window"
+    >
+      <ExternalLink size={13} /> Open in IDE
+    </button>
+  );
 }
 
 export function WorkspacesDashboard() {
@@ -177,8 +225,11 @@ function WorkspaceDetails({ workspaceId, workspaces }: { workspaceId: string, wo
             {workspace?.root_paths[0]}
           </div>
         </div>
-        <div style={{ fontSize: '0.7rem', color: 'var(--paper-500)', background: 'var(--ink-850)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid var(--line)' }}>
-          ID: {workspaceId.substring(0, 8)}...
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <OpenInIdeButton workspaceId={workspaceId} />
+          <div style={{ fontSize: '0.7rem', color: 'var(--paper-500)', background: 'var(--ink-850)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid var(--line)' }}>
+            ID: {workspaceId.substring(0, 8)}...
+          </div>
         </div>
       </div>
 

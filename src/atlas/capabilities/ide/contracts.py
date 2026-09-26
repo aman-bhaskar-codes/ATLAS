@@ -219,6 +219,52 @@ class GitDiff(_Frozen):
     patch: str = ""
 
 
+class GitOpResult(_Frozen):
+    """Outcome of one governed git WRITE — stage / unstage / commit / branch /
+    checkout (Slice 9). Honest like `CommandResult`: `ok` reflects the real git
+    exit, `denied` means the funnel refused (nothing ran), and `error` carries
+    git's own message on failure (e.g. "nothing to commit"). `commit` is the new
+    short SHA after a successful commit; `branch` the resulting branch after a
+    branch create/checkout. Never a fabricated success."""
+
+    action: str  # stage | unstage | commit | branch | checkout
+    ok: bool = False
+    detail: str = ""  # human summary (files staged, or the `[branch sha] summary`)
+    commit: str | None = None
+    branch: str | None = None
+    denied: bool = False
+    error: str | None = None
+
+
+# ── Checkpoints (Slice 10) ──────────────────────────────────────────────── #
+class CheckpointResult(_Frozen):
+    """Outcome of one governed workspace checkpoint op — snapshot or restore.
+    Honest like `GitOpResult`: `ok` reflects the real git exit, `denied` means the
+    funnel refused (nothing ran), and `error` carries git's own message on failure.
+    `checkpoint_id` is the stable id pinned under `refs/atlas/checkpoints/*`;
+    `commit` the snapshot's short SHA; `clean` is True when the working tree had
+    nothing uncommitted (the checkpoint pins HEAD). Never a fabricated success."""
+
+    action: str  # snapshot | restore
+    ok: bool = False
+    checkpoint_id: str | None = None
+    commit: str | None = None
+    label: str = ""
+    clean: bool = False
+    detail: str = ""
+    denied: bool = False
+    error: str | None = None
+
+
+class CheckpointRef(_Frozen):
+    """One stored checkpoint: its stable id, the snapshot's short commit sha, and
+    the human label captured at snapshot time."""
+
+    checkpoint_id: str
+    commit: str
+    label: str = ""
+
+
 # ── Debug (Phase 9) — DAP-shaped, adapter-agnostic ──────────────────────── #
 class DebugSession(_Frozen):
     id: DebugSessionId
@@ -311,6 +357,84 @@ class CommandResult(_Frozen):
     duration_ms: int = 0
     denied: bool = False  # SafetyEngine refused on policy — nothing was executed
     error: str | None = None  # runner/tool error, or a non-zero-exit summary
+
+
+# ── Tests & diagnostics (Slice 8) ───────────────────────────────────────── #
+class TestOutcome(StrEnum):
+    PASSED = "passed"
+    FAILED = "failed"
+    ERROR = "error"  # collection/runtime error, not a plain assertion failure
+    SKIPPED = "skipped"
+    UNKNOWN = "unknown"  # the command ran but no outcome could be parsed
+
+
+class TestCase(_Frozen):
+    """One parsed test result — only the cases worth surfacing (failures/errors)
+    are collected; passing cases are counted, not enumerated."""
+
+    name: str
+    outcome: TestOutcome
+    file: str | None = None
+    line: int | None = None
+    message: str | None = None  # failure/error detail, bounded
+
+
+class TestReport(_Frozen):
+    """Structured outcome of running ONE test command through the governed funnel.
+    Honest about the unparseable case: `ok`/`exit_code` always reflect the real
+    process, but the counts are `None` (not a fabricated 0) when no known
+    framework summary could be parsed from the output."""
+
+    command: str
+    framework: str | None = None  # pytest | jest | vitest | go | cargo | None
+    ok: bool = False  # process exited 0
+    exit_code: int | None = None
+    duration_ms: int = 0
+    passed: int | None = None
+    failed: int | None = None
+    skipped: int | None = None
+    total: int | None = None
+    failures: tuple[TestCase, ...] = ()
+    denied: bool = False  # SafetyEngine refused — nothing ran
+    error: str | None = None  # runner/tool error or non-zero summary
+    output_tail: str = ""  # bounded raw tail for the human
+
+
+class DiagnosticSeverity(StrEnum):
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
+    HINT = "hint"
+
+
+class Diagnostic(_Frozen):
+    """One normalized problem parsed from a linter/type-checker's output. `line`/
+    `col` are 1-based as tools emit them; `None` when the tool reported none."""
+
+    file: str
+    line: int | None = None
+    col: int | None = None
+    severity: DiagnosticSeverity = DiagnosticSeverity.ERROR
+    message: str = ""
+    code: str | None = None
+    source: str | None = None  # mypy | ruff | tsc | eslint | None
+
+
+class DiagnosticReport(_Frozen):
+    """Normalized problems from running ONE diagnostic command (lint/type-check)
+    through the governed funnel. The counts reflect the parsed diagnostics, not the
+    process exit — a linter exits non-zero WITH findings, and that is not an error."""
+
+    command: str
+    ok: bool = False  # process exited 0 (no findings, for most linters)
+    exit_code: int | None = None
+    duration_ms: int = 0
+    diagnostics: tuple[Diagnostic, ...] = ()
+    errors: int = 0
+    warnings: int = 0
+    denied: bool = False
+    error: str | None = None  # runner/tool error (never a mere findings-present exit)
+    output_tail: str = ""
 
 
 # ── Agent task (Phases 17/42) ───────────────────────────────────────────── #

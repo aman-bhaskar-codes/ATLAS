@@ -142,3 +142,36 @@ ide:
   max_tree_entries: 20000 # ceiling on a single tree() walk
   max_open_file_bytes: 2000000 # refuse to open files larger than this
 
+
+
+# ── Routing fabric (Part 3) ──────────────────────────────────────────── #
+# The control plane: TaskIR → domain → strategy → capabilities → catalog
+# candidates → hard policy filter → judgment → ranking → plan/graph.
+# Judgment rungs (Jev / strong-LLM) default OFF — deterministic rules decide
+# the fast path and unambiguous cases; flip a rung on to activate it ONLY
+# where rules are inconclusive. Jev reads TYPESAFE_API_KEY from the env
+# (never stored here).
+routing:
+  enabled: true
+  enable_jev: false
+  enable_llm_judgment: false
+  max_candidates: 30
+  judgment_top_n: 12
+  max_recovery_retries: 3
+  max_replans: 3
+
+# ── Durable execution fabric (Part 4) ────────────────────────────────── #
+# Executes Part-3 RoutePlans: dependency-aware scheduling, bounded parallelism,
+# side-effect-aware retries, fallback/recovery, SQLite checkpoints + resume.
+# Global task budgets stay owned by ExecutionLimits (orchestration).
+execution:
+  enabled: true
+  max_concurrent_steps: 8
+  checkpoint_enabled: true
+  retry_max_attempts: 3
+  retry_initial_delay_s: 0.5
+  retry_max_delay_s: 10.0
+  max_fallback_hops: 3
+  max_replans: 3
+  max_nested_workflows: 2
+  default_step_timeout_s: 120

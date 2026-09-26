@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { Providers } from "./providers";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Topbar } from "@/components/layout/Topbar";
-import { MobileNav } from "@/components/layout/MobileNav";
-import { CommandPalette } from "@/components/command/CommandPalette";
+import { AppChrome } from "@/components/layout/AppChrome";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -20,15 +17,7 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body>
         <Providers>
-          <div className="app">
-            <Sidebar />
-            <main className="main">
-              <Topbar />
-              {children}
-            </main>
-          </div>
-          <MobileNav />
-          <CommandPalette />
+          <AppChrome>{children}</AppChrome>
         </Providers>
       </body>
     </html>

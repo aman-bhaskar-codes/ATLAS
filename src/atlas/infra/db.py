@@ -1658,6 +1658,246 @@ _MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_ide_sessions_ws
         ON ide_sessions(workspace_id, updated_ts DESC);
     """,
+    # 030 — Part 2 Tooling Fabric: persistent Tool Catalog. Hierarchy
+    # source -> namespace -> tool -> operation (normalized rows, §16); JSON
+    # columns hold only the schemas that ARE data (§17). Catalog state is
+    # separate from runtime executability: a tool can be READY in the catalog
+    # while its source is down. NEVER stores secrets — credential references
+    # only (§7). tool_sync_runs + catalog_state.version give every consumer a
+    # monotonic epoch to answer "has the tool universe changed since I read it?"
+    """
+    CREATE TABLE IF NOT EXISTS tool_sources (
+        source_id TEXT PRIMARY KEY,
+        source_type TEXT NOT NULL,
+        display_name TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        version TEXT NOT NULL DEFAULT '',
+        trust_level TEXT NOT NULL DEFAULT 'system_builtin',
+        locality TEXT NOT NULL DEFAULT 'local',
+        last_sync_ts TEXT,
+        last_sync_ok INTEGER,
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS tool_namespaces (
+        namespace_id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES tool_sources(source_id),
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        version TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'READY',
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL,
+        UNIQUE (source_id, name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_tool_ns_source ON tool_namespaces(source_id);
+
+    CREATE TABLE IF NOT EXISTS tool_definitions (
+        tool_id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES tool_sources(source_id),
+        namespace_id TEXT NOT NULL REFERENCES tool_namespaces(namespace_id),
+        name TEXT NOT NULL,
+        version TEXT NOT NULL DEFAULT '1',
+        definition_version INTEGER NOT NULL DEFAULT 1,
+        description TEXT NOT NULL DEFAULT '',
+        search_text TEXT NOT NULL DEFAULT '',
+        capability TEXT,
+        operations_json TEXT NOT NULL DEFAULT '[]',
+        input_schema_json TEXT NOT NULL DEFAULT '{}',
+        output_schema_json TEXT,
+        input_schema_fp TEXT NOT NULL DEFAULT '',
+        output_schema_fp TEXT NOT NULL DEFAULT '',
+        definition_fp TEXT NOT NULL DEFAULT '',
+        execution_type TEXT NOT NULL DEFAULT 'native',
+        adapter TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'DISCOVERED',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        availability TEXT NOT NULL DEFAULT 'UNKNOWN',
+        requires_auth INTEGER NOT NULL DEFAULT 0,
+        credential_reference TEXT,
+        auth_state TEXT NOT NULL DEFAULT 'NONE',
+        cost_class TEXT NOT NULL DEFAULT 'free',
+        estimated_cost_usd REAL NOT NULL DEFAULT 0,
+        estimated_latency_ms INTEGER NOT NULL DEFAULT 500,
+        schema_bytes INTEGER NOT NULL DEFAULT 0,
+        estimated_schema_tokens INTEGER NOT NULL DEFAULT 0,
+        safety_tool TEXT NOT NULL DEFAULT '',
+        default_tier INTEGER NOT NULL DEFAULT 0,
+        side_effects INTEGER NOT NULL DEFAULT 0,
+        idempotent INTEGER NOT NULL DEFAULT 1,
+        rollback_support INTEGER NOT NULL DEFAULT 0,
+        trust_level TEXT NOT NULL DEFAULT 'system_builtin',
+        locality TEXT NOT NULL DEFAULT 'local',
+        privacy_class TEXT NOT NULL DEFAULT 'public',
+        network_required INTEGER NOT NULL DEFAULT 0,
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL,
+        last_seen_ts TEXT NOT NULL,
+        last_validated_ts TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tool_def_source ON tool_definitions(source_id);
+    CREATE INDEX IF NOT EXISTS idx_tool_def_ns ON tool_definitions(namespace_id);
+    CREATE INDEX IF NOT EXISTS idx_tool_def_status ON tool_definitions(status);
+    CREATE INDEX IF NOT EXISTS idx_tool_def_capability ON tool_definitions(capability);
+
+    CREATE TABLE IF NOT EXISTS tool_operations (
+        operation_id TEXT PRIMARY KEY,
+        tool_id TEXT NOT NULL REFERENCES tool_definitions(tool_id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        input_schema_json TEXT NOT NULL DEFAULT '{}',
+        output_schema_json TEXT,
+        schema_fingerprint TEXT NOT NULL DEFAULT '',
+        read_only_hint INTEGER,
+        destructive_hint INTEGER,
+        idempotent_hint INTEGER,
+        open_world_hint INTEGER,
+        status TEXT NOT NULL DEFAULT 'READY',
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL,
+        UNIQUE (tool_id, name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_tool_ops_tool ON tool_operations(tool_id);
+
+    CREATE TABLE IF NOT EXISTS tool_sync_runs (
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL,
+        started_ts TEXT NOT NULL,
+        completed_ts TEXT,
+        duration_ms INTEGER,
+        discovered INTEGER NOT NULL DEFAULT 0,
+        added INTEGER NOT NULL DEFAULT 0,
+        updated INTEGER NOT NULL DEFAULT 0,
+        unchanged INTEGER NOT NULL DEFAULT 0,
+        stale INTEGER NOT NULL DEFAULT 0,
+        removed INTEGER NOT NULL DEFAULT 0,
+        rejected INTEGER NOT NULL DEFAULT 0,
+        ok INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        catalog_version INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_tool_sync_source ON tool_sync_runs(source_id, started_ts DESC);
+
+    CREATE TABLE IF NOT EXISTS catalog_state (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+    """,
+    # 031 — Part 3 Routing Fabric: persisted routing decisions. One row per
+    # routing pass with the FULL decision + plan + graph as JSON (§55) so any
+    # route can be reconstructed for debugging, explanation, and REPLAY (§67)
+    # without fresh external calls. Routing metadata only — never secrets.
+    """
+    CREATE TABLE IF NOT EXISTS route_decisions (
+        route_id TEXT PRIMARY KEY,
+        task_id TEXT,
+        correlation_id TEXT,
+        objective TEXT NOT NULL DEFAULT '',
+        domain TEXT NOT NULL DEFAULT '',
+        strategy TEXT NOT NULL DEFAULT '',
+        decision_type TEXT NOT NULL DEFAULT 'route',
+        catalog_version INTEGER NOT NULL DEFAULT 0,
+        payload_json TEXT NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_route_task ON route_decisions(task_id, created_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_route_created ON route_decisions(created_ts DESC);
+    """,
+    # 032 — Part 4 Durable Execution Fabric: execution runs + checkpoints.
+    # One row per run (typed state JSON: step states, attempts, counters);
+    # checkpoints are explicit versioned JSON snapshots at step boundaries
+    # (§19/§20/§69) — never pickles. At-least-once semantics for external
+    # side effects; idempotency keys live in the run state (§22/§23).
+    """
+    CREATE TABLE IF NOT EXISTS execution_runs (
+        run_id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        correlation_id TEXT NOT NULL,
+        route_plan_id TEXT NOT NULL,
+        route_id TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'CREATED',
+        outcome TEXT,
+        payload_json TEXT NOT NULL,
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_exec_runs_task ON execution_runs(task_id, created_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_exec_runs_status ON execution_runs(status);
+
+    CREATE TABLE IF NOT EXISTS execution_run_checkpoints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,
+        schema_version INTEGER NOT NULL DEFAULT 1,
+        payload_json TEXT NOT NULL,
+        created_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_exec_ckpt_run ON execution_run_checkpoints(run_id, id DESC);
+    """,
+    # 033 — Agent-run context substrate (M0.5): durable, resumable native
+    # tool-calling runs. One row per AgentEngine.run(...): the seed conversation
+    # plus the terminal result trace, stored as a JSON `payload` (the schema grows
+    # with the engine — new record fields need no migration). The full
+    # conversation is REBUILT from the payload (orchestration/agent_engine/
+    # context.py::reconstruct_conversation) so a run resumes in a later process;
+    # the engine loop itself stays stateless. Indexed scalar columns are only what
+    # the IDE run-list/filters query on.
+    #
+    # SUPABASE/NEON-READY (future, not wired now): dialect-neutral TEXT columns and
+    # TS-as-TEXT, no SQLite-only types, so the same table ports to Postgres by
+    # swapping the driver behind the AgentRunStore protocol
+    # (orchestration/agent_engine/persistence.py). The protocol is the seam;
+    # nothing here binds the engine to SQLite.
+    """
+    CREATE TABLE IF NOT EXISTS agent_runs (
+        run_id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL DEFAULT '',
+        correlation_id TEXT NOT NULL DEFAULT '',
+        workspace_id TEXT,
+        session_id TEXT,
+        request TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT '',
+        payload TEXT NOT NULL,
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_ws ON agent_runs(workspace_id, updated_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_session ON agent_runs(session_id, updated_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_task ON agent_runs(task_id, updated_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_corr ON agent_runs(correlation_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status, updated_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_updated ON agent_runs(updated_ts DESC);
+    """,
+    # ── Research surface (Phase 1) ─────────────────────────────────────────── #
+    # Durable, resumable Perplexity-class research sessions. Named
+    # `research_query_sessions` to stay distinct from the knowledge fabric's
+    # internal `research_sessions` table (bounded-investigation budget state) — a
+    # different concept owned by a different layer. The FULL ResearchSessionRecord
+    # rides in `payload` (schema grows without migration); scalar columns are only
+    # what the session list/filters query. Dialect-neutral for the reserved
+    # Postgres port (same ON CONFLICT, `?`→`$n`).
+    """
+    CREATE TABLE IF NOT EXISTS research_query_sessions (
+        session_id TEXT PRIMARY KEY,
+        correlation_id TEXT NOT NULL DEFAULT '',
+        parent_session_id TEXT,
+        question TEXT NOT NULL DEFAULT '',
+        mode TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT '',
+        payload TEXT NOT NULL,
+        created_ts TEXT NOT NULL,
+        updated_ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_research_sessions_parent
+        ON research_query_sessions(parent_session_id, updated_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_research_sessions_status
+        ON research_query_sessions(status, updated_ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_research_sessions_updated
+        ON research_query_sessions(updated_ts DESC);
+    """,
 )
 
 

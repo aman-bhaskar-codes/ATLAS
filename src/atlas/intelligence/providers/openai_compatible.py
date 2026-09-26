@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 
 from atlas.infra.types import ProviderToolCall, ToolCallSpec
-from atlas.intelligence.contracts import Message, StreamChunk, Usage
+from atlas.intelligence.contracts import Message, Role, StreamChunk, Usage
 from atlas.intelligence.errors import ProviderError, RateLimitError
 from atlas.intelligence.providers.base import ProviderCompletion
 
@@ -44,6 +44,34 @@ class OpenAICompatibleProvider:
             return "moonshotai/kimi-k2.7-code"
         return model
 
+    @staticmethod
+    def _encode_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
+        """Serialize turns into OpenAI chat format, including tool loops.
+
+        ASSISTANT turns that chose tools emit an ``tool_calls`` array; TOOL turns
+        become ``role: "tool"`` messages carrying ``tool_call_id``. Plain turns
+        keep their prior shape (content + optional reasoning_details).
+        """
+        out: list[dict[str, Any]] = []
+        for m in messages:
+            if m.role == Role.TOOL:
+                out.append({"role": "tool", "tool_call_id": m.tool_call_id or "", "content": m.content})
+                continue
+            entry: dict[str, Any] = {"role": m.role.value, "content": m.content}
+            if m.reasoning_details:
+                entry["reasoning_details"] = m.reasoning_details
+            if m.tool_calls:
+                entry["tool_calls"] = [
+                    {
+                        "id": tc.id or tc.name,
+                        "type": "function",
+                        "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)},
+                    }
+                    for tc in m.tool_calls
+                ]
+            out.append(entry)
+        return out
+
     def _payload(
         self,
         model: str,
@@ -59,14 +87,7 @@ class OpenAICompatibleProvider:
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": stream,
-            "messages": [
-                {
-                    "role": m.role.value,
-                    "content": m.content,
-                    **({"reasoning_details": m.reasoning_details} if m.reasoning_details else {}),
-                }
-                for m in messages
-            ],
+            "messages": self._encode_messages(messages),
         }
         if self._is_openrouter:
             payload["reasoning"] = {"enabled": True}

@@ -360,20 +360,26 @@ def create_app() -> FastAPI:
     # Register routers (imported here to keep the factory free of circular deps)
     from atlas.interfaces.api.events import router as events_router
     from atlas.interfaces.api.health import router as health_router  # Runtime health endpoints
+    from atlas.interfaces.api.routes_agent import router as agent_router  # Agent-run surface (M2.1, optional)
     from atlas.interfaces.api.routes_approvals import router as approvals_router
     from atlas.interfaces.api.routes_attachments import router as attachments_router
     from atlas.interfaces.api.routes_automations import router as automations_router  # Phase 3
     from atlas.interfaces.api.routes_capabilities import router as capabilities_router
     from atlas.interfaces.api.routes_events import router as events_ws_router
+    from atlas.interfaces.api.routes_execution import router as execution_router  # Execution fabric (Part 4)
     from atlas.interfaces.api.routes_feedback import router as feedback_router
     from atlas.interfaces.api.routes_ide import router as ide_router  # ADE / IDE (optional)
     from atlas.interfaces.api.routes_knowledge import router as knowledge_router
     from atlas.interfaces.api.routes_learning import router as learning_router  # Batch 6
+    from atlas.interfaces.api.routes_mcp import router as mcp_router  # MCP runtime (Part 5)
     from atlas.interfaces.api.routes_memory import router as memory_router
     from atlas.interfaces.api.routes_ops import router as ops_router  # Batch 6
     from atlas.interfaces.api.routes_providers import router as providers_router  # Zero-cost-first
+    from atlas.interfaces.api.routes_research import router as research_router  # Research surface (R2, optional)
+    from atlas.interfaces.api.routes_routing import router as routing_router  # Routing fabric (Part 3)
     from atlas.interfaces.api.routes_runtime import router as runtime_router
     from atlas.interfaces.api.routes_tasks import router as tasks_router
+    from atlas.interfaces.api.routes_tools import router as tools_router  # Universal tooling fabric
     from atlas.interfaces.api.routes_trajectory import router as trajectory_router  # Phase 2
     from atlas.interfaces.api.routes_trust import router as trust_router
     from atlas.interfaces.api.routes_voice import router as voice_router  # Voice pipeline (optional)
@@ -416,6 +422,10 @@ def create_app() -> FastAPI:
     app.include_router(events_ws_router, prefix="")  # WebSocket routes include /ws/ prefix
     app.include_router(learning_router, prefix="/api/v1", dependencies=auth_required)  # Batch 6
     app.include_router(ops_router, prefix="/api/v1", dependencies=auth_required)  # Batch 6
+    app.include_router(tools_router, prefix="/api/v1", dependencies=auth_required)  # Universal tooling fabric
+    app.include_router(routing_router, prefix="/api/v1", dependencies=auth_required)  # Routing fabric (Part 3)
+    app.include_router(execution_router, prefix="/api/v1", dependencies=auth_required)  # Execution fabric (Part 4)
+    app.include_router(mcp_router, prefix="/api/v1", dependencies=auth_required)  # MCP runtime (Part 5)
     app.include_router(providers_router, prefix="", dependencies=auth_required)  # already has /api/v1 prefix
     app.include_router(automations_router, prefix="", dependencies=auth_required)  # has /api/v1/automations prefix
     # Voice router carries a WebSocket route (/ws/voice), so — like memory_router
@@ -431,5 +441,18 @@ def create_app() -> FastAPI:
     # is mounted with an empty prefix to avoid doubling. Off by default: the
     # routes return 503 until config.ide.enabled and the service is built.
     app.include_router(ide_router, prefix="", dependencies=auth_required)
+
+    # Agent-run surface (M2.1): HTTP only, key-gated like the other HTTP routers.
+    # Router declares its own /api/v1/agent prefix, so it is mounted with an empty
+    # prefix. Off by default: the routes return 503 until config.agent_engine.enabled
+    # and the service is built.
+    app.include_router(agent_router, prefix="", dependencies=auth_required)
+
+    # Research surface (R2): HTTP only, key-gated like the other HTTP routers.
+    # Router declares its own /api/v1/research prefix, so it is mounted with an
+    # empty prefix. Off by default: the routes return 503 until config.research.enabled
+    # and the service is built. Every research action still flows through the
+    # SafetyEngine funnel via the governed `knowledge` tool — no second execution path.
+    app.include_router(research_router, prefix="", dependencies=auth_required)
 
     return app

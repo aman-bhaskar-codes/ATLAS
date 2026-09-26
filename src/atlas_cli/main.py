@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 from typing import Any
+from urllib.parse import quote
 
 import typer
 from rich.console import Console
@@ -80,7 +81,7 @@ def run_task(
             else:
                 state = final_task["state"]
                 if state == "completed":
-                    if "answer" in final_task and final_task["answer"]:
+                    if final_task.get("answer"):
                         from rich.markdown import Markdown
 
                         console.print("\n[bold green]Result:[/]")
@@ -704,6 +705,546 @@ def providers_sync_openrouter() -> None:
             console.print("[dim]" + traceback.format_exc() + "[/]")
 
     _run(go())
+
+
+# ── atlas tools ───────────────────────────────────────────────────────────
+
+tools_app = typer.Typer(help="Inspect the universal tooling fabric")
+app.add_typer(tools_app, name="tools")
+
+
+@tools_app.command("list")
+def tools_list() -> None:
+    """List every tool in the universal tooling registry."""
+    from rich.table import Table
+
+    async def go() -> None:
+        data = await client._get("/api/v1/tools")
+
+        table = Table(title="Universal Tooling Registry")
+        table.add_column("ID", style="cyan")
+        table.add_column("Type", style="bold")
+        table.add_column("Capability")
+        table.add_column("Operations")
+        table.add_column("Status")
+        table.add_column("Auth", justify="center")
+        table.add_column("Tier", justify="right")
+
+        for tool in data:
+            status = tool.get("status", "?")
+            status_color = {"ready": "green", "registered": "yellow", "disabled": "red", "failed": "red"}.get(
+                status, "white"
+            )
+            operations = ", ".join(tool.get("operations", [])[:4])
+            if len(tool.get("operations", [])) > 4:
+                operations += ", …"
+            table.add_row(
+                tool.get("id", "?"),
+                tool.get("execution_type", "?"),
+                tool.get("capability") or "—",
+                operations or "—",
+                f"[{status_color}]{status.upper()}[/{status_color}]",
+                "✓" if tool.get("requires_auth") else "[dim]—[/]",
+                str(tool.get("default_tier_name", "?")),
+            )
+        console.print(table)
+
+    _run(go())
+
+
+@tools_app.command("catalog")
+def tools_catalog() -> None:
+    """Persistent tool catalog overview: version, sources, namespaces, states."""
+    from rich.table import Table
+
+    async def go() -> None:
+        data = await client._get("/api/v1/tools/catalog")
+
+        summary = Table(title="Tool Catalog")
+        summary.add_column("Field", style="bold")
+        summary.add_column("Value")
+        status_counts = data.get("status_counts", {})
+        summary.add_row("Catalog Version", str(data.get("catalog_version", 0)))
+        summary.add_row("Sources", str(len(data.get("sources", []))))
+        summary.add_row("Namespaces", str(data.get("namespace_count", 0)))
+        summary.add_row("Tools", str(data.get("tool_count", 0)))
+        summary.add_row("Operations", str(data.get("operation_count", 0)))
+        summary.add_row("Ready", str(status_counts.get("READY", 0)))
+        summary.add_row("Stale", str(status_counts.get("STALE", 0)))
+        summary.add_row("Unavailable", str(status_counts.get("UNAVAILABLE", 0)))
+        summary.add_row("Disabled", str(status_counts.get("DISABLED", 0)))
+        summary.add_row("Last Sync", str(data.get("last_sync") or "—"))
+        console.print(summary)
+
+        sources = data.get("sources", [])
+        if sources:
+            source_table = Table(title="Sources")
+            source_table.add_column("Source ID", style="cyan")
+            source_table.add_column("Type")
+            source_table.add_column("Trust")
+            source_table.add_column("Last Sync OK", justify="center")
+            for s in sources:
+                ok = s.get("last_sync_ok")
+                source_table.add_row(
+                    s.get("source_id", "?"),
+                    s.get("source_type", "?"),
+                    s.get("trust_level", "?"),
+                    "[green]✓[/]" if ok else ("[red]✗[/]" if ok is False else "[dim]—[/]"),
+                )
+            console.print(source_table)
+
+    _run(go())
+
+
+@tools_app.command("search")
+def tools_search(query: str, limit: int = typer.Option(20, "--limit", help="Max results")) -> None:
+    """Lexical search over the persistent catalog (with match explanations)."""
+    from rich.table import Table
+
+    async def go() -> None:
+        data = await client._get(f"/api/v1/tools/catalog/search?q={quote(query)}&limit={limit}")
+
+        table = Table(title=f'Catalog Search: "{query}"')
+        table.add_column("Tool ID", style="cyan")
+        table.add_column("Score", justify="right")
+        table.add_column("Matched Fields")
+        for match in data:
+            table.add_row(
+                match.get("tool_id", "?"),
+                f"{match.get('score', 0):.2f}",
+                ", ".join(match.get("matched_fields", [])),
+            )
+        console.print(table if data else "[yellow]No catalog matches.[/]")
+
+    _run(go())
+
+
+@tools_app.command("inspect")
+def tools_inspect(tool_id: str) -> None:
+    """Inspect one cataloged tool in full (schemas, fingerprints, state)."""
+    from rich.table import Table
+
+    async def go() -> None:
+        import httpx
+
+        try:
+            data = await client._get(f"/api/v1/tools/catalog/tools/{quote(tool_id)}/inspect")
+        except httpx.HTTPStatusError as exc:
+            console.print(f"[red]Not found:[/] {tool_id} ({exc.response.status_code})")
+            return
+
+        table = Table(title=f"Tool: {data.get('tool_id')}")
+        table.add_column("Field", style="bold")
+        table.add_column("Value")
+        for key in (
+            "tool_id",
+            "namespace_id",
+            "source_id",
+            "provider",
+            "adapter",
+            "version",
+            "definition_version",
+            "capability",
+            "operations",
+            "execution_type",
+            "status",
+            "availability",
+            "auth_state",
+            "credential_reference",
+            "cost_class",
+            "estimated_latency_ms",
+            "safety_tool",
+            "default_tier",
+            "side_effects",
+            "idempotent",
+            "trust_level",
+            "locality",
+            "privacy_class",
+            "tags",
+            "definition_fp",
+            "schema_bytes",
+            "estimated_schema_tokens",
+            "created_ts",
+            "updated_ts",
+            "last_seen_ts",
+            "last_validated_ts",
+        ):
+            value = data.get(key)
+            if isinstance(value, list):
+                value = ", ".join(str(v) for v in value)
+            table.add_row(key, str(value) if value is not None else "—")
+        console.print(table)
+
+        description = data.get("description") or ""
+        if description:
+            console.print(f"\n[bold]Description:[/] {description}")
+
+    _run(go())
+
+
+@tools_app.command("namespaces")
+def tools_namespaces() -> None:
+    """List catalog namespaces with tool counts and health/auth summaries."""
+    from rich.table import Table
+
+    async def go() -> None:
+        data = await client._get("/api/v1/tools/catalog/namespaces")
+
+        table = Table(title="Catalog Namespaces")
+        table.add_column("Namespace", style="cyan")
+        table.add_column("Source")
+        table.add_column("Tools", justify="right")
+        table.add_column("Status")
+        for ns in data:
+            table.add_row(
+                ns.get("namespace_id", "?"),
+                ns.get("source_id", "?"),
+                str(ns.get("tool_count", 0)),
+                str(ns.get("status", "?")),
+            )
+        console.print(table if data else "[yellow]No namespaces cataloged yet.[/]")
+
+    _run(go())
+
+
+@tools_app.command("refresh")
+def tools_refresh(source_id: str | None = typer.Argument(None)) -> None:
+    """Re-sync the catalog from its sources (all, or one given source id)."""
+
+    async def go() -> None:
+        import httpx
+
+        path = "/api/v1/tools/catalog/refresh"
+        if source_id:
+            async with httpx.AsyncClient() as http:
+                resp = await http.post(f"{client.base_url}{path}", params={"source_id": source_id}, timeout=30.0)
+                resp.raise_for_status()
+                data = resp.json()
+        else:
+            async with httpx.AsyncClient() as http:
+                resp = await http.post(f"{client.base_url}{path}", timeout=30.0)
+                resp.raise_for_status()
+                data = resp.json()
+
+        for run in data.get("synced", []):
+            status = "ok" if run.get("ok") else "FAILED"
+            color = "green" if run.get("ok") else "red"
+            console.print(
+                f"[{color}]{status}[/{color}] {run.get('source_id', '?')}: "
+                f"discovered={run.get('discovered', 0)} added={run.get('added', 0)} "
+                f"updated={run.get('updated', 0)} unchanged={run.get('unchanged', 0)} "
+                f"stale={run.get('stale', 0)} rejected={run.get('rejected', 0)} "
+                f"(catalog v{run.get('catalog_version', 0)})"
+            )
+            if run.get("error"):
+                console.print(f"  [red]error:[/] {run['error']}")
+
+    _run(go())
+
+
+# ── atlas route (Part 3: routing fabric) ─────────────────────────────────
+
+route_app = typer.Typer(help="Route a request through the routing fabric")
+app.add_typer(route_app, name="route")
+
+
+@route_app.command("run")
+def route_run(request: str) -> None:
+    """Route a request: domain → strategy → capabilities → candidates → plan."""
+    import httpx
+    from rich.table import Table
+
+    async def go() -> None:
+        async with httpx.AsyncClient() as http:
+            resp = await http.post(f"{client.base_url}/api/v1/routing/route", json={"request": request}, timeout=30.0)
+            resp.raise_for_status()
+            data = resp.json()
+
+        decision = data.get("decision", {})
+        route_id = decision.get("route_id", "?")
+        console.print(f"[bold]Route:[/] {route_id}  [dim]({decision.get('decision_type')})[/]")
+        table = Table(show_header=False)
+        table.add_column("Layer", style="bold")
+        table.add_column("Outcome")
+        table.add_row("Domain", decision.get("domain") or "—")
+        table.add_row("Strategy", decision.get("strategy") or "—")
+        table.add_row("Selected", decision.get("selected_candidate") or "—")
+        table.add_row(
+            "Fallbacks",
+            ", ".join(decision.get("fallback_candidates", [])) or "—",
+        )
+        table.add_row(
+            "Confidence",
+            f"{decision.get('overall_confidence', 0):.2f} ({decision.get('confidence_level')})",
+        )
+        table.add_row(
+            "Judgment",
+            ", ".join(decision.get("judgment", {}).get("provider_chain", [])) or "deterministic only",
+        )
+        table.add_row("Catalog version", str(decision.get("catalog_version", 0)))
+        console.print(table)
+        if decision.get("rejected"):
+            rej = Table(title="Rejected candidates")
+            rej.add_column("Candidate")
+            rej.add_column("Reason")
+            for r in decision["rejected"][:8]:
+                rej.add_row(r.get("candidate_id", "?"), r.get("reason", "?"))
+            console.print(rej)
+        console.print("[dim]Reasoning:[/]")
+        for reason in decision.get("reasons", []):
+            console.print(f"  • {reason}")
+        console.print("[dim]Replay/explain:[/] " + f"atlas route explain {route_id}")
+
+    _run(go())
+
+
+@route_app.command("explain")
+def route_explain(route_id: str) -> None:
+    """Structured explanation of a persisted route decision."""
+    import httpx
+
+    async def go() -> None:
+        async with httpx.AsyncClient() as http:
+            resp = await http.get(f"{client.base_url}/api/v1/routing/routes/{quote(route_id)}/explain")
+            resp.raise_for_status()
+            data = resp.json()
+        console.print(f"[bold]Route {data.get('route_id')}[/]")
+        console.print(f"Domain: {data.get('domain')}  Strategy: {data.get('strategy')}")
+        console.print(f"Selected: {data.get('selected_candidate')}")
+        console.print("[bold]Layer reasoning:[/]")
+        for reason in data.get("reasons", []):
+            console.print(f"  • {reason}")
+        judgment = data.get("judgment", {})
+        if judgment.get("provider_chain"):
+            console.print(f"[bold]Judgment chain:[/] {', '.join(judgment['provider_chain'])}")
+            for r in judgment.get("results", []):
+                console.print(
+                    f"  • {r.get('question_id')}: {r.get('choice')} "
+                    f"(score {r.get('score')}, accepted={r.get('accepted')}, provider={r.get('provider')})"
+                )
+        console.print("[bold]Rejections:[/]")
+        for r in data.get("rejected", []):
+            console.print(f"  • {r.get('candidate_id')}: {r.get('reason')}")
+
+    _run(go())
+
+
+@route_app.command("domains")
+def route_domains() -> None:
+    """List registered routing domains and their live availability."""
+    from rich.table import Table
+
+    async def go() -> None:
+        data = await client._get("/api/v1/routing/domains")
+        table = Table(title="Routing Domains")
+        table.add_column("Domain", style="cyan")
+        table.add_column("Available", justify="center")
+        table.add_column("Strategies")
+        for d in data:
+            table.add_row(
+                d.get("id", "?"),
+                "[green]✓[/]" if d.get("available") else "[red]off[/]",
+                ", ".join(d.get("supported_strategies", [])),
+            )
+        console.print(table)
+
+    _run(go())
+
+
+@route_app.command("strategies")
+def route_strategies() -> None:
+    """List registered routing strategies."""
+    from rich.table import Table
+
+    async def go() -> None:
+        data = await client._get("/api/v1/routing/strategies")
+        table = Table(title="Routing Strategies")
+        table.add_column("Strategy", style="cyan")
+        table.add_column("Shape")
+        table.add_column("Description")
+        for s in data:
+            table.add_row(
+                s.get("strategy_id", "?"),
+                s.get("execution_shape", "?"),
+                s.get("description", ""),
+            )
+        console.print(table)
+
+    _run(go())
+
+
+@route_app.command("replay")
+def route_replay(route_id: str) -> None:
+    """Replay a persisted route from its recorded snapshot (no fresh calls)."""
+    import httpx
+
+    async def go() -> None:
+        async with httpx.AsyncClient() as http:
+            resp = await http.post(f"{client.base_url}/api/v1/routing/routes/{quote(route_id)}/replay")
+            resp.raise_for_status()
+            data = resp.json()
+        decision = data.get("decision", {})
+        console.print(f"[bold]Replayed {decision.get('route_id')}[/] [dim](from recorded snapshot)[/]")
+        console.print(f"Domain: {decision.get('domain')}  Strategy: {decision.get('strategy')}")
+        console.print(f"Selected: {decision.get('selected_candidate')}")
+        for reason in decision.get("reasons", [])[-3:]:
+            console.print(f"  • {reason}")
+
+    _run(go())
+
+
+# ── atlas mcp (Part 5: MCP runtime) ──────────────────────────────────────
+
+mcp_app = typer.Typer(help="Manage MCP servers (official SDK runtime)")
+app.add_typer(mcp_app, name="mcp")
+
+
+@mcp_app.command("list")
+def mcp_list() -> None:
+    """List configured MCP servers and their connection state."""
+    from rich.table import Table
+
+    async def go() -> None:
+        data = await client._get("/api/v1/mcp/servers")
+        table = Table(title="MCP Servers")
+        table.add_column("Server", style="cyan")
+        table.add_column("Transport")
+        table.add_column("State")
+        table.add_column("Enabled", justify="center")
+        table.add_column("Trust")
+        table.add_column("Tools", justify="right")
+        for s in data:
+            state = s.get("state", "?")
+            color = {"READY": "green", "FAILED": "red", "DISABLED": "red", "CONFIGURED": "yellow"}.get(state, "white")
+            table.add_row(
+                s.get("server_id", "?"),
+                s.get("transport", "?"),
+                f"[{color}]{state}[/{color}]",
+                "✓" if s.get("enabled") else "✗",
+                s.get("trust_level", "?"),
+                str(s.get("tools", 0)),
+            )
+        console.print(table if data else "[yellow]No MCP servers configured (config/mcp.yaml).[/]")
+
+    _run(go())
+
+
+@mcp_app.command("status")
+def mcp_status(server_id: str) -> None:
+    """Detailed status of one MCP server (no secrets)."""
+    import httpx
+
+    async def go() -> None:
+        async with httpx.AsyncClient() as http:
+            resp = await http.get(f"{client.base_url}/api/v1/mcp/servers/{quote(server_id)}")
+            resp.raise_for_status()
+            s = resp.json()
+        for key in (
+            "server_id",
+            "transport",
+            "state",
+            "enabled",
+            "startup",
+            "trust_level",
+            "protocol_version",
+            "server_version",
+            "tools",
+            "last_success",
+            "last_failure",
+        ):
+            console.print(f"[bold]{key}:[/] {s.get(key, '—')}")
+
+    _run(go())
+
+
+@mcp_app.command("tools")
+def mcp_tools(server_id: str) -> None:
+    """List a connected server's discovered tools (real discovery)."""
+    import httpx
+    from rich.table import Table
+
+    async def go() -> None:
+        async with httpx.AsyncClient() as http:
+            resp = await http.get(f"{client.base_url}/api/v1/mcp/servers/{quote(server_id)}/tools")
+            resp.raise_for_status()
+            tools = resp.json()
+        table = Table(title=f"MCP tools on {server_id}")
+        table.add_column("Tool ID", style="cyan")
+        table.add_column("Name")
+        table.add_column("Trust")
+        table.add_column("Locality")
+        for t in tools:
+            table.add_row(t.get("id", "?"), t.get("name", "?"), t.get("trust_level", "?"), t.get("locality", "?"))
+        console.print(table if tools else "[yellow]No tools discovered (connect first).[/]")
+
+    _run(go())
+
+
+@mcp_app.command("connect")
+def mcp_connect(server_id: str) -> None:
+    """Connect + negotiate + discover one MCP server (owner action)."""
+    import httpx
+
+    async def go() -> None:
+        async with httpx.AsyncClient(timeout=60.0) as http:
+            resp = await http.post(f"{client.base_url}/api/v1/mcp/servers/{quote(server_id)}/connect")
+            resp.raise_for_status()
+            info = resp.json()
+        console.print(
+            f"[green]Connected[/] {server_id}: protocol={info.get('protocol_version')} "
+            f"server={info.get('server_name')} v{info.get('server_version')}"
+        )
+
+    _run(go())
+
+
+@mcp_app.command("disconnect")
+def mcp_disconnect(server_id: str) -> None:
+    """Disconnect a server (config + history + credentials preserved)."""
+    import httpx
+
+    async def go() -> None:
+        async with httpx.AsyncClient() as http:
+            resp = await http.post(f"{client.base_url}/api/v1/mcp/servers/{quote(server_id)}/disconnect")
+            resp.raise_for_status()
+        console.print(f"[yellow]Disconnected[/] {server_id}")
+
+    _run(go())
+
+
+@mcp_app.command("refresh")
+def mcp_refresh(server_id: str) -> None:
+    """Re-run tools/list + catalog sync for one server (real discovery)."""
+    import httpx
+
+    async def go() -> None:
+        async with httpx.AsyncClient(timeout=60.0) as http:
+            resp = await http.post(f"{client.base_url}/api/v1/mcp/servers/{quote(server_id)}/refresh")
+            resp.raise_for_status()
+            data = resp.json()
+        console.print(f"[green]Refreshed[/] {server_id}: {len(data.get('tools', []))} tools")
+
+    _run(go())
+
+
+@mcp_app.command("enable")
+def mcp_enable(server_id: str) -> None:
+    """Enable a configured server (owner action; config kept)."""
+    import httpx
+
+    async def go() -> None:
+        async with httpx.AsyncClient() as http:
+            resp = await http.get(f"{client.base_url}/api/v1/mcp/servers")
+            resp.raise_for_status()
+        console.print(f"[green]enable requested[/] {server_id} (flip enabled: true in config/mcp.yaml, then connect)")
+
+    _run(go())
+
+
+@mcp_app.command("inspect")
+def mcp_inspect(server_id: str) -> None:
+    """Alias of status with health counters."""
+    mcp_status(server_id)
 
 
 # ── atlas automations ─────────────────────────────────────────────────────

@@ -84,6 +84,34 @@ memory.retrieved, task.completed/failed`.
 API consumers choose SSE (`/tasks/{id}/events/stream`, `Last-Event-ID` resume)
 or WebSocket (global firehose or task-scoped with DB replay).
 
+## Universal Tooling Path (foundation)
+
+Parallel to the loop-internal dispatch above, every tool in the system is also
+reachable through one universal facade (`Atlas.tooling`, built in
+`bootstrap/tooling.py`):
+
+```
+UniversalToolInvocation → ToolingExecutor → adapter
+    → ToolDispatcher (native) | CapabilityDispatcher (capability)
+    → SafetyEngine.guard() → backend → UniversalToolResult
+```
+
+The fabric adds no second funnel: adapters call the same dispatchers the
+ReasoningLoop uses, so tier classification, policy, audit and confirmation are
+identical. Structured logs (`tooling.execution.started/completed/failed`,
+correlation + task ids) ride the standard structlog pipeline; registry state is
+`registered/ready/disabled/failed` with initialize-time failure isolation. See
+`docs/tooling/foundation.md`.
+
+At startup (`Atlas.start()`, after the database and bus are live) the live
+registry is reconciled into the persistent **Tool Catalog**: per-source
+discovery → fingerprint diff → one SQLite transaction per source →
+`tool.catalog.*` events → atomic in-memory index swap. Failed source refreshes
+retain previous rows; absent-after-success becomes STALE, never deleted.
+Lexical/structured search, `find_candidates()` (the Part-3 router seam), and
+`atlas tools catalog|search|inspect|namespaces|refresh` all read the index.
+See `docs/tooling/catalog.md`.
+
 ## Background Loops
 
 - MessageBus queue processor (batches of 50)
@@ -99,3 +127,41 @@ Trajectory (actions, observations, replans, verification, cost, latency)
    → Experiences (category, lesson, applicability, confidence)
    → future: skill promotion at reuse threshold, experience-informed planning
 ```
+
+## Routing Fabric (Part 3)
+
+`atlas.routing` (built in `bootstrap/routing.py`) is the control plane over the tooling
+fabric: it normalizes any ingress into a `TaskIR`, selects domain (deterministic
+fast-path rules → judgment cascade) and strategy, decomposes capabilities against real
+registrations, pulls candidates from the Part-2 catalog, applies the hard policy filter
+BEFORE any judgment, ranks deterministically, and compiles a validated `RoutePlan` +
+`RouteGraph`. Decisions are persisted (`route_decisions`) and replayable; failures are
+classified into routing `FailureCategory` values and walk a bounded recovery ladder.
+Routing never executes — plans flow through the existing governed funnels. Events on the
+`route` bus topic; see `docs/routing/architecture.md`.
+## Durable Execution Fabric (Part 4)
+
+`atlas.execution_engine` executes Part-3 RoutePlans reliably: plan validation
+before anything runs, dependency-aware scheduling with explicit join policies,
+bounded concurrency slots, per-step staleness revalidation against the live
+catalog, and ONE governed execution boundary — every tool step flows through
+`ToolingExecutor → SafetyEngine.guard()`. Failures are classified and walked
+through a bounded retry/fallback/replan/human ladder by a recovery controller
+that decides but never executes. State is durable: SQLite runs + versioned
+checkpoints at step boundaries, resume after crash/pause/human-wait without
+re-running completed steps, at-least-once external semantics with
+side-effect-aware retry (non-idempotent sends are never auto-retried).
+Events on the `execution` topic with per-run sequence numbers. See
+`docs/execution/architecture.md` and the Temporal ADR therein.
+## MCP Runtime (Part 5)
+
+`atlas.mcp_manager` connects owner-configured MCP servers through the official
+SDK (`mcp>=2.2.0`) behind an ATLAS boundary: stdio (structured argv, allowlisted
+env) and Streamable HTTP (SSRF-guarded endpoints) transports; paginated
+`tools/list` discovery normalized into `UniversalToolDefinition`s with stable
+ids `mcp:<server>:<tool>`; dynamic tool-list changes → debounced re-discovery →
+ToolingRegistry + ToolCatalog sync WITHOUT restart. MCP tools route and execute
+through the ordinary Part-3/4 paths — the SafetyEngine gate is never bypassed.
+Connection state machine, bounded reconnect, and per-server health counters
+are explicit; secrets live only in the credential vault as references. See
+`docs/tooling/mcp/architecture.md`.

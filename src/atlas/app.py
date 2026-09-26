@@ -48,7 +48,7 @@ from atlas.infra.workflows import WorkflowStore
 from atlas.intelligence.gateway import ModelGateway
 from atlas.interfaces.notify import CliConfirmer, CompositeConfirmer
 from atlas.memory.consolidation import Consolidator
-from atlas.memory.embedder import CloudEmbedder, EmbeddingWorker
+from atlas.memory.embedder import Embedder, EmbeddingWorker
 from atlas.memory.episodic import EpisodicMemory
 from atlas.memory.knowledge_store import KnowledgeStore
 from atlas.memory.pruning import Pruner
@@ -108,7 +108,7 @@ class Atlas:
     gateway: ModelGateway
     notification_platform: NotificationPlatform
     vectors: ChromaVectorStore
-    embedder: CloudEmbedder
+    embedder: Embedder
     embedding_worker: EmbeddingWorker
     episodic: EpisodicMemory
     semantic: SemanticMemory
@@ -148,6 +148,10 @@ class Atlas:
     skill_promoter: Any = None  # Batch 4
     tool_router: Any = None  # Batch 6: operator surface
     tool_health: Any = None  # Batch 6
+    tooling: Any = None  # Universal tooling fabric (foundation part)
+    routing: Any = None  # Routing fabric (Part 3): engine + registries
+    execution_engine: Any = None  # Durable execution fabric (Part 4)
+    mcp_manager: Any = None  # MCP runtime (Part 5)
     checkpoints: Any = None  # Batch 7
     model_registry: Any = None  # Model registry for frontend
     runtime_supervisor: RuntimeSupervisor | None = None  # Runtime orchestration layer
@@ -156,6 +160,8 @@ class Atlas:
     knowledge_fabric: Any = None  # Prompt 3: KnowledgeFabricComponents (fabric + bridges + research)
     voice_service: Any = None  # Optional voice pipeline (VoiceService or None when disabled)
     ide_service: Any = None  # Optional ADE (IDEService or None when disabled/no filesystem tool)
+    agent_engine: Any = None  # Optional autonomous agent-run surface (AgentRunService or None)
+    research: Any = None  # Optional Perplexity-class research surface (ResearchService or None)
     curated: Any = None  # CuratedMemory — the always-loaded MEMORY/USER tier
     lane_one: Any = None  # LaneOneRecall — default read path (SQL, no embeddings)
     intents: Any = None  # IntentStore — prospective memory ("remember to X when Y")
@@ -193,6 +199,17 @@ class Atlas:
         if self.trajectory_store is not None:
             self.trajectory_store.set_bus(self.bus)
         await self.bus.start()
+
+        # Part 2: reconcile the live tooling registry into the persistent tool
+        # catalog (load what survived from previous runs, then sync). Runs
+        # after the database + bus are live; failure-isolated per source and
+        # never blocks startup.
+        if self.tooling is not None:
+            await self.tooling.sync_catalog()
+
+        # Part 5: eager MCP servers connect + discover before READY (§64).
+        if self.mcp_manager is not None:
+            await self.mcp_manager.start_eager()
 
         # Initialize runtime supervisor if not already initialized
         if self.runtime_supervisor is None:
@@ -233,6 +250,10 @@ class Atlas:
             await self.computer_use.engine.shutdown()
         if self.voice_service is not None:
             await self.voice_service.close()
+        if self.mcp_manager is not None:
+            await self.mcp_manager.shutdown()
+        if self.tooling is not None:
+            await self.tooling.shutdown()
         # Close bus first so background queue-processor exits before DB closes
         await self.bus.close()
         await self.embedder.close()
@@ -542,6 +563,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     from atlas.bootstrap.ide import build_ide
 
     ide = build_ide(
+        settings,
         config,
         safety=safety,
         filesystem_tool=tools.get("filesystem"),
@@ -583,6 +605,142 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     orchestrator = orch.orchestrator
     tool_router, tool_health = orch.tool_router, orch.tool_health  # Batch 6
     checkpoints = orch.checkpoints  # Batch 7
+
+    # ── IDE workspace tool (M2.* — the last Phase-2 slice) ────────────── #
+    # If the ADE/IDE subsystem is built, expose its verb set as ONE governed
+    # `ide` tool in the SHARED orchestration registry, so a persisted agent run
+    # can read/edit/run code inside a workspace. Registered AFTER build_ide +
+    # build_orchestration and BEFORE build_agent_engine, so the agent's
+    # ToolRouter (which shortlists from this same registry) can offer it. The
+    # mutating verbs re-enter the SAME SafetyEngine funnel internally — no new
+    # execution path (Constitution).
+    if ide.service is not None:
+        from atlas.capabilities.ide import (
+            IDE_OPERATIONS,
+            IDE_TOOL_DESCRIPTION,
+            IDEWorkspaceTool,
+        )
+        from atlas.orchestration.registry import ToolMetadata
+
+        ide_tool = IDEWorkspaceTool(ide.service)
+        orch.tool_registry.register(
+            ide_tool,
+            operations=IDE_OPERATIONS,
+            metadata=ToolMetadata(
+                name="ide",
+                description=IDE_TOOL_DESCRIPTION,
+                operations=IDE_OPERATIONS,
+                safety_tool="ide",
+                side_effects=True,
+                idempotent=False,
+                supports_rollback=False,
+            ),
+        )
+
+    # ── Agent-run surface (M2.1) ──────────────────────────────────── #
+    # Wire the M0.2 AgentEngine + M0.5 run store into a governed, persisted
+    # use-case. Uses the ORCHESTRATION dispatcher/router (funnel-aligned) and the
+    # shared event bus + SQLite substrate — NOT the tooling fabric. Off by default
+    # (config.agent_engine.enabled): the routes return 503 until it is built.
+    from atlas.bootstrap.agent_engine import build_agent_engine
+
+    agent_engine = build_agent_engine(
+        settings,
+        config,
+        gateway=gateway,
+        dispatcher=orch.dispatcher,
+        tool_router=orch.tool_router,
+        events=orch.events,
+        ids=ids,
+        clock=clock,
+        db=db,
+    )
+
+    # ── Research surface (Phase 1) ────────────────────────────────── #
+    # Wire the governed knowledge pipeline into a persisted, resumable research
+    # SESSION surface. Uses the ORCHESTRATION dispatcher (funnel-aligned) — it
+    # drives the SAME `knowledge` tool over the SAME knowledge fabric and the SAME
+    # SafetyEngine funnel as any other dispatch, adding only session persistence.
+    # NOT a second retrieval system or execution path. Off by default
+    # (config.research.enabled): the routes return 503 until it is built.
+    from atlas.bootstrap.research import build_research
+
+    research = build_research(
+        settings,
+        config,
+        dispatcher=orch.dispatcher,
+        ids=ids,
+        clock=clock,
+        db=db,
+    )
+
+    # ── Universal tooling fabric ──────────────────────────────────── #
+    # Bridges every real native tool and capability into one registry with
+    # adapters that execute through the SAME governed funnels (ToolDispatcher /
+    # CapabilityDispatcher -> SafetyEngine). Initialization is isolated: one
+    # broken adapter marks its tool FAILED without blocking the rest.
+    from atlas.bootstrap.tooling import build_tooling
+
+    tooling = build_tooling(
+        tool_registry=orch.tool_registry,
+        dispatcher=orch.dispatcher,
+        cap_registry=cap_registry,
+        cap_dispatcher=cap_dispatcher,
+        cap_providers=cap_providers,
+        metrics=metrics,
+        classifier=classifier,
+        db=db,
+        bus=bus,
+    )
+    await tooling.fabric.initialize()
+
+    # ── Routing fabric (Part 3) ───────────────────────────────────── #
+    # The control plane over the fabric: TaskIR → domain → strategy →
+    # capabilities → catalog candidates → hard policy filter → judgment →
+    # ranking → plan/graph. Produces inspectable decisions; NEVER executes
+    # (plans flow through the existing governed funnels).
+    from atlas.bootstrap.routing import build_routing
+
+    knowledge_available = tooling.registry.get("native:atlas:knowledge") is not None
+    routing = build_routing(
+        config=config,
+        db=db,
+        catalog=tooling.catalog,
+        knowledge_available=knowledge_available,
+        ide_available=config.ide.enabled and ide.service is not None,
+        gateway=gateway,
+        bus=bus,
+    )
+
+    # ── Durable execution fabric (Part 4) ─────────────────────────── #
+    # Executes Part-3 RoutePlans: dependency-aware scheduling, bounded
+    # parallelism, side-effect-aware retries, fallback/recovery, SQLite
+    # checkpoints + resume. Tool steps flow through the SAME governed funnel
+    # (ToolingExecutor → dispatchers → SafetyEngine); the Orchestrator stays
+    # the task lifecycle owner.
+    from atlas.bootstrap.execution import build_execution
+
+    execution = build_execution(
+        config=config,
+        db=db,
+        tooling_executor=tooling.executor,
+        catalog=tooling.catalog,
+        routing_engine=routing.engine,
+        gateway=gateway,
+        bus=bus,
+    )
+
+    # ── MCP runtime (Part 5) ──────────────────────────────────────── #
+    # Official SDK behind an ATLAS boundary: dynamic discovery → normalization
+    # → ToolingRegistry + ToolCatalog → routing/execution like every tool.
+    from atlas.bootstrap.mcp import build_mcp
+
+    mcp_runtime = build_mcp(
+        config_dir=config_dir,
+        tooling_registry=tooling.registry,
+        catalog=tooling.catalog,
+        bus=bus,
+    )
 
     # ── Feedback, Scheduler, Workflows ───────────────────────────── #
     feedback_store = FeedbackStore(db=db, ids=ids, clock=clock)
@@ -671,6 +829,8 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         knowledge_fabric=knowledge_fabric,
         voice_service=voice.service,
         ide_service=ide.service,
+        agent_engine=agent_engine.service,
+        research=research.service,
         curated=curated,
         lane_one=lane_one,
         intents=intents,
@@ -684,6 +844,10 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         skill_promoter=skill_promoter,  # Batch 4
         tool_router=tool_router,  # Batch 6
         tool_health=tool_health,  # Batch 6
+        tooling=tooling.fabric,  # Universal tooling fabric
+        routing=routing.engine,  # Routing fabric (Part 3)
+        execution_engine=execution.engine,  # Durable execution fabric (Part 4)
+        mcp_manager=mcp_runtime.manager,  # MCP runtime (Part 5)
         checkpoints=checkpoints,  # Batch 7
         model_registry=intel.registry,  # Model registry for frontend
     )

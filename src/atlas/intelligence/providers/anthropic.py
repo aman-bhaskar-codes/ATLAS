@@ -23,6 +23,46 @@ class AnthropicProvider:
         self._client = httpx.AsyncClient(timeout=timeout_s)
         self._base = "https://api.anthropic.com/v1"
 
+    @staticmethod
+    def _encode_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
+        """Serialize non-system turns into Anthropic message blocks.
+
+        Anthropic has no dedicated tool role: a TOOL turn becomes a ``user``
+        message carrying a ``tool_result`` block keyed by ``tool_use_id``, and an
+        ASSISTANT turn that chose tools emits ``tool_use`` blocks alongside any
+        text. Plain turns keep a simple string content.
+        """
+        out: list[dict[str, Any]] = []
+        for m in messages:
+            if m.role == Role.SYSTEM:
+                continue
+            if m.role == Role.TOOL:
+                out.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": m.tool_call_id or "",
+                                "content": m.content,
+                            }
+                        ],
+                    }
+                )
+                continue
+            if m.tool_calls:
+                blocks: list[dict[str, Any]] = []
+                if m.content:
+                    blocks.append({"type": "text", "text": m.content})
+                blocks.extend(
+                    {"type": "tool_use", "id": tc.id or tc.name, "name": tc.name, "input": dict(tc.arguments)}
+                    for tc in m.tool_calls
+                )
+                out.append({"role": "assistant", "content": blocks})
+                continue
+            out.append({"role": m.role.value, "content": m.content})
+        return out
+
     def _payload(
         self,
         model: str,
@@ -34,7 +74,7 @@ class AnthropicProvider:
     ) -> dict[str, Any]:
         # Anthropic extracts system messages to a top-level parameter
         system_msg = next((m.content for m in messages if m.role == Role.SYSTEM), "")
-        chat_msgs = [{"role": m.role.value, "content": m.content} for m in messages if m.role != Role.SYSTEM]
+        chat_msgs = self._encode_messages(messages)
 
         payload: dict[str, Any] = {
             "model": model,
