@@ -419,7 +419,7 @@ async def verify_webhook_signature(
                 source=source,
                 reason=exc.reason,
             )
-            raise HTTPException(401, str(exc))
+            raise HTTPException(401, str(exc)) from exc
     elif secret and not verifier:
         # Secret configured but no verifier registered → warn, passthrough.
         _log.warning(

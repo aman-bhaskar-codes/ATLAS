@@ -22,6 +22,8 @@ jobs:
       - name: Import boundaries
         run: uv run lint-imports --config importlinter.ini
       - name: Tests + global coverage floor
+        env:
+          TMPDIR: /tmp
         run: >-
           uv run pytest --cov=atlas --cov-report=term-missing
           --cov-report=xml --cov-report=html

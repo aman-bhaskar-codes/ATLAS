@@ -160,7 +160,7 @@ class StripeVerifier:
             raise WebhookSignatureError(
                 reason="malformed_header",
                 message="Stripe-Signature timestamp is not an integer",
-            )
+            ) from None
 
         # Replay protection
         age = abs(time.time() - ts)

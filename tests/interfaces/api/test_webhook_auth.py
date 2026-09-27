@@ -21,7 +21,6 @@ import hashlib
 import hmac
 import inspect
 import json
-import logging
 import time
 import unittest.mock
 from types import SimpleNamespace
@@ -39,7 +38,6 @@ from atlas.interfaces.api.webhook_auth import (
     WebhookSignatureError,
     get_source_secret,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -244,7 +242,7 @@ class TestNoSecretConfigured:
         assert bus.published and bus.published[0][0] == "webhook.stripe"
 
     def test_verification_off_debug_log(self) -> None:
-        client, bus = _client(github_webhook_secret="")
+        client, _bus = _client(github_webhook_secret="")
         with unittest.mock.patch("atlas.interfaces.api.routes_events._log.debug") as mock_debug:
             client.post("/api/v1/webhooks/github", json={"a": 1})
         mock_debug.assert_called_with(

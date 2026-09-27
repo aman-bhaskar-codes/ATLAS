@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,15 +7,15 @@ from atlas.capabilities.browser.dispatcher import (
     PlaywrightBrowserDispatcher,
 )
 from atlas.capabilities.browser.domain.action import ActionKind, BrowserAction
-from atlas.capabilities.browser.domain.content import FormField, FormModel
+from atlas.capabilities.browser.domain.content import FormModel
 from atlas.capabilities.browser.domain.locator import Locator
 from atlas.capabilities.browser.domain.page import PageHandle
 from atlas.capabilities.browser.engines.submit import SubmitEngine
-from atlas.capabilities.errors import CapabilityDenied, NoProviderAvailable, ProviderExecutionError
-from atlas.capabilities.notification.domain.models import ApprovalDecision
+from atlas.capabilities.errors import NoProviderAvailable, ProviderExecutionError
 from atlas.infra.ids import CorrelationId, UuidGenerator
-from atlas.infra.types import ToolResult, ToolRequest
-from atlas.safety.engine import HaltedError, DeniedError
+from atlas.infra.types import ToolResult
+from atlas.safety.engine import DeniedError
+
 
 @pytest.mark.asyncio
 async def test_null_dispatcher_raises():
@@ -115,6 +114,7 @@ import tempfile
 
 from atlas.capabilities.browser.providers.playwright_provider import PlaywrightProvider
 
+
 @pytest.mark.asyncio
 async def test_playwright_dispatcher_happy_path(require_browser: None):
     # This test spins up a real browser to ensure the dispatcher integration actually works
@@ -156,13 +156,17 @@ async def test_playwright_dispatcher_happy_path(require_browser: None):
         assert val == "clicked"
         
         # 2. Test type
-        action_type = BrowserAction(handle=handle, kind=ActionKind.TYPE, locator=Locator(kind="css", value="#myinput"), value="typed_text")
+        action_type = BrowserAction(
+            handle=handle, kind=ActionKind.TYPE, locator=Locator(kind="css", value="#myinput"), value="typed_text"
+        )
         await dispatcher.dispatch(action_type, cid)
         val2 = await provider.eval_readonly(session_id, tab_id, "document.getElementById('myinput').value")
         assert val2 == "typed_text"
         
         # 3. Test submit
-        action_submit = BrowserAction(handle=handle, kind=ActionKind.SUBMIT, locator=Locator(kind="css", value="#myform"))
+        action_submit = BrowserAction(
+            handle=handle, kind=ActionKind.SUBMIT, locator=Locator(kind="css", value="#myform")
+        )
         await dispatcher.dispatch(action_submit, cid)
         val3 = await provider.eval_readonly(session_id, tab_id, "window.location.hash")
         assert val3 == "#submitted"

@@ -1,14 +1,13 @@
 import os
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
 
 import pytest
-import aiosqlite
 
 from atlas.infra.db import Database
-from atlas.intelligence.governance.quota_governor import FreeQuotaGovernor, ProviderQuota
 from atlas.intelligence.errors import QuotaExhaustedError
+from atlas.intelligence.governance.quota_governor import FreeQuotaGovernor, ProviderQuota
 
 
 @pytest.fixture
@@ -160,8 +159,11 @@ async def test_delta_upsert(temp_db):
     assert gov.remaining("groq")["requests_used"] == 2
     assert gov.remaining("groq")["tokens_used"] == 30
     
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    async with temp_db.conn.execute("SELECT requests_today, tokens_today FROM quota_counters WHERE provider = ? AND day = ?", ("groq", today)) as cursor:
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    async with temp_db.conn.execute(
+        "SELECT requests_today, tokens_today FROM quota_counters WHERE provider = ? AND day = ?",
+        ("groq", today)
+    ) as cursor:
         row = await cursor.fetchone()
         assert row["requests_today"] == 2
         assert row["tokens_today"] == 30

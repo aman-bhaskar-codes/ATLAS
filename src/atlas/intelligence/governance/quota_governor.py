@@ -19,8 +19,8 @@ The RPM window is memory-only and ephemeral.
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from atlas.infra.logging import get_logger
@@ -92,7 +92,7 @@ class FreeQuotaGovernor:
         if not self._db:
             return
 
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
 
         try:
             # Load rows only for today
@@ -183,7 +183,7 @@ class FreeQuotaGovernor:
         if not self._db:
             return
 
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
 
         # We retry once on failure as per rules
         for attempt in range(2):
@@ -243,7 +243,7 @@ class FreeQuotaGovernor:
 
         # 2. Clear DB (only for today and past days)
         if self._db:
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            today = datetime.now(UTC).strftime("%Y-%m-%d")
             try:
                 await self._db.conn.execute(
                     "DELETE FROM quota_counters WHERE day <= ?", (today,)
