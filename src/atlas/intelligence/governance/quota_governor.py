@@ -7,12 +7,19 @@ CostGovernor blocks overspend, FreeQuotaGovernor blocks over-quota.
 
 Persistence: daily counters are stored in the SQLite database so they
 survive restarts. Reset happens at midnight UTC (called by scheduler).
-If the DB is unavailable, counters are kept in-memory (degrade gracefully).
+The RPM window is memory-only and ephemeral.
+- check() is synchronous and reads only memory.
+- record() updates memory (called directly for sync-only testing).
+- arecord() updates memory and writes a delta to the DB. If the DB fails, 
+  it retries once, then logs and continues, accepting a bounded loss window.
+- load() hydrates today's usage on startup.
+- reset_daily() clears memory and deletes past DB rows.
 """
 
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -77,8 +84,30 @@ class FreeQuotaGovernor:
         self._db: Database | None = None
 
     def set_db(self, db: Database) -> None:
-        """Optional: attach DB for persistent quota counters."""
+        """Attach DB for persistent quota counters."""
         self._db = db
+
+    async def load(self) -> None:
+        """Hydrate today's quota from DB on startup."""
+        if not self._db:
+            return
+
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        try:
+            # Load rows only for today
+            async with self._db.conn.execute(
+                "SELECT provider, requests_today, tokens_today FROM quota_counters WHERE day = ?", (today,)
+            ) as cursor:
+                async for row in cursor:
+                    provider = row["provider"]
+                    if provider in self._quotas:
+                        state = self._state.setdefault(provider, QuotaState())
+                        state.requests_today = row["requests_today"]
+                        state.tokens_today = row["tokens_today"]
+                        # minute fields stay fresh
+        except Exception as exc:
+            _log.error("quota.load_failed", event_type="intel", error=str(exc))
 
     def configure(self, provider: str, quota: ProviderQuota) -> None:
         """Register quota limits for a provider."""
@@ -135,6 +164,54 @@ class FreeQuotaGovernor:
             daily_tokens=state.tokens_today,
         )
 
+    async def arecord(self, provider: str, tokens_used: int) -> None:
+        """Post-call: update in-memory counters and persist delta.
+
+        The delta approach avoids clobbering concurrent writers. If persistence
+        fails, memory remains the source of truth for this process lifetime.
+        """
+        # 1. Synchronously update memory (fast path)
+        self.record(provider, tokens_used)
+
+        # 2. Persist to DB asynchronously
+        if self._db is None:
+            return
+
+        await self._persist(provider, tokens_used)
+
+    async def _persist(self, provider: str, tokens_used: int) -> None:
+        if not self._db:
+            return
+
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        # We retry once on failure as per rules
+        for attempt in range(2):
+            try:
+                # Upsert delta
+                await self._db.conn.execute(
+                    """
+                    INSERT INTO quota_counters (provider, day, requests_today, tokens_today)
+                    VALUES (?, ?, 1, ?)
+                    ON CONFLICT (provider, day) DO UPDATE SET
+                        requests_today = quota_counters.requests_today + 1,
+                        tokens_today   = quota_counters.tokens_today + excluded.tokens_today;
+                    """,
+                    (provider, today, tokens_used)
+                )
+                await self._db.conn.commit()
+                return
+            except Exception as exc:
+                if attempt == 1:
+                    _log.error(
+                        "quota.persist_failed",
+                        event_type="intel",
+                        provider=provider,
+                        day=today,
+                        tokens=tokens_used,
+                        error=str(exc)
+                    )
+
     def remaining(self, provider: str) -> dict[str, int | float]:
         """Return remaining quota for a provider (for dashboards/CLI)."""
         quota = self._quotas.get(provider)
@@ -158,8 +235,19 @@ class FreeQuotaGovernor:
         """Full quota state for all configured providers."""
         return {p: self.remaining(p) for p in self._quotas}
 
-    def reset_daily(self) -> None:
+    async def reset_daily(self) -> None:
         """Reset all daily counters. Called by scheduler at midnight UTC."""
         for provider in self._state:
             self._state[provider] = QuotaState()
         _log.info("quota.daily_reset", event_type="intel", providers=list(self._state))
+
+        # 2. Clear DB (only for today and past days)
+        if self._db:
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            try:
+                await self._db.conn.execute(
+                    "DELETE FROM quota_counters WHERE day <= ?", (today,)
+                )
+                await self._db.conn.commit()
+            except Exception as exc:
+                _log.error("quota.reset_failed", event_type="intel", error=str(exc))

@@ -429,11 +429,12 @@ def create_app() -> FastAPI:
     app.include_router(providers_router, prefix="", dependencies=auth_required)  # already has /api/v1 prefix
     app.include_router(automations_router, prefix="", dependencies=auth_required)  # has /api/v1/automations prefix
     # Voice router carries a WebSocket route (/ws/voice), so — like memory_router
-    # and events_ws_router — it is mounted WITHOUT the require_principal Request
-    # dependency (which cannot resolve a WebSocket scope). Its HTTP endpoints
-    # (/voice/speak, /voice/transcribe) are therefore not key-gated; WebSocket +
-    # voice-HTTP auth is tracked as the same debt as the other WS routers. The
-    # subsystem is off by default, so no live surface exists until enabled.
+    # and events_ws_router — it cannot take the router-level require_principal
+    # Request dependency (which cannot resolve a WebSocket scope). Its HTTP
+    # endpoints (/voice/speak, /voice/transcribe) instead gate per-route via
+    # Depends(require_principal); only /ws/voice remains WS-auth debt, tracked
+    # with the other WS routers. Off by default, so no live surface exists until
+    # enabled.
     app.include_router(voice_router, prefix="/api/v1")
 
     # ADE / IDE: all HTTP endpoints (no WebSocket yet), so it is key-gated like

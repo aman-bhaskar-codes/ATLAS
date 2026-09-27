@@ -1,7 +1,8 @@
 <!--
-  ATLAS README — updated 2026-09-13 against the live tree.
+  ATLAS README — updated 2026-09-27 against the live tree.
   Every number, path, flag and command below was verified from source, not
-  from memory. Motion graphics are self-hosted animated SVGs (no third-party
+  from memory (module/line/test/router/migration counts re-measured this pass).
+  Motion graphics are self-hosted animated SVGs (no third-party
   badge/animation services), each paired with a prefers-reduced-motion
   static fallback via <picture>.
 -->
@@ -17,7 +18,7 @@
 <br/>
 
 [![Python](https://img.shields.io/badge/python-3.13%2B-3776AB?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-1%2C687%20collected-3fb950?style=flat-square&logo=pytest&logoColor=white)](tests)
+[![Tests](https://img.shields.io/badge/tests-2%2C205%20collected-3fb950?style=flat-square&logo=pytest&logoColor=white)](tests)
 [![Coverage](https://img.shields.io/badge/coverage-70%25%20%2F%20floor%2063-238636?style=flat-square)](pyproject.toml)
 [![Models](https://img.shields.io/badge/models-5%20free%20%C2%B7%201%20key-58a6ff?style=flat-square)](config/models.yaml)
 [![Cost](https://img.shields.io/badge/runtime%20cost-%240.00-0f2417?style=flat-square&labelColor=238636)](config/settings.yaml)
@@ -25,7 +26,7 @@
 [![Layers](https://img.shields.io/badge/import--linter-3%20contracts%20kept-f778ba?style=flat-square)](importlinter.ini)
 [![License](https://img.shields.io/badge/license-MIT-e3b341?style=flat-square)](LICENSE)
 
-**[What it is](#what-atlas-is)** · **[Pipeline](#the-pipeline-one-funnel-no-bypasses)** · **[Architecture](#architecture)** · **[Safety](#safety-the-part-that-says-no)** · **[Memory](#memory--two-lane-recall)** · **[Models](#intelligence--cost)** · **[Voice](#voice)** · **[IDE / ADE](#ide--ade-the-agentic-development-environment)** · **[Quick start](#quick-start)** · **[Config](#configuration)** · **[Status](#current-status-honest-version)**
+**[What it is](#what-atlas-is)** · **[Pipeline](#the-pipeline-one-funnel-no-bypasses)** · **[Architecture](#architecture)** · **[Safety](#safety-the-part-that-says-no)** · **[Memory](#memory--two-lane-recall)** · **[Models](#intelligence--cost)** · **[Research](#knowledge--research)** · **[Voice](#voice)** · **[IDE / ADE](#ide--ade-the-agentic-development-environment)** · **[Quick start](#quick-start)** · **[Config](#configuration)** · **[Status](#current-status-honest-version)**
 
 </div>
 
@@ -55,14 +56,14 @@ Everything in this table was measured against the working tree on branch `main`.
 
 | | |
 |---|---|
-| **Source** | 491 Python modules · 69,398 lines · 19 top-level packages under `src/atlas` |
-| **Tests** | 1,687 collected across 201 test files · ~70% line coverage |
+| **Source** | 593 Python modules · ~88,900 lines · 20 top-level packages under `src/atlas` |
+| **Tests** | 2,205 collected across 261 test files · ~70% line coverage |
 | **Coverage floors** | 63% global · 70% `safety/` · 83% `orchestration/` (CI-enforced) |
 | **Layering** | 14 layers, 3 import-linter contracts, 0 broken |
-| **Database** | SQLite (`.atlas/atlas.db`) for core data, 30 forward-only migrations · **Supabase Postgres** for IDE session persistence |
+| **Database** | SQLite (`.atlas/atlas.db`) for core data, 36 forward-only migrations · **Supabase Postgres** for domain-routed cloud persistence (IDE sessions today) |
 | **Model fleet** | 5 OpenRouter `:free` models, 1 `OPENROUTER_API_KEY`, `$0.00` per run |
 | **Embeddings** | `qwen/qwen3-embedding-0.6b`, 1024-dim, same key and base URL as chat |
-| **HTTP surface** | 19 routers under `/api/v1` + WebSocket routes (events, voice) |
+| **HTTP surface** | 25 routers under `/api/v1` + WebSocket routes (events, voice) |
 | **Runtime** | Python 3.13+, `uv`-managed, phased startup with health gating |
 | **Web UI** | Next.js 16.2.11 · React 19.2.4 (separate `frontend/` workspace) |
 
@@ -154,23 +155,24 @@ than aspirational: the voice engine physically cannot import the orchestrator, s
 speech has to enter through the same front door as everything else.
 
 <details>
-<summary><b>Repository layout</b> — all 19 packages under <code>src/atlas</code></summary>
+<summary><b>Repository layout</b> — the packages under <code>src/atlas</code></summary>
 
 ```
 atlas/
 ├─ src/atlas/
 │  ├─ app.py               # composition root — build() returns the Atlas graph
 │  ├─ bootstrap/           # one builder per startup phase; the only place wiring lives
-│  ├─ infra/               # config, db + 29 migrations, backends, clock, logging, types
+│  ├─ infra/               # config, db + 36 migrations, backends, clock, logging, types
 │  ├─ perception/          # screen/accessibility perception + sensitivity redaction
 │  ├─ control/             # OS-level control surface (osascript, scripted actions)
-│  ├─ tools/               # filesystem, shell, browser primitives (base.py contract)
+│  ├─ tools/               # filesystem, shell, browser, knowledge primitives (base.py contract)
+│  ├─ tooling/             # universal tool catalog + intent-aware routing (Tool-RAG)
 │  ├─ safety/              # classifier, engine, matchers, policy, sandbox, kill switch, audit
 │  ├─ intelligence/        # provider registry, model catalog, selection, routing
 │  ├─ memory/              # working, episodic, semantic, curated, lanes, trajectory
 │  ├─ capabilities/        # browser, computer_use, connectors, pim, notification, voice, ide
-│  ├─ knowledge/           # ingestion, chunking, BM25 + rerank, citations, synthesis
-│  ├─ orchestration/       # orchestrator, planner, registry, limits, self-critique, DAG
+│  ├─ knowledge/           # ingestion, chunking, BM25 + rerank, citations, synthesis, research
+│  ├─ orchestration/       # orchestrator, planner, registry, limits, self-critique, DAG, agent_engine, research
 │  ├─ agents/              # multi-agent delegation (disabled by default)
 │  ├─ evaluation/          # golden sets, RAG metrics, the eval gate CI runs
 │  ├─ adaptation/          # experiments, canary/shadow, calibration, skill promotion
@@ -178,11 +180,11 @@ atlas/
 │  ├─ engineering/         # code fingerprinting / repo-aware helpers
 │  ├─ training/            # dataset + triplet shaping for self-improvement
 │  ├─ autonomy/            # automations, trigger engine, proactive events
-│  └─ interfaces/          # cli.py, api/ (18 routers), shell, transports
+│  └─ interfaces/          # cli.py, api/ (25 routers), shell, transports
 ├─ src/atlas_cli/          # the installed `atlas` command — thin HTTP client
 ├─ config/                 # settings.yaml, models.yaml, policies (hot-editable)
 ├─ frontend/               # Next.js 16 web UI
-├─ tests/                  # 201 files, 1,687 tests
+├─ tests/                  # 261 files, 2,205 tests
 └─ importlinter.ini        # the 3 layering contracts CI enforces
 ```
 
@@ -393,6 +395,22 @@ memory as `origin_class: untrusted`, which means it can inform an answer *now* b
 never be silently recalled later as if you had said it. That is the same boundary the
 recall query enforces — one rule, applied in one place.
 
+### Persisted research sessions (Perplexity-class surface)
+
+On top of the fabric sits a dedicated **research surface** — a persisted, resumable
+session (question → grounded answer → source rail → inline citations → follow-ups),
+served by `orchestration/research/` and the `research` router at `/api/v1/research`
+(`POST /sessions`, `GET /sessions[/{id}]`, `POST /sessions/{id}/follow-up`, and an SSE
+`GET /sessions/{id}/stream`). It is **not a second execution path**: every search and
+page read still flows through the governed `knowledge` tool and the `SafetyEngine`
+funnel. The stream emits **real phase events** (`retrieving → sources_found →
+synthesizing → answer → citations → grounding → completed`), resumable from a cursor via
+`Last-Event-ID` — never a fabricated token stream. The web surface (`frontend/app/
+research/[sessionId]`) is the streaming Perplexity-style reader, launched full-window
+from the Command Center. It ships **off** behind `research.enabled` and returns `503`
+until enabled and built, the same optional-subsystem convention `browser`/`voice`/`ide`
+follow.
+
 <img src="assets/divider.svg" width="100%" alt="">
 
 ## Voice
@@ -602,7 +620,7 @@ the deep surface used for inspection, memory work and safety drills.
 
 ### HTTP + WebSocket API
 
-FastAPI, 19 routers. `/api/v1/health` is intentionally unauthenticated so container
+FastAPI, 25 routers. `/api/v1/health` is intentionally unauthenticated so container
 probes work; **everything else sits behind `auth_required`**.
 
 <details>
@@ -610,10 +628,18 @@ probes work; **everything else sits behind `auth_required`**.
 
 `health` · `runtime` · `tasks` · `approvals` · `capabilities` · `feedback` ·
 `knowledge` · `memory` · `trajectory` · `attachments` · `trust` · `events` ·
-`events_ws` · `learning` · `ops` · `providers` · `automations` · `voice` · `ide`
+`events_ws` · `learning` · `ops` · `tools` · `routing` · `execution` · `mcp` ·
+`providers` · `automations` · `voice` · `ide` · `agent` · `research`
 
 WebSocket: `/ws/events` for live task/event streaming, plus a bidirectional voice socket
-(audio in → STT → orchestrator → TTS audio out).
+(audio in → STT → orchestrator → TTS audio out). Streaming HTTP (SSE) backs the
+agent-run console (`/api/v1/agent/runs/{id}/stream`) and research sessions
+(`/api/v1/research/sessions/{id}/stream`), both resumable via `Last-Event-ID`.
+
+The three WebSocket-hosting routers (`memory`, `events_ws`, `voice`) cannot take the
+router-level `require_principal` Request dependency, so their HTTP endpoints gate
+per-route instead (e.g. `/voice/speak` and `/voice/transcribe` each depend on
+`require_principal`); only the raw `/ws/*` sockets remain tracked WS-auth debt.
 
 </details>
 
@@ -753,7 +779,7 @@ uv run pytest -q
 | `ruff check` + `format --check` | zero findings | clean |
 | `mypy` | strict, zero errors | clean |
 | `lint-imports` | 3 contracts kept, **0 broken** | kept |
-| `pytest` | all pass | 1,687 collected |
+| `pytest` | all pass | 2,205 collected |
 | Coverage — global | `fail_under = 63` | ~70% |
 | Coverage — `safety/` | 70 | enforced in CI |
 | Coverage — `orchestration/` | 83 | enforced in CI |
@@ -781,7 +807,9 @@ product with an SLA. Here is what that actually means, per subsystem:
 | Two-lane recall | ✅ live | Lane 1 is the default path |
 | Model fleet + routing | ✅ live | 5 free models, `$0.00`, one key |
 | Knowledge & research | ✅ live | BM25 + vector fusion, citations, confidence; **Knowledge dashboard UI** with ingest, search, and document management |
-| HTTP + WebSocket API | ✅ live | 19 routers, auth-gated except health |
+| Research sessions (Perplexity surface) | ✅ live | persisted/resumable sessions, SSE phase-event stream, inline citations + source rail; governed via the `knowledge` tool; off behind `research.enabled` |
+| Agent-run engine | ✅ live | governed native tool-calling loop, persisted runs, SSE live console; off behind `agent_engine.enabled` |
+| HTTP + WebSocket API | ✅ live | 25 routers, auth-gated except health |
 | CLI (both surfaces) | ✅ live | client + in-process operator CLI |
 | ADE / IDE subsystem | 🧪 foundational | open/tree/read, hash-versioned edits, governed run, `git status`/`diff`, project model — all funnel-gated; **Supabase Postgres session persistence** implemented |
 | Web UI | ✅ live | Next 16 / React 19; **Memory**, **Knowledge**, **Workspaces**, and **Settings** dashboards fully interactive |
@@ -800,6 +828,27 @@ Two things worth calling out explicitly rather than burying:
 - **Voice has never talked to a real vendor endpoint.** Providers are covered by unit
   tests with mocked HTTP and WebSocket transports, which proves the parsing and fallback
   logic, not the wire format of today's API.
+
+### Recent hardening (project-wide audit pass)
+
+A full architecture audit independently verified every finding before fixing and re-ran
+the backend gates (`mypy` clean · `lint-imports` 3/0 · `ruff` clean) after each change:
+
+- **Voice HTTP endpoints are now identity-gated.** `/voice/speak` and `/voice/transcribe`
+  depend on `require_principal` per-route (the router hosts a WebSocket route, so it
+  can't take the dependency at router level); audio no longer leaves the box for an
+  unidentified caller once `ATLAS_API_KEYS` is set.
+- **PDF ingestion fails closed.** With no PDF text extractor wired, ingestion raises a
+  clean `UserError` instead of indexing utf-8 mojibake as if it were real document text
+  (§69 — no fabricated content).
+- **Approvals endpoint returns an honest 404**, not a fabricated decision or a 500, while
+  approval storage is deferred.
+- **The cron scheduler fires each due schedule once per cron-minute** — a sub-minute or
+  extra `tick()` can no longer double-dispatch a DB schedule or an in-process job.
+- **Frontend contract discipline (§70/§71):** event search and "clear memories" moved off
+  raw `fetch` onto typed, Zod-validated React Query hooks hitting the ATLAS API base.
+- **Dead code / stale docs removed** (an unused regex + import; a resolved coupling-debt
+  note), and browser-platform wiring fixed to type-check cleanly.
 
 <img src="assets/divider.svg" width="100%" alt="">
 

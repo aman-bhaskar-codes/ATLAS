@@ -34,6 +34,7 @@ __all__ = [
     "Task",
     "TaskResult",
     "Thought",
+    "TokenUsage",
 ]
 
 
@@ -94,12 +95,38 @@ class Action(BaseModel):
     final_text: str | None = None  # for final_answer / ask_user
 
 
+class TokenUsage(BaseModel):
+    """Per-step token consumption reported by an LLM call.
+
+    Used by the DAG executor to feed LimitCounter.add_tokens() so that
+    max_tokens actually trips.  ``total`` is the value ticked against the
+    budget.
+    """
+
+    model_config = {"frozen": True}
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+
 class Observation(BaseModel):
+    """Result of executing a single plan step.
+
+    ``usage`` is optional: *None* means token consumption is **unmeasured**
+    (the step involved no LLM call, or the tool did not report usage).
+    Unmeasured usage counts as 0 against the token budget — the step and
+    tool-call limits still bound the run independently.
+    """
+
     model_config = {"frozen": True}
     step: int
     ok: bool
     content: Any = None
     error: str | None = None
+    usage: TokenUsage | None = None
 
 
 class TaskResult(BaseModel):

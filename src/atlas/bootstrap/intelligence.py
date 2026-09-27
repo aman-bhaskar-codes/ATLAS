@@ -126,8 +126,10 @@ async def build_intelligence(
         )
         quota_governor.configure(
             "openrouter", ProviderQuota(daily_requests=200, daily_tokens=200_000, requests_per_minute=20)
-        )
         _log.info("quota_governor.configured", event_type="lifecycle", providers=["groq", "gemini", "openrouter"])
+
+    # Attach shared database for persistence (hydration happens later in Atlas.start())
+    quota_governor.set_db(db)
 
     # ── Provider registration (profile-filtered) ──────────────────────
     provider_registry = ProviderRegistry()

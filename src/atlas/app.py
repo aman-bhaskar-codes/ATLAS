@@ -140,6 +140,7 @@ class Atlas:
     experience_extractor: Any = None  # Phase 2: ExperienceExtractor
     browser_platform: BrowserPlatform | None = None
     feedback: FeedbackStore | None = None
+    quota_governor: Any = None  # FreeQuotaGovernor
     scheduler: CronScheduler | None = None
     llm_tracker: LLMCallTracker | None = None
     workflows: WorkflowStore | None = None
@@ -178,6 +179,9 @@ class Atlas:
         # The supervisor verifies infrastructure during its startup phases. The
         # lifecycle owns the database connection, so it must run first.
         await self.lifecycle.start()
+        
+        if self.quota_governor:
+            await self.quota_governor.load()
 
         # Storage Backbone (T3/T4): provision the schema on any Postgres account a
         # StorageDomain routes to, using the lifecycle-owned router (its pool is
@@ -786,6 +790,10 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     cron_scheduler.register_job(name="memory_consolidation", cron="0 2 * * *", fn=_consolidate_job)
 
+    async def _quota_reset_job() -> None:
+        await intel.quota_governor.reset_daily()
+    cron_scheduler.register_job(name="quota_daily_reset", cron="0 0 * * *", fn=_quota_reset_job)
+
     _log.info("core.ready", event_type="lifecycle", providers=str(type(gateway)))
 
     # Initialize runtime supervisor (will be started in Atlas.start())
@@ -857,6 +865,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         lane_one=lane_one,
         intents=intents,
         feedback=feedback_store,
+        quota_governor=intel.quota_governor,
         scheduler=cron_scheduler,
         llm_tracker=llm_tracker,
         workflows=workflow_store,

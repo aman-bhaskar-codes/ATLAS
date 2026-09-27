@@ -132,7 +132,7 @@ async def test_playwright_dispatcher_happy_path(require_browser: None):
     <html><body>
         <input type="text" id="myinput" value="" />
         <button id="mybtn" onclick="document.getElementById('myinput').value='clicked'">Click Me</button>
-        <form id="myform" onsubmit="event.preventDefault(); document.getElementById('myinput').value='submitted';">
+        <form id="myform" action="#submitted">
             <button type="submit" id="mysubmit">Submit Form</button>
         </form>
     </body></html>
@@ -162,10 +162,10 @@ async def test_playwright_dispatcher_happy_path(require_browser: None):
         assert val2 == "typed_text"
         
         # 3. Test submit
-        action_submit = BrowserAction(handle=handle, kind=ActionKind.SUBMIT, locator=Locator(kind="css", value="#mysubmit"))
+        action_submit = BrowserAction(handle=handle, kind=ActionKind.SUBMIT, locator=Locator(kind="css", value="#myform"))
         await dispatcher.dispatch(action_submit, cid)
-        val3 = await provider.eval_readonly(session_id, tab_id, "document.getElementById('myinput').value")
-        assert val3 == "submitted"
+        val3 = await provider.eval_readonly(session_id, tab_id, "window.location.hash")
+        assert val3 == "#submitted"
         
     finally:
         await provider.stop()

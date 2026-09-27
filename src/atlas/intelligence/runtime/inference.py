@@ -130,7 +130,7 @@ class InferenceRuntime:
         # Record quota usage for free-tier providers
         if self._quota and spec.cost_class == CostClass.FREE_QUOTA:
             total_tokens = resp.usage.input_tokens + resp.usage.output_tokens
-            self._quota.record(spec.provider, total_tokens)
+            await self._quota.arecord(spec.provider, total_tokens)
 
         if req.task_id and resp.usage.usd:
             self._governor.record_task_spend(req.task_id, resp.usage.usd)

@@ -1916,6 +1916,19 @@ _MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_research_events_session
         ON research_query_events(session_id, sequence);
     """,
+    # ── Quota Governor (Phase 1) ───────────────────────────────────────────── #
+    # Durable daily quota counters for free-tier providers (Groq/Gemini/OpenRouter).
+    # The RPM window (requests_this_minute, minute_window_start) is intentionally
+    # memory-only and ephemeral — a 60-second window never needs to survive a restart.
+    """
+    CREATE TABLE IF NOT EXISTS quota_counters (
+        provider       TEXT NOT NULL,
+        day            TEXT NOT NULL,          -- YYYY-MM-DD, UTC
+        requests_today INTEGER NOT NULL DEFAULT 0,
+        tokens_today   INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (provider, day)
+    );
+    """,
 )
 
 
