@@ -64,6 +64,10 @@ class CronScheduler:
         self._clock = clock
         # In-process jobs: name -> (cron_expression, callable)
         self._jobs: dict[str, tuple[str, _InProcessJob]] = {}
+        # Last cron-minute each in-process job fired, so a second tick() in the
+        # same minute (jitter / clock skew / an extra manual tick) does not
+        # re-run it. DB schedules use the persisted last_run_ts for the same guard.
+        self._job_last_minute: dict[str, str] = {}
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
 
@@ -145,35 +149,48 @@ class CronScheduler:
         registered in-process jobs whose cron expression matches.
         """
         now = self._clock.now()
+        # cron_matches is minute-granular, so any tick() landing in a given
+        # minute matches the same schedules. Dedupe on the cron-minute the
+        # schedule last fired: a schedule already run this minute is skipped, so
+        # a sub-minute tick interval (or an extra manual tick) cannot double-fire.
+        this_minute = now.strftime("%Y-%m-%dT%H:%M")
         cur = await self._db.conn.execute("SELECT * FROM schedules WHERE enabled=1")
         schedules = [dict(r) for r in await cur.fetchall()]
         due: list[dict[str, object]] = []
 
         for sched in schedules:
-            if cron_matches(str(sched["cron_expression"]), now):
-                template = json.loads(str(sched["task_template"]))
-                due.append(template)
-                await self._db.conn.execute(
-                    "UPDATE schedules SET last_run_ts=?, next_run_ts=? WHERE id=?",
-                    (now.isoformat(), now.isoformat(), sched["id"]),
-                )
-                _log.info(
-                    "scheduler.triggered",
-                    event_type="scheduler",
-                    schedule_id=sched["id"],
-                    description=sched["description"],
-                )
+            if not cron_matches(str(sched["cron_expression"]), now):
+                continue
+            last_run = sched.get("last_run_ts")
+            if last_run and str(last_run)[:16] == this_minute:
+                continue  # already fired this cron-minute
+            template = json.loads(str(sched["task_template"]))
+            due.append(template)
+            await self._db.conn.execute(
+                "UPDATE schedules SET last_run_ts=?, next_run_ts=? WHERE id=?",
+                (now.isoformat(), now.isoformat(), sched["id"]),
+            )
+            _log.info(
+                "scheduler.triggered",
+                event_type="scheduler",
+                schedule_id=sched["id"],
+                description=sched["description"],
+            )
 
         if due:
             await self._db.conn.commit()
 
-        # Run in-process jobs
+        # Run in-process jobs (same one-fire-per-cron-minute guard).
         for name, (cron_expr, fn) in self._jobs.items():
-            if cron_matches(cron_expr, now):
-                _log.info("scheduler.job_triggered", event_type="scheduler", name=name)
-                try:
-                    await fn()
-                except Exception as exc:
-                    _log.error("scheduler.job_error", event_type="scheduler", name=name, error=str(exc))
+            if not cron_matches(cron_expr, now):
+                continue
+            if self._job_last_minute.get(name) == this_minute:
+                continue
+            self._job_last_minute[name] = this_minute
+            _log.info("scheduler.job_triggered", event_type="scheduler", name=name)
+            try:
+                await fn()
+            except Exception as exc:
+                _log.error("scheduler.job_error", event_type="scheduler", name=name, error=str(exc))
 
         return due

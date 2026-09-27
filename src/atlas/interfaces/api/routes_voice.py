@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from atlas.app import Atlas
 from atlas.infra.logging import get_logger
 from atlas.infra.types import InboundEvent
+from atlas.interfaces.api.auth import Principal, require_principal
 from atlas.interfaces.api.dependencies import get_atlas
 
 _log = get_logger("atlas.interfaces.api.voice")
@@ -47,8 +48,19 @@ def _require_voice(atlas: Atlas) -> object:
 
 
 @router.post("/voice/speak")
-async def speak(body: SpeakRequest, atlas: Atlas = Depends(get_atlas)) -> StreamingResponse:
-    """Synthesize ``text`` to streamed audio bytes."""
+async def speak(
+    body: SpeakRequest,
+    atlas: Atlas = Depends(get_atlas),
+    _principal: Principal = Depends(require_principal),
+) -> StreamingResponse:
+    """Synthesize ``text`` to streamed audio bytes.
+
+    Per-route ``require_principal`` (not a router-level dependency): this router
+    hosts a WebSocket route, so the Request-based dependency is attached to each
+    HTTP endpoint individually. Audio is forwarded to third-party TTS — an
+    identified caller is required (open in local mode, key-gated once
+    ATLAS_API_KEYS is set).
+    """
     service = _require_voice(atlas)
 
     async def _stream() -> AsyncIterator[bytes]:
@@ -60,8 +72,13 @@ async def speak(body: SpeakRequest, atlas: Atlas = Depends(get_atlas)) -> Stream
 
 
 @router.post("/voice/transcribe", response_model=TranscribeResponse)
-async def transcribe(request: Request, atlas: Atlas = Depends(get_atlas)) -> TranscribeResponse:
-    """Transcribe a posted audio body (raw bytes) to text."""
+async def transcribe(
+    request: Request,
+    atlas: Atlas = Depends(get_atlas),
+    _principal: Principal = Depends(require_principal),
+) -> TranscribeResponse:
+    """Transcribe a posted audio body (raw bytes) to text. Key-gated per-route
+    (see ``speak``): audio is forwarded to a third-party STT provider."""
     service = _require_voice(atlas)
     audio = await request.body()
     result = await service.transcribe(audio)  # type: ignore[attr-defined]

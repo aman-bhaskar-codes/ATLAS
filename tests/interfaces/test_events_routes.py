@@ -75,7 +75,7 @@ class TestEmitReplayAuth:
         assert bus.published
 
     def test_replay_rejects_readonly_key(self) -> None:
-        client, bus = _client(api_keys={"rokey": "readonly"})
+        client, _bus = _client(api_keys={"rokey": "readonly"})
         resp = client.post(
             "/api/v1/events/evt-1/replay",
             headers={"Authorization": "Bearer rokey"},
