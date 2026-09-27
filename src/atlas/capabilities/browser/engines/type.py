@@ -18,5 +18,5 @@ class TypeEngine:
 
     async def type_text(self, handle: PageHandle, locator: Locator, text: str, cid: CorrelationId) -> ActionResult:
         action = BrowserAction(handle=handle, kind=ActionKind.TYPE, locator=locator, value=text)
-        # result = await self._dispatch.dispatch(action, cid)
+        await self._dispatch.dispatch(action, cid)
         return ActionResult(ok=True, action=action, post_state=await self._builder.build_state(handle))

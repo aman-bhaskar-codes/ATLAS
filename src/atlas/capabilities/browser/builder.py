@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from atlas.capabilities.browser.engines.click import ClickEngine
 from atlas.capabilities.browser.engines.dom import DOMEngine
 from atlas.capabilities.browser.engines.extraction import ExtractionEngine
@@ -33,6 +35,8 @@ def build_browser_platform(
     approval_channels: tuple[str, ...] = ("push",),
     safe_browsing_api_key: str = "",
     virustotal_api_key: str = "",
+    dispatcher: Any = None,
+    playwright_provider: Any = None,
 ) -> BrowserPlatform:
     """Wire the full browser automation platform.
 
@@ -45,10 +49,12 @@ def build_browser_platform(
         approval_channels: Channels for approval requests
         safe_browsing_api_key: Google Safe Browsing API key for URL reputation checking
         virustotal_api_key: VirusTotal API key for URL reputation checking
+        dispatcher: The BrowserDispatcher to execute mutations (must be provided for live execution)
+        playwright_provider: The PlaywrightProvider instance to use (optional)
     """
     # 1. Provider registry
     registry = ProviderRegistry()
-    playwright = PlaywrightProvider()
+    playwright = playwright_provider or PlaywrightProvider()
     cdp = CDPProvider()
     registry.register(playwright, preference=10)
     registry.register(cdp, preference=5)
@@ -82,12 +88,10 @@ def build_browser_platform(
     net_engine = NetworkEngine(page_manager=page_manager)
 
     # 5. Mutating engines (Tier-2 — all gated through approval)
-    #    dispatcher=None is acceptable for the click/type engines now —
-    #    they build ActionResult directly without a dispatcher.
-    click_engine = ClickEngine(dispatcher=None, state_builder=state_builder)
-    type_engine = TypeEngine(dispatcher=None, state_builder=state_builder)
+    click_engine = ClickEngine(dispatcher=dispatcher, state_builder=state_builder)
+    type_engine = TypeEngine(dispatcher=dispatcher, state_builder=state_builder)
     submit_engine = SubmitEngine(
-        dispatcher=None,
+        dispatcher=dispatcher,
         notifications=notifications,
         ids=ids,
         approval_channels=approval_channels,

@@ -18,5 +18,5 @@ class ClickEngine:
 
     async def click(self, handle: PageHandle, locator: Locator, cid: CorrelationId) -> ActionResult:
         action = BrowserAction(handle=handle, kind=ActionKind.CLICK, locator=locator)
-        # result = await self._dispatch.dispatch(action, cid)
+        await self._dispatch.dispatch(action, cid)
         return ActionResult(ok=True, action=action, post_state=await self._builder.build_state(handle))

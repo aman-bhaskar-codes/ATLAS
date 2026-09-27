@@ -12,7 +12,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -234,6 +234,7 @@ class BrowserCfg(BaseModel):
     enabled: bool = False
     headless: bool = True
     default_provider: str = "playwright"
+    execution_backend: Literal["none", "playwright"] = "none"
 
 
 class AgentsCfg(BaseModel):

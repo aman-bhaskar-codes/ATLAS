@@ -116,4 +116,4 @@ build()
 2. `ModelGateway.health()` reaches into `runtime._providers`/`runtime._health` privates.
 3. `Retriever.set_events()` / `SafetyEngine.set_events()` use `Any` to dodge a circular import.
 4. `bootstrap/orchestration.py` and some store classes take `Any`-typed parameters for bus/stores.
-5. `app.py` still constructs capability platforms inline (~200 lines) — a `bootstrap/capabilities.py` builder is the planned extraction.
+5. ~~`app.py` still constructs capability platforms inline (~200 lines) — a `bootstrap/capabilities.py` builder is the planned extraction.~~ RESOLVED: extracted to `bootstrap/capabilities.py` (`build_identity_platform`, `build_data_platforms`); `app.py` now delegates to those builders.

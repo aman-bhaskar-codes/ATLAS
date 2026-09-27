@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 from atlas.bootstrap.runtime import RuntimeSupervisor, SystemState
-from atlas.capabilities.browser.builder import build_browser_platform
 from atlas.capabilities.browser.platform import BrowserPlatform
 from atlas.capabilities.dispatcher import CapabilityDispatcher
 from atlas.capabilities.identity.platform import IdentityPlatform
@@ -520,15 +519,22 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     # ── Browser platform (optional) ───────────────────────────────── #
     browser_platform: BrowserPlatform | None = None
     if config.browser.enabled:
-        browser_platform = build_browser_platform(
+        from atlas.bootstrap.browser import build_browser
+        browser_platform = build_browser(
+            config=config.browser,
             ids=ids,
             notifications=notification_platform,
+            safety=safety,
             approval_channels=tuple(),  # approval_channels defined in data_platforms builder
             safe_browsing_api_key=settings.safe_browsing_api_key,
             virustotal_api_key=settings.virustotal_api_key,
         )
         from atlas.tools.browser import BrowserTool
 
+        # build_browser returns None only when disabled; we are inside the
+        # enabled branch, so the platform is present. Assert the invariant so
+        # BrowserTool (which requires a non-None platform) type-checks.
+        assert browser_platform is not None
         tools["browser"] = BrowserTool(platform=browser_platform, ids=ids)
 
     # ── Computer use (universal perception/control across bodies) ──── #

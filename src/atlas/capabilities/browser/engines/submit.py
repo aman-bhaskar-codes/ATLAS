@@ -36,6 +36,10 @@ class SubmitEngine:
     async def submit(
         self, handle: PageHandle, form: FormModel, values: dict[str, str], correlation_id: CorrelationId
     ) -> ActionResult:
+        if type(self._dispatch).__name__ == "NullBrowserDispatcher" or self._dispatch is None:
+            from atlas.capabilities.errors import NoProviderAvailable
+            raise NoProviderAvailable("browser execution not wired")
+        
         preview = self._render_preview(form, values)
         req = ApprovalRequest(
             id=self._ids.execution_id(),
@@ -55,9 +59,7 @@ class SubmitEngine:
             raise CapabilityDenied("form submit not approved" + (" (timed out)" if decision.timed_out else ""))
 
         action = BrowserAction(handle=handle, kind=ActionKind.SUBMIT, args={"form_id": form.id, "values": values})
-        # dispatch → SafetyEngine.guard() (Tier-2, audited) → provider.submit()
-        # Mocking dispatch behavior for now
-        # result = await self._dispatch.dispatch(action, correlation_id)
+        await self._dispatch.dispatch(action, correlation_id)
 
         return ActionResult(ok=True, action=action, post_state=await self._builder.build_state(handle))
 

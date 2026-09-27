@@ -12,11 +12,8 @@ implicit transactions, matching the current store code exactly.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from typing import Any, Protocol
-
-_QMARK = re.compile(r"\?")
 
 
 def translate_placeholders(sql: str) -> str | None:
