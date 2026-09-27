@@ -102,7 +102,9 @@ class ResearchSessionStore(Protocol):
 
     async def append_event(self, session_id: str, phase: str, payload: dict[str, Any], *, ts: str) -> ResearchEvent: ...
 
-    async def list_events(self, session_id: str, *, after_sequence: int = 0, limit: int = 1000) -> tuple[ResearchEvent, ...]: ...
+    async def list_events(
+        self, session_id: str, *, after_sequence: int = 0, limit: int = 1000
+    ) -> tuple[ResearchEvent, ...]: ...
 
 
 class SqliteResearchSessionStore:
@@ -143,7 +145,9 @@ class SqliteResearchSessionStore:
         cur = await self._db.conn.execute(_INSERT_EVENT, (session_id, phase, json.dumps(payload), ts))
         await self._db.conn.commit()
         # AUTOINCREMENT sequence assigned by SQLite — the SSE cursor / Last-Event-ID key.
-        return ResearchEvent(sequence=int(cur.lastrowid or 0), session_id=session_id, phase=phase, payload=payload, ts=ts)
+        return ResearchEvent(
+            sequence=int(cur.lastrowid or 0), session_id=session_id, phase=phase, payload=payload, ts=ts
+        )
 
     async def list_events(
         self, session_id: str, *, after_sequence: int = 0, limit: int = 1000

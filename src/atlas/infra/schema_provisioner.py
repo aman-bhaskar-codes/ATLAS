@@ -77,9 +77,7 @@ class SchemaProvisioner:
     of truth for the schema; a custom tuple is injectable for tests.
     """
 
-    def __init__(
-        self, router: BackendRouter, migrations: tuple[str, ...] = _MIGRATIONS
-    ) -> None:
+    def __init__(self, router: BackendRouter, migrations: tuple[str, ...] = _MIGRATIONS) -> None:
         self._router = router
         self._migrations = migrations
 

@@ -143,6 +143,28 @@ async def test_an_admin_key_can_mutate(tmp_path: Path, monkeypatch: pytest.Monke
     assert response.status_code == 202, response.text
 
 
+# ── per-route auth on the WS-hosting memory router ──────────────────────────────
+#
+# ``memory_router`` cannot take router-level ``require_principal`` (it hosts a
+# WebSocket route), so the destructive DELETE /api/v1/memory carries its own
+# ``require_admin``. Before that fix an unauthenticated caller could wipe every
+# episode, fact, knowledge doc and preference. These pin the per-route gate.
+
+
+async def test_memory_wipe_rejects_a_request_with_no_header(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    async with app_client(tmp_path, monkeypatch, ATLAS_API_KEYS=_KEYS_ENV) as (_app, client):
+        response = await client.delete("/api/v1/memory")
+
+    assert response.status_code == 401
+
+
+async def test_memory_wipe_rejects_a_readonly_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    async with app_client(tmp_path, monkeypatch, ATLAS_API_KEYS=_KEYS_ENV) as (_app, client):
+        response = await client.delete("/api/v1/memory", headers=_bearer(_READONLY_KEY))
+
+    assert response.status_code == 403
+
+
 # ── quota identity ─────────────────────────────────────────────────────────────
 
 

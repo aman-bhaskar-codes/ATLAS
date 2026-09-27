@@ -20,6 +20,41 @@ FIXTURES = Path(__file__).parent / "mcp_fixtures"
 PYTHON = sys.executable
 
 
+def _governed_safety(db: Any) -> Any:
+    """A REAL SafetyEngine granting the `mcp:call` seat, with an approving
+    confirmer — so MCP execution flows through the funnel and executes."""
+    import datetime
+
+    from atlas.infra.config import SafetyCfg
+    from atlas.safety.audit import AuditLog
+    from atlas.safety.classifier import TierClassifier
+    from atlas.safety.engine import SafetyEngine
+    from atlas.safety.manifest import Manifest
+    from atlas.safety.policy import KillSwitchPolicy, PolicyEngine
+    from tests.fakes import FakeClock, FakeConfirmer, FakeKillSwitch
+
+    manifest = Manifest(
+        version=1,
+        allowed_paths={},
+        allowed_commands={},
+        whatsapp={},
+        safety={},
+        rules=[{"tool": "mcp", "operation": "call", "tier": 2}],  # type: ignore[list-item]
+        hard_block=[],  # type: ignore[arg-type]
+    )
+    killswitch = FakeKillSwitch(False)
+    engine = SafetyEngine(
+        classifier=TierClassifier(manifest, 2),
+        policy=PolicyEngine((KillSwitchPolicy(killswitch),)),  # type: ignore[arg-type]
+        audit=AuditLog(db),
+        killswitch=killswitch,
+        clock=FakeClock(datetime.datetime.now()),  # type: ignore[arg-type]
+        cfg=SafetyCfg(),
+    )
+    engine.set_confirmer(FakeConfirmer(True))
+    return engine
+
+
 @pytest.fixture
 def registry() -> ToolingRegistry:
     return ToolingRegistry()
@@ -103,8 +138,13 @@ async def test_mcp_execution_through_part4_engine(memory_db: Any) -> None:
     from atlas.tooling.execution.store import ExecutionRunStore
 
     registry = ToolingRegistry()
-    manager = MCPServerManager(definitions=[_definition("echo")], tooling_registry=registry)
+    manager = MCPServerManager(
+        definitions=[_definition("echo")],
+        tooling_registry=registry,
+        safety=_governed_safety(memory_db),
+    )
     definitions = await manager.refresh("echo")
+
     from atlas.tooling.models.tool_health import ToolRuntimeState
 
     for d in definitions:

@@ -35,15 +35,19 @@ class DurableTaskQueue:
         self._worker = worker_id
 
     async def enqueue(self, payload: dict[str, Any], *, tenant_id: str = "local", max_attempts: int = 3) -> int:
-        cur = await self._conn.fetchone("SELECT MAX(id) AS m FROM task_queue")
-        next_id = (cur["m"] or 0) + 1 if cur else 1
-        await self._conn.execute(
-            "INSERT INTO task_queue (id, payload, tenant_id, state, max_attempts, created_ts) "
-            "VALUES (?,?,?,'pending',?,?)",
-            (next_id, json.dumps(payload), tenant_id, max_attempts, datetime.now(UTC).isoformat()),
+        # Let the engine assign the id atomically (AUTOINCREMENT / BIGSERIAL) and
+        # return it via RETURNING — supported by both aiosqlite (SQLite ≥3.35) and
+        # asyncpg. The old SELECT MAX(id)+1 raced to a PRIMARY KEY collision under
+        # concurrent enqueue and desynced the sequence.
+        row = await self._conn.fetchone(
+            "INSERT INTO task_queue (payload, tenant_id, state, max_attempts, created_ts) "
+            "VALUES (?,?,'pending',?,?) RETURNING id",
+            (json.dumps(payload), tenant_id, max_attempts, datetime.now(UTC).isoformat()),
         )
         await self._conn.commit()
-        return next_id
+        if row is None:  # RETURNING always yields a row on success — defensive only
+            raise RuntimeError("enqueue INSERT did not return an id")
+        return int(row["id"])
 
     async def claim(self) -> QueueJob | None:
         """Atomically claim the oldest pending (or lease-expired) job."""

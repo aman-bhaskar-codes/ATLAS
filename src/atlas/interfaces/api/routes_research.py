@@ -227,9 +227,7 @@ async def _drain(svc: Any, session_id: str, after: int) -> AsyncIterator[Any]:
             yield event
 
 
-async def _run_event_generator(
-    session_id: str, request: Request, svc: Any, start_after: int
-) -> AsyncGenerator[str]:
+async def _run_event_generator(session_id: str, request: Request, svc: Any, start_after: int) -> AsyncGenerator[str]:
     """Stream a session's durable phase trace as SSE, resuming from ``start_after``.
 
     Emits ``connected``, then the REAL phase trace in ``sequence`` order (snapshot +

@@ -15,10 +15,10 @@ tags, so do not rename them without a migration.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class StorageDomain(str, Enum):
+class StorageDomain(StrEnum):
     """A logical persistence account. Six active, two reserved."""
 
     CORE = "core"  # Acct 1 (critical): orchestration hot path, event bus, safety/audit, tooling, routing

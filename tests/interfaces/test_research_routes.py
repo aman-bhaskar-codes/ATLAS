@@ -108,7 +108,9 @@ class FakeResearchService:
         events = (
             ResearchEvent(sequence=1, session_id=session_id, phase="started", ts="t"),
             ResearchEvent(sequence=2, session_id=session_id, phase="sources_found", payload={"count": 1}, ts="t"),
-            ResearchEvent(sequence=3, session_id=session_id, phase="completed", payload={"status": "completed"}, ts="t"),
+            ResearchEvent(
+                sequence=3, session_id=session_id, phase="completed", payload={"status": "completed"}, ts="t"
+            ),
         )
         return tuple(e for e in events if e.sequence > after_sequence)
 
@@ -220,9 +222,7 @@ def test_stream_emits_connected_phase_frames_and_closes() -> None:
 
 
 def test_stream_resumes_from_last_event_id() -> None:
-    resp = _client(service=FakeResearchService()).get(
-        f"{BASE}/sessions/sess-x/stream", headers={"Last-Event-ID": "2"}
-    )
+    resp = _client(service=FakeResearchService()).get(f"{BASE}/sessions/sess-x/stream", headers={"Last-Event-ID": "2"})
     assert resp.status_code == 200
     body = resp.text
     # Resuming past sequence 2 replays only the strict tail (event 3), never 1 or 2.

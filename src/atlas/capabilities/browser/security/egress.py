@@ -56,9 +56,7 @@ class EgressPolicy:
         parts = urlsplit(url.strip())
         scheme = parts.scheme.lower()
         if scheme not in _ALLOWED_SCHEMES:
-            raise UnsafeURLError(
-                f"egress denied: scheme {scheme or '(none)'!r} is not http/https"
-            )
+            raise UnsafeURLError(f"egress denied: scheme {scheme or '(none)'!r} is not http/https")
 
         host = (parts.hostname or "").lower()
         if not host:

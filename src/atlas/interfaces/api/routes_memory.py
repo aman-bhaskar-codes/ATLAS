@@ -26,11 +26,12 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
+from atlas.interfaces.api.auth import Principal, require_admin
 from atlas.interfaces.api.websocket import ConnectionManager
 from atlas.memory.cache import StatsCache
 
@@ -463,10 +464,14 @@ async def _count_chunks(db: Database) -> int:
 
 
 @router.delete("/api/v1/memory")
-async def clear_memories(request: Request) -> dict[str, Any]:
+async def clear_memories(request: Request, _admin: Principal = Depends(require_admin)) -> dict[str, Any]:
     """
     Wipes the local memory database (episodes, facts, knowledge, preferences).
     This action is destructive and irreversible.
+
+    Admin-authenticated: this router hosts WebSocket routes so router-level
+    ``require_principal`` (Request-based) cannot apply — the auth is per-route
+    here, gating the destructive wipe behind an admin key (§53).
     """
     atlas = request.app.state.atlas
     db = atlas.db

@@ -100,9 +100,7 @@ class _FakeRouter:
     ``fail_dsns`` marks accounts that raise on first execute (unreachable host).
     """
 
-    def __init__(
-        self, dsns: dict[StorageDomain, str], fail_dsns: set[str] | None = None
-    ) -> None:
+    def __init__(self, dsns: dict[StorageDomain, str], fail_dsns: set[str] | None = None) -> None:
         self._dsns = dsns
         self._fail = fail_dsns or set()
         self._conns: dict[str, _FakeConn] = {}

@@ -47,7 +47,7 @@ def test_non_http_schemes_are_denied(url: str) -> None:
     ],
 )
 def test_internal_and_loopback_hosts_are_denied(url: str) -> None:
-    with pytest.raises(UnsafeURLError, match="internal|loopback"):
+    with pytest.raises(UnsafeURLError, match=r"internal|loopback"):
         EgressPolicy().check(url)
 
 
@@ -68,5 +68,5 @@ def test_scope_still_denies_internal_hosts() -> None:
     # An in-scope name that is nonetheless internal is denied by the SSRF guard,
     # which runs before the scope check.
     policy = EgressPolicy(allowed_hosts=frozenset({"localhost"}))
-    with pytest.raises(UnsafeURLError, match="internal|loopback"):
+    with pytest.raises(UnsafeURLError, match=r"internal|loopback"):
         policy.check("http://localhost/x")

@@ -104,7 +104,11 @@ async def _check_domain_backends(atlas: Atlas) -> list[CheckResult]:
         version = int(row["version"]) if row else 0
         if version < target:
             results.append(
-                CheckResult(f"backends.{label}", "warn", f"reachable, schema_version={version} < target {target} (stale)")
+                CheckResult(
+                    f"backends.{label}",
+                    "warn",
+                    f"reachable, schema_version={version} < target {target} (stale)",
+                )
             )
         else:
             results.append(CheckResult(f"backends.{label}", "pass", f"reachable, schema_version={version}/{target}"))

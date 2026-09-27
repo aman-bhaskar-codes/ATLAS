@@ -21,6 +21,7 @@ from atlas.tooling.mcp.models import MCPServerDefinition, TransportType
 from atlas.tooling.models.tool_health import ToolRuntimeState
 from atlas.tooling.routing.models import RoutePlan, RouteStep
 from tests.api.conftest import app_client
+from tests.fakes import FakeConfirmer
 
 FIXTURES = Path(__file__).parent / "mcp_fixtures"
 
@@ -44,6 +45,12 @@ async def test_full_composition_root_mcp_execution(tmp_path: Path) -> None:
     async with app_client(tmp_path) as (app, client):
         atlas = app.state.atlas
         assert atlas.mcp_manager is not None  # the runtime is on the graph
+
+        # MCP `call` is a tier-2 (CONFIRM) seat (permissions.yaml) — the governed
+        # funnel now REQUIRES an approval for every external MCP call. Install an
+        # approving confirmer so this test proves the call flows THROUGH the guard
+        # and executes on approval (not that it bypasses the funnel).
+        atlas.safety.set_confirmer(FakeConfirmer(True))
 
         # Inject the fixture server as an owner-configured server (§28: the
         # definition arrives via the same path config/mcp.yaml would feed).

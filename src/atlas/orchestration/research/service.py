@@ -102,9 +102,7 @@ class ResearchService:
         reaches that state, never as a fabricated token stream (§69). The store
         assigns the monotonic ``sequence`` used as the SSE cursor / ``Last-Event-ID``.
         """
-        return await self._store.append_event(
-            session_id, phase, dict(payload), ts=self._clock.now().isoformat()
-        )
+        return await self._store.append_event(session_id, phase, dict(payload), ts=self._clock.now().isoformat())
 
     async def start_session(
         self,

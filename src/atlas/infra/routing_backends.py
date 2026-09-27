@@ -139,8 +139,7 @@ class BackendRouter:
         # SQLite fallback — requires the shared Database.
         if self._db is None:
             raise ConfigError(
-                f"domain {domain.value!r} resolved to SQLite fallback but no Database "
-                "was wired into the BackendRouter"
+                f"domain {domain.value!r} resolved to SQLite fallback but no Database was wired into the BackendRouter"
             )
         if self._sqlite is None:
             self._sqlite = _RoutedSqliteConnection(self._db)

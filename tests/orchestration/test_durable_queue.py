@@ -74,6 +74,29 @@ class TestDurableTaskQueue:
         assert got1 is not None
         assert got2 is None  # pending no longer matches
 
+    async def test_ids_never_reuse_a_removed_high_id(self, db: Database) -> None:
+        """Regression: enqueue must let the engine assign ids (AUTOINCREMENT),
+        never SELECT MAX(id)+1 — which reused the id of a deleted top row and
+        could collide with a live row. AUTOINCREMENT holds a high-water mark, so
+        the id after a delete is strictly greater, never a reused value."""
+        q = DurableTaskQueue(SQLiteConnection(db.conn), "w1")
+        first = await q.enqueue(_payload("1"))
+        second = await q.enqueue(_payload("2"))
+        assert second > first
+        # Remove the highest row, then enqueue again.
+        await db.conn.execute("DELETE FROM task_queue WHERE id = ?", (second,))
+        await db.conn.commit()
+        third = await q.enqueue(_payload("3"))
+        assert third > second, "id was reused after deleting the top row (MAX(id)+1 bug)"
+
+    async def test_concurrent_enqueue_yields_unique_ids(self, db: Database) -> None:
+        """No two concurrent enqueues collide on the primary key."""
+        import asyncio
+
+        q = DurableTaskQueue(SQLiteConnection(db.conn), "w1")
+        ids = await asyncio.gather(*(q.enqueue(_payload(str(n))) for n in range(20)))
+        assert len(set(ids)) == 20
+
 
 class TestTaskWorker:
     async def test_worker_executes_and_completes(self, db: Database) -> None:

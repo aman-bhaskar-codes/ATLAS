@@ -17,10 +17,10 @@ from atlas.infra.errors import ConfigError
 from atlas.infra.routing_backends import BackendRouter, _RoutedSqliteConnection
 from atlas.infra.storage_domains import StorageDomain
 
-_DSN_ENVS = (
-    [f"ATLAS_SUPABASE_{d.value.upper()}_DSN" for d in StorageDomain]
-    + ["ATLAS_DATABASE_URL", "SUPABASE_DB_CONNECTION_STRING"]
-)
+_DSN_ENVS = [f"ATLAS_SUPABASE_{d.value.upper()}_DSN" for d in StorageDomain] + [
+    "ATLAS_DATABASE_URL",
+    "SUPABASE_DB_CONNECTION_STRING",
+]
 
 
 def _clean_settings(monkeypatch: pytest.MonkeyPatch, **env: str) -> Settings:

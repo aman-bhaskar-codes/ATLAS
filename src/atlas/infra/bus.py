@@ -25,6 +25,13 @@ from atlas.infra.logging import get_logger
 
 _log = get_logger("atlas.bus")
 
+# Backoff before re-selecting when a batch produced only handler-error retries.
+# Without it the loop re-claims the same rows on a tight spin, marching
+# attempt_count 1→5 in a handful of back-to-back iterations and dead-lettering
+# instantly — the retry cap becomes a spin counter, not a time-spaced retry.
+_RETRY_BACKOFF_S = 1.0
+_MAX_DELIVERY_ATTEMPTS = 5
+
 
 class Event(BaseModel):
     """Base for all bus events. Subclasses add typed fields."""
@@ -189,6 +196,7 @@ class MessageBus:
 
                 delivered_ids = []
                 dead_letter_ids = []
+                retry_ids: list[int] = []
                 for row in rows:
                     topic = row["type"]
                     payload_json = row["payload"]
@@ -236,7 +244,7 @@ class MessageBus:
                         cur = await self._db.conn.execute("SELECT attempt_count FROM events WHERE id = ?", (eid,))
                         attempt_row: Row | None = await cur.fetchone()
                         attempts = attempt_row["attempt_count"] if attempt_row is not None else 1
-                        if attempts >= 5:
+                        if attempts >= _MAX_DELIVERY_ATTEMPTS:
                             dead_letter_ids.append(("max retries exceeded", eid))
                         # Otherwise leave as pending for retry
                         else:
@@ -245,6 +253,7 @@ class MessageBus:
                                 "UPDATE events SET delivery_status = 'pending' WHERE id = ?",
                                 (eid,),
                             )
+                            retry_ids.append(eid)
                     else:
                         delivered_ids.append(eid)
 
@@ -261,8 +270,19 @@ class MessageBus:
                             (reason, eid),
                         )
 
-                if delivered_ids or dead_letter_ids:
+                # Commit whenever ANY row changed state — including pure retry
+                # resets. Gating the commit on delivered/dead-letter only left the
+                # in_flight→pending resets uncommitted, so the next SELECT re-read
+                # them on a tight loop (the retry-spin bug).
+                if delivered_ids or dead_letter_ids or retry_ids:
                     await self._db.conn.commit()
+
+                # If this batch produced ONLY retries (nothing progressed), pause
+                # before re-selecting so attempt_count is spaced over time and
+                # transient handler failures get a chance to recover, instead of
+                # burning all attempts in a few back-to-back iterations.
+                if retry_ids and not delivered_ids:
+                    await asyncio.sleep(_RETRY_BACKOFF_S)
             except Exception as e:
                 if not self._closed:
                     _log.error("bus.process_error", event_type="bus", error=str(e))

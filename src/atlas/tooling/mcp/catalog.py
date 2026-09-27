@@ -40,9 +40,7 @@ class _GuardedMCPCall:
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         arguments = args.get("arguments") or {}
-        res: UniversalToolResult = await self._manager.call_tool_normalized(
-            self._server_id, self._tool_name, arguments
-        )
+        res: UniversalToolResult = await self._manager.call_tool_normalized(self._server_id, self._tool_name, arguments)
         self.result = res
         return ToolResult(ok=res.ok, output=res.data, error=(res.error.message if res.error else None))
 
