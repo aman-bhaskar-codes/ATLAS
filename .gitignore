@@ -1,8 +1,15 @@
-# Python caches
+# ──────────────────────────────────────────────────────────────
+# Python
+# ──────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*.pyo
 .venv/
 *.egg-info/
+dist/
+build/
+
+# Linter / type-checker / test caches
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
@@ -13,10 +20,17 @@ __pycache__/
 coverage.xml
 htmlcov/
 
-# uv lockfile (uv.lock IS committed; the venv is not)
-# (do not ignore uv.lock)
+# ──────────────────────────────────────────────────────────────
+# Node / Next.js (frontend/)
+# ──────────────────────────────────────────────────────────────
+node_modules/
+frontend/.next/
+frontend/test-results/
+frontend/playwright-report/
 
+# ──────────────────────────────────────────────────────────────
 # ATLAS runtime state
+# ──────────────────────────────────────────────────────────────
 .atlas/
 STOP.flag
 
@@ -26,12 +40,29 @@ STOP.flag
 *.db-wal
 *.db-shm
 
-# Secrets & Environment
-.env
+# uv lockfile (uv.lock IS committed; the venv is not)
+# (do not ignore uv.lock)
 
-# OS metadata
+# ──────────────────────────────────────────────────────────────
+# Secrets & environment
+# ──────────────────────────────────────────────────────────────
+.env
+.env.real
+.env.local
+.env.production.local
+
+# ──────────────────────────────────────────────────────────────
+# OS & editor metadata
+# ──────────────────────────────────────────────────────────────
 .DS_Store
+Thumbs.db
 *.swp
 *~
+.idea/
+.vscode/
+*.iml
 
-.env.real
+# ──────────────────────────────────────────────────────────────
+# Other tool leftovers
+# ──────────────────────────────────────────────────────────────
+.claude/
