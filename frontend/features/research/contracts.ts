@@ -15,6 +15,8 @@
  * §23 (untrusted data): answer text is rendered as text by React — never as HTML.
  */
 
+import { z } from "zod";
+
 const CITATION = /\[(\d{1,3})\]/g;
 
 /** One `[n] …` footnote line the answer defined for itself. */
@@ -114,4 +116,146 @@ export function tokenizeProse(text: string, definedNumbers: Set<number>): Answer
   }
   if (last < text.length) tokens.push({ kind: "text", text: text.slice(last) });
   return tokens;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * Session surface contracts (`/api/v1/research/*`) + SSE phase trace (R3/R4).
+ *
+ * These mirror the backend source of truth EXACTLY — orchestration/research/
+ * records.py + interfaces/api/routes_research.py — no invented fields, no `any`
+ * (§70). The persisted, streamed research SESSION is distinct from the legacy
+ * poll-based task view above: a question runs the governed `knowledge` pipeline in
+ * the background, emits a REAL phase trace (§69), and lands a grounded answer.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/** A persisted session's lifecycle state; RUNNING is the only non-terminal one. */
+export const ResearchStatusSchema = z.enum(["running", "completed", "refused", "failed"]);
+export type ResearchStatus = z.infer<typeof ResearchStatusSchema>;
+
+export const TERMINAL_RESEARCH_STATUSES: ReadonlySet<ResearchStatus> = new Set([
+  "completed",
+  "refused",
+  "failed",
+]);
+
+/** Every REAL phase a streamed run passes through (records.py::ResearchPhase). */
+export const ResearchPhaseSchema = z.enum([
+  "started",
+  "retrieving",
+  "round",
+  "sources_found",
+  "synthesizing",
+  "answer",
+  "citations",
+  "grounding",
+  "completed",
+  "refused",
+  "failed",
+]);
+export type ResearchPhase = z.infer<typeof ResearchPhaseSchema>;
+
+/** One inline citation the fabric resolved — the anchor a `[n]` marker points at. */
+export const ResearchCitationSchema = z.object({
+  index: z.number().int().default(0),
+  title: z.string().default(""),
+  uri: z.string().default(""),
+  quote: z.string().default(""),
+});
+export type ResearchCitation = z.infer<typeof ResearchCitationSchema>;
+
+/** One surfaced disagreement between sources — carried verbatim, never averaged. */
+export const ResearchContradictionSchema = z.object({
+  key: z.string().default(""),
+  description: z.string().default(""),
+});
+export type ResearchContradiction = z.infer<typeof ResearchContradictionSchema>;
+
+/** One retrieved source for the source rail (may exceed the cited set). */
+export const ResearchSourceSchema = z.object({
+  title: z.string().default(""),
+  uri: z.string().default(""),
+  quote: z.string().default(""),
+});
+export type ResearchSource = z.infer<typeof ResearchSourceSchema>;
+
+/** The grounded, cited answer. `answered=false` is an HONEST refusal (§54/§69). */
+export const ResearchAnswerSchema = z.object({
+  text: z.string().default(""),
+  answered: z.boolean().default(false),
+  confidence: z.number().default(0),
+  mode: z.string().default(""),
+  citations: z.array(ResearchCitationSchema).default([]),
+  refusal_reason: z.string().default(""),
+  contradictions: z.array(ResearchContradictionSchema).default([]),
+  degraded: z.boolean().default(false),
+  degradation_reason: z.string().default(""),
+  coverage_warning: z.string().default(""),
+});
+export type ResearchAnswer = z.infer<typeof ResearchAnswerSchema>;
+
+/** A full session: metadata + the grounded answer + source rail + trace summary. */
+export const ResearchSessionSchema = z.object({
+  session_id: z.string(),
+  status: ResearchStatusSchema,
+  question: z.string(),
+  mode: z.string(),
+  correlation_id: z.string(),
+  parent_session_id: z.string().nullable().default(null),
+  answer: ResearchAnswerSchema.nullable().default(null),
+  sources: z.array(ResearchSourceSchema).default([]),
+  stop_reason: z.string().default(""),
+  total_rounds: z.number().int().default(0),
+  total_discovered: z.number().int().default(0),
+  open_questions: z.number().int().default(0),
+  error: z.string().nullable().default(null),
+  created_ts: z.string(),
+  updated_ts: z.string(),
+});
+export type ResearchSession = z.infer<typeof ResearchSessionSchema>;
+
+/** A compact session row for lists — no answer body or source rail. */
+export const ResearchSessionSummarySchema = z.object({
+  session_id: z.string(),
+  status: ResearchStatusSchema,
+  question: z.string(),
+  mode: z.string(),
+  parent_session_id: z.string().nullable().default(null),
+  answered: z.boolean().default(false),
+  source_count: z.number().int().default(0),
+  created_ts: z.string(),
+  updated_ts: z.string(),
+});
+export type ResearchSessionSummary = z.infer<typeof ResearchSessionSummarySchema>;
+
+export const ResearchSessionListSchema = z.object({
+  sessions: z.array(ResearchSessionSummarySchema).default([]),
+});
+
+/**
+ * One `research_event` SSE frame's `data` (records.py::ResearchEvent). `payload`
+ * carries that phase's REAL facts (e.g. `{count: 5}` for sources_found); kept
+ * permissive and read through the reducer's narrow accessors so a new metadata key
+ * never breaks the trace.
+ */
+export const ResearchEventSchema = z.object({
+  sequence: z.number().int(),
+  session_id: z.string().default(""),
+  phase: z.string().default(""),
+  payload: z.record(z.string(), z.unknown()).default({}),
+  ts: z.string().default(""),
+});
+export type ResearchEvent = z.infer<typeof ResearchEventSchema>;
+
+/* ── request bodies ────────────────────────────────────────────────────────── */
+
+export interface StartResearchBody {
+  question: string;
+  mode?: string | null;
+  background?: boolean;
+}
+
+export interface FollowUpResearchBody {
+  question: string;
+  mode?: string | null;
+  background?: boolean;
 }

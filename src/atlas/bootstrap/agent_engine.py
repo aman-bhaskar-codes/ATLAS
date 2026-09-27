@@ -16,12 +16,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from atlas.infra.backends import PostgresConnection
 from atlas.infra.clock import Clock
 from atlas.infra.config import AppConfig, Settings
 from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
+from atlas.infra.routing_backends import BackendRouter
+from atlas.infra.storage_domains import StorageDomain
 from atlas.orchestration.agent_engine.engine import SupportsDispatch, SupportsInfer
 from atlas.orchestration.agent_engine.event_reader import AgentEventReader, SqliteAgentEventReader
 from atlas.orchestration.agent_engine.persistence import (
@@ -53,18 +54,21 @@ def build_agent_engine(
     ids: IdGenerator,
     clock: Clock,
     db: Database | None = None,
+    router: BackendRouter | None = None,
 ) -> AgentEngineComponents:
     cfg = config.agent_engine
     if not cfg.enabled:
         _log.info("agent_engine.disabled", event_type="lifecycle")
         return AgentEngineComponents(service=None)
 
-    # Durable, resumable runs on the SAME substrate everything else uses. Postgres
-    # only if a Supabase/Neon connection is actually configured (reserved seam —
-    # the placeholder is empty by default), else the shared SQLite DB.
+    # Durable, resumable runs on the SAME substrate everything else uses. Agent
+    # runs are orchestration state -> the CORE domain. The BackendRouter applies
+    # the fallback chain (CORE dsn / legacy ATLAS_DATABASE_URL -> SQLite) and
+    # dedupes the pool; construction stays out of bootstrap (T4). Zero-config
+    # resolves CORE to SQLite, so this is the shared DB exactly as before.
     store: AgentRunStore | None = None
-    if settings.supabase_db_connection_string:
-        store = PostgresAgentRunStore(PostgresConnection(settings.supabase_db_connection_string))
+    if router is not None and router.effective_dsn(StorageDomain.CORE):
+        store = PostgresAgentRunStore(router.resolve_postgres(StorageDomain.CORE))
     elif db is not None:
         store = SqliteAgentRunStore(db)
     if store is None:

@@ -15,14 +15,19 @@ session. Live streaming of a backgrounded run (SSE) is the next slice (R3).
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from atlas.app import Atlas
 from atlas.interfaces.api.dependencies import get_atlas
 from atlas.orchestration.research.records import (
+    TERMINAL_RESEARCH_STATUSES,
     ResearchAnswer,
     ResearchSessionRecord,
     ResearchSource,
@@ -30,6 +35,12 @@ from atlas.orchestration.research.records import (
 from atlas.orchestration.research.service import ResearchError
 
 router = APIRouter(prefix="/api/v1/research", tags=["research"])
+
+# Live-stream cadence: how often to sweep the durable phase trace for new events, and
+# how long to wait idle before a keep-alive heartbeat. The store commits synchronously,
+# so a short poll surfaces events promptly without a wake queue.
+_POLL_INTERVAL_SECONDS = 0.5
+_HEARTBEAT_SECONDS = 15.0
 
 
 def _service(atlas: Atlas) -> Any:
@@ -44,11 +55,13 @@ def _service(atlas: Atlas) -> Any:
 class StartSessionRequest(BaseModel):
     question: str
     mode: str | None = None
+    background: bool = False
 
 
 class FollowUpRequest(BaseModel):
     question: str
     mode: str | None = None
+    background: bool = False
 
 
 class SessionResponse(BaseModel):
@@ -131,18 +144,23 @@ def _to_summary(rec: ResearchSessionRecord) -> SessionSummary:
 # ── Routes ───────────────────────────────────────────────────────────── #
 @router.post("/sessions", response_model=SessionResponse)
 async def start_session(req: StartSessionRequest, atlas: Atlas = Depends(get_atlas)) -> SessionResponse:
-    """Run one governed research question and return its full persisted session.
+    """Run one governed research question and return its persisted session.
 
-    Synchronous in R2: blocks until the grounded answer lands, and the response IS
-    the persisted trace. A denied/halted dispatch or a tool error is never an HTTP
-    error — it comes back as a session whose ``status`` is ``failed``. An unknown
-    ``mode`` or empty question is a 400.
+    Synchronous by default: blocks until the grounded answer lands, and the response
+    IS the persisted trace. When ``background`` is set, returns immediately with a
+    ``running`` stub (``answer`` null) that is addressable and streamable at once —
+    poll ``GET /sessions/{id}`` or stream it until terminal. A denied/halted dispatch
+    or a tool error is never an HTTP error — it comes back as a session whose
+    ``status`` is ``failed``. An unknown ``mode`` or empty question is a 400.
     """
     svc = _service(atlas)
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="question must not be empty")
     try:
-        rec = await svc.start_session(req.question, mode=req.mode)
+        if req.background:
+            rec = await svc.start_session_background(req.question, mode=req.mode)
+        else:
+            rec = await svc.start_session(req.question, mode=req.mode)
     except ResearchError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _to_response(rec)
@@ -178,10 +196,107 @@ async def follow_up(session_id: str, req: FollowUpRequest, atlas: Atlas = Depend
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="question must not be empty")
     try:
-        rec = await svc.follow_up(session_id, req.question, mode=req.mode)
+        if req.background:
+            rec = await svc.follow_up_background(session_id, req.question, mode=req.mode)
+        else:
+            rec = await svc.follow_up(session_id, req.question, mode=req.mode)
     except ResearchError as exc:
         # An unknown parent session is a 404; an invalid mode is a client error too,
         # but both surface as ResearchError — disambiguate on the message.
         status = 404 if "unknown research session" in str(exc) else 400
         raise HTTPException(status_code=status, detail=str(exc)) from exc
     return _to_response(rec)
+
+
+# ── Live research stream (SSE) ───────────────────────────────────────── #
+def _frame(event: Any) -> str:
+    """Render one phase event as an SSE ``research_event`` frame (``id:`` = cursor)."""
+    return f"id: {event.sequence}\nevent: research_event\ndata: {event.model_dump_json()}\n\n"
+
+
+async def _drain(svc: Any, session_id: str, after: int) -> AsyncIterator[Any]:
+    """Yield every phase event past ``after``, walking the cursor until the trace is
+    empty. Looping until a batch comes back empty drains a trace of any size."""
+    seq = after
+    while True:
+        batch = await svc.session_events(session_id, after_sequence=seq)
+        if not batch:
+            return
+        for event in batch:
+            seq = event.sequence
+            yield event
+
+
+async def _run_event_generator(
+    session_id: str, request: Request, svc: Any, start_after: int
+) -> AsyncGenerator[str]:
+    """Stream a session's durable phase trace as SSE, resuming from ``start_after``.
+
+    Emits ``connected``, then the REAL phase trace in ``sequence`` order (snapshot +
+    live tail), ``heartbeat`` while idle, and ``stream_closed`` once the session
+    reaches a terminal ``ResearchStatus``. The terminal record is persisted before
+    its terminal phase event, so a final drain on terminal detection never loses a
+    late event.
+    """
+    last_seq = start_after
+    idle = 0.0
+    yield f"event: connected\ndata: {json.dumps({'status': 'connected', 'session_id': session_id})}\n\n"
+
+    while True:
+        if await request.is_disconnected():
+            return
+        emitted = False
+        async for event in _drain(svc, session_id, last_seq):
+            if await request.is_disconnected():
+                return
+            yield _frame(event)
+            last_seq = event.sequence
+            emitted = True
+
+        rec = await svc.get_session(session_id)
+        if rec is None or rec.status in TERMINAL_RESEARCH_STATUSES:
+            # Final sweep: catch anything written between the last drain and the
+            # terminal transition (safe — all events precede/accompany the terminal phase).
+            async for event in _drain(svc, session_id, last_seq):
+                yield _frame(event)
+                last_seq = event.sequence
+            status = rec.status if rec is not None else "unknown"
+            yield f"event: stream_closed\ndata: {json.dumps({'reason': 'session_terminal', 'status': status})}\n\n"
+            return
+
+        idle = 0.0 if emitted else idle + _POLL_INTERVAL_SECONDS
+        if idle >= _HEARTBEAT_SECONDS:
+            yield f"event: heartbeat\ndata: {json.dumps({'last_sequence': last_seq})}\n\n"
+            idle = 0.0
+        await asyncio.sleep(_POLL_INTERVAL_SECONDS)
+
+
+@router.get("/sessions/{session_id}/stream")
+async def stream_session(session_id: str, request: Request, atlas: Atlas = Depends(get_atlas)) -> StreamingResponse:
+    """Stream a research session's live phase trace via SSE — the Perplexity feed.
+
+    Sends ``connected``, then every persisted REAL phase event in order (a snapshot
+    for a finished session, a live tail for one still ``running``), heartbeats while
+    idle, and ``stream_closed`` on terminal status. Resumable via the ``Last-Event-ID``
+    header (the last ``sequence`` seen). 404 if the session is unknown.
+    """
+    svc = _service(atlas)
+    # Validate BEFORE returning the StreamingResponse: an error inside the body
+    # generator lands after the response head is on the wire (past CORS), so the
+    # browser would see a truncated stream instead of a real 404.
+    if await svc.get_session(session_id) is None:
+        raise HTTPException(status_code=404, detail=f"research session {session_id!r} not found")
+
+    start_after = 0
+    last_event_id = request.headers.get("Last-Event-ID")
+    if last_event_id is not None:
+        try:
+            start_after = int(last_event_id)
+        except ValueError:
+            start_after = 0
+
+    return StreamingResponse(
+        _run_event_generator(session_id, request, svc, start_after),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

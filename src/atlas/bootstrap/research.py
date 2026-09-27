@@ -17,12 +17,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from atlas.infra.backends import PostgresConnection
 from atlas.infra.clock import Clock
 from atlas.infra.config import AppConfig, Settings
 from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
+from atlas.infra.routing_backends import BackendRouter
+from atlas.infra.storage_domains import StorageDomain
 from atlas.orchestration.agent_engine.engine import SupportsDispatch
 from atlas.orchestration.research.persistence import (
     PostgresResearchSessionStore,
@@ -47,18 +48,20 @@ def build_research(
     ids: IdGenerator,
     clock: Clock,
     db: Database | None = None,
+    router: BackendRouter | None = None,
 ) -> ResearchComponents:
     cfg = config.research
     if not cfg.enabled:
         _log.info("research.disabled", event_type="lifecycle")
         return ResearchComponents(service=None)
 
-    # Durable, resumable sessions on the SAME substrate everything else uses.
-    # Postgres only if a Supabase/Neon connection is actually configured (reserved
-    # seam — the placeholder is empty by default), else the shared SQLite DB.
+    # Durable, resumable sessions routed via the RESEARCH domain. The
+    # BackendRouter applies the fallback chain (RESEARCH dsn -> CORE dsn ->
+    # SQLite) and dedupes the pool; construction stays out of bootstrap (T4).
+    # Zero-config resolves RESEARCH to the shared SQLite substrate, as before.
     store: ResearchSessionStore | None = None
-    if settings.supabase_db_connection_string:
-        store = PostgresResearchSessionStore(PostgresConnection(settings.supabase_db_connection_string))
+    if router is not None and router.effective_dsn(StorageDomain.RESEARCH):
+        store = PostgresResearchSessionStore(router.resolve_postgres(StorageDomain.RESEARCH))
     elif db is not None:
         store = SqliteResearchSessionStore(db)
     if store is None:

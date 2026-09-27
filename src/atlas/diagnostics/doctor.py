@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 from atlas.app import Atlas
+from atlas.infra.db import _MIGRATIONS
+from atlas.infra.storage_domains import ACTIVE_DOMAINS, StorageDomain
 from atlas.safety.classifier import KNOWN_CONSTRAINTS
 from atlas.safety.manifest import verify_manifest
 from atlas.safety.matchers import KNOWN_MATCHERS
@@ -53,6 +55,60 @@ async def _count_identities(atlas: Atlas) -> int:
         return row[0] if row else 0
     except Exception:
         return 0
+
+
+async def _check_domain_backends(atlas: Atlas) -> list[CheckResult]:
+    """Per configured Postgres account (deduped by DSN): connectivity + schema_version.
+
+    Design rule (T6): CORE unreachable is a FAIL (the critical orchestration hot
+    path); ANY optional domain unreachable is a WARN — it degrades to its fallback,
+    exactly as ``SchemaProvisioner`` now tolerates at startup. Zero-config (every
+    domain on SQLite) reports one pass; the shared file itself is covered by the
+    ``database`` check. DSNs are SECRETS and are never printed — each account is
+    labelled by the domains that route to it.
+    """
+    router = atlas.router
+    core_dsn = router.effective_dsn(StorageDomain.CORE)
+    by_dsn: dict[str, list[StorageDomain]] = {}
+    for domain in ACTIVE_DOMAINS:
+        dsn = router.effective_dsn(domain)
+        if not dsn:
+            continue  # SQLite fallback — owned by Database, covered by `database`
+        by_dsn.setdefault(dsn, []).append(domain)
+    if not by_dsn:
+        return [CheckResult("backends.routing", "pass", "all domains on shared SQLite (zero-config)")]
+
+    target = len(_MIGRATIONS)
+    results: list[CheckResult] = []
+    for dsn, domains in by_dsn.items():
+        label = "+".join(d.value for d in domains)
+        is_core = dsn == core_dsn
+        conn = router.resolve_backend(domains[0])  # deduped per DSN
+        try:
+            await conn.fetchone("SELECT 1")
+        except Exception as exc:
+            status: Status = "fail" if is_core else "warn"
+            kind = "CORE" if is_core else "optional"
+            tail = "fatal hot path" if is_core else "domain degrades to fallback"
+            results.append(
+                CheckResult(f"backends.{label}", status, f"{kind} account unreachable ({type(exc).__name__}) — {tail}")
+            )
+            continue
+        try:
+            row = await conn.fetchone("SELECT version FROM schema_version LIMIT 1")
+        except Exception:
+            results.append(
+                CheckResult(f"backends.{label}", "warn", "reachable but schema_version absent — not provisioned")
+            )
+            continue
+        version = int(row["version"]) if row else 0
+        if version < target:
+            results.append(
+                CheckResult(f"backends.{label}", "warn", f"reachable, schema_version={version} < target {target} (stale)")
+            )
+        else:
+            results.append(CheckResult(f"backends.{label}", "pass", f"reachable, schema_version={version}/{target}"))
+    return results
 
 
 async def run_doctor(atlas: Atlas, *, verify_manifest_only: bool = False) -> list[CheckResult]:
@@ -152,6 +208,10 @@ async def run_doctor(atlas: Atlas, *, verify_manifest_only: bool = False) -> lis
             "database", "pass" if db_ok else "fail", "connected, migrations applied" if db_ok else "not connected"
         )
     )
+
+    # domain-routed Postgres accounts (T6): per configured DSN, connectivity +
+    # schema_version. CORE unreachable = fail; optional domain unreachable = warn.
+    results.extend(await _check_domain_backends(atlas))
 
     # audit ledger integrity
     audit_ok, audit_count = await atlas.audit.verify_chain()

@@ -101,7 +101,7 @@ class PostgresConnection:
 
     async def _ensure(self) -> Any:
         if self._pool is None:
-            import asyncpg  # type: ignore[import-not-found]  # lazy: optional in PG deployments
+            import asyncpg  # type: ignore[import-not-found, import-untyped, unused-ignore]  # lazy: optional in PG deployments
 
             self._pool = await asyncpg.create_pool(self._dsn)
         return self._pool

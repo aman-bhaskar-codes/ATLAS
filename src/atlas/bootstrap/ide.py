@@ -17,12 +17,13 @@ from dataclasses import dataclass
 
 from atlas.capabilities.ide.persistence import IDESessionStore, PostgresIDESessionStore, SqliteIDESessionStore
 from atlas.capabilities.ide.service import IDEService
-from atlas.infra.backends import PostgresConnection
 from atlas.infra.clock import Clock
 from atlas.infra.config import AppConfig, Settings
 from atlas.infra.db import Database
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
+from atlas.infra.routing_backends import BackendRouter
+from atlas.infra.storage_domains import StorageDomain
 from atlas.safety.engine import SafetyEngine
 from atlas.tools.base import Tool
 
@@ -44,6 +45,7 @@ def build_ide(
     clock: Clock,
     db: Database | None = None,
     command_tool: Tool | None = None,
+    router: BackendRouter | None = None,
 ) -> IDEComponents:
     if not config.ide.enabled:
         _log.info("ide.disabled", event_type="lifecycle")
@@ -58,12 +60,15 @@ def build_ide(
         )
         return IDEComponents(service=None)
 
-    # Durable, resumable workspaces (Phase 17/42) when the shared DB is wired —
-    # the SAME SQLite substrate the rest of the runtime uses (Constitution: one
-    # persistence layer). Without a db the service runs in-memory-only.
+    # Durable, resumable workspaces (Phase 17/42) routed via the IDE domain. The
+    # BackendRouter honours the legacy SUPABASE_DB_CONNECTION_STRING alias (which
+    # maps to IDE) and the fallback chain (IDE dsn -> CORE dsn -> SQLite), dedupes
+    # the pool, and keeps construction out of bootstrap (T5). Zero-config resolves
+    # IDE to the shared SQLite substrate, exactly as before. Without a db and no
+    # dsn the service runs in-memory-only.
     store: IDESessionStore | None = None
-    if settings.supabase_db_connection_string:
-        store = PostgresIDESessionStore(PostgresConnection(settings.supabase_db_connection_string))
+    if router is not None and router.effective_dsn(StorageDomain.IDE):
+        store = PostgresIDESessionStore(router.resolve_postgres(StorageDomain.IDE))
     elif db is not None:
         store = SqliteIDESessionStore(db)
     service = IDEService(

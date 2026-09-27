@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from atlas.infra.errors import ConfigError, ManifestError
+from atlas.infra.storage_domains import StorageDomain
 
 
 class Settings(BaseSettings):
@@ -68,6 +69,26 @@ class Settings(BaseSettings):
     supabase_url: str = Field(default="", validation_alias="SUPABASE_URL")
     supabase_service_role_key: str = Field(default="", validation_alias="SUPABASE_SERVICE_ROLE_KEY")
     supabase_db_connection_string: str = Field(default="", validation_alias="SUPABASE_DB_CONNECTION_STRING")
+    # ── Domain-routed Supabase DSNs (Storage Backbone) ────────────────
+    # One DSN per persistence domain (StorageDomain). Empty = fall back:
+    # the BackendRouter (infra.routing_backends, T2) resolves domain DSN ->
+    # CORE DSN -> SQLite, so accounts can be enabled incrementally. Plain
+    # fields (no validation_alias) so they read via the ATLAS_ env prefix as
+    # ATLAS_SUPABASE_<DOMAIN>_DSN — a validation_alias would silently fall
+    # through to the real .env in tests. Each is a SECRET (embeds a password);
+    # never logged/echoed except by env-name.
+    supabase_core_dsn: str = ""  # ATLAS_SUPABASE_CORE_DSN — Acct 1 (critical)
+    supabase_identity_dsn: str = ""  # ATLAS_SUPABASE_IDENTITY_DSN — Acct 2
+    supabase_memory_dsn: str = ""  # ATLAS_SUPABASE_MEMORY_DSN — Acct 3
+    supabase_ide_dsn: str = ""  # ATLAS_SUPABASE_IDE_DSN — Acct 4
+    supabase_research_dsn: str = ""  # ATLAS_SUPABASE_RESEARCH_DSN — Acct 5
+    supabase_telemetry_dsn: str = ""  # ATLAS_SUPABASE_TELEMETRY_DSN — Acct 6
+    supabase_analytics_dsn: str = ""  # ATLAS_SUPABASE_ANALYTICS_DSN — Acct 7 RESERVED
+    supabase_environment_dsn: str = ""  # ATLAS_SUPABASE_ENVIRONMENT_DSN — Acct 8 RESERVED
+    # Legacy execution-path Postgres DSN. Predates domain routing; the
+    # BackendRouter (T2) maps it to the CORE domain so existing single-Postgres
+    # setups keep working with no rename. Empty = no legacy CORE override.
+    database_url: str = ""  # ATLAS_DATABASE_URL — legacy, maps to CORE
     # ── Zero-cost-first policy ────────────────────────────────────────
     profile: str = "free_hybrid"  # local_free | free_hybrid | free_demo | production
     cost_policy: str = "free_only"  # zero_cost | free_only | free_preferred | balanced | unrestricted
@@ -76,6 +97,16 @@ class Settings(BaseSettings):
     def db_path(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         return self.data_dir / "atlas.db"
+
+    def configured_dsn(self, domain: StorageDomain) -> str:
+        """The raw Postgres DSN explicitly configured for ``domain``, or "".
+
+        No fallback is applied here — this returns ONLY what the operator set
+        for that exact domain. The BackendRouter (T2) layers the fallback chain
+        (domain -> CORE -> SQLite) on top. Returning "" means "this domain has
+        no dedicated account", which the router reads as "fall back".
+        """
+        return str(getattr(self, f"supabase_{domain.value}_dsn", ""))
 
     def effective_embed_api_key(self) -> str:
         """The key the embedder should use.

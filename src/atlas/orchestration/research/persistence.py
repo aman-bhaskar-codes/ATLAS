@@ -19,12 +19,13 @@ which is a different concept owned by a different layer.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+import json
+from typing import Any, Protocol, runtime_checkable
 
 from atlas.infra.backends import PostgresConnection
 from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
-from atlas.orchestration.research.records import ResearchSessionRecord
+from atlas.orchestration.research.records import ResearchEvent, ResearchSessionRecord
 
 _log = get_logger("atlas.research.persistence")
 
@@ -58,6 +59,34 @@ def _params(record: ResearchSessionRecord) -> tuple[object, ...]:
     )
 
 
+# ── Event trace (Slice R3) ───────────────────────────────────────────── #
+_INSERT_EVENT = "INSERT INTO research_query_events (session_id, phase, payload, ts) VALUES (?, ?, ?, ?)"
+_SELECT_EVENTS = (
+    "SELECT sequence, session_id, phase, payload, ts FROM research_query_events "
+    "WHERE session_id = ? AND sequence > ? ORDER BY sequence ASC LIMIT ?"
+)
+
+
+def _event_from_row(row: Any) -> ResearchEvent:
+    """Project a ``research_query_events`` row into a typed ``ResearchEvent``.
+
+    A payload that is not decodable JSON (a corrupt/foreign write) degrades to an
+    empty dict rather than aborting the whole stream — same tolerance the agent
+    event reader applies.
+    """
+    try:
+        payload = json.loads(row["payload"])
+    except (TypeError, ValueError):
+        payload = {}
+    return ResearchEvent(
+        sequence=int(row["sequence"]),
+        session_id=row["session_id"] or "",
+        phase=row["phase"] or "",
+        payload=payload if isinstance(payload, dict) else {},
+        ts=row["ts"] or "",
+    )
+
+
 @runtime_checkable
 class ResearchSessionStore(Protocol):
     """Durable store for research sessions. Async because a remote (Postgres) impl
@@ -70,6 +99,10 @@ class ResearchSessionStore(Protocol):
     async def list_sessions(self, *, limit: int = 50) -> tuple[ResearchSessionRecord, ...]: ...
 
     async def delete_session(self, session_id: str) -> None: ...
+
+    async def append_event(self, session_id: str, phase: str, payload: dict[str, Any], *, ts: str) -> ResearchEvent: ...
+
+    async def list_events(self, session_id: str, *, after_sequence: int = 0, limit: int = 1000) -> tuple[ResearchEvent, ...]: ...
 
 
 class SqliteResearchSessionStore:
@@ -105,6 +138,19 @@ class SqliteResearchSessionStore:
         await self._db.conn.execute("DELETE FROM research_query_sessions WHERE session_id=?", (session_id,))
         await self._db.conn.commit()
         _log.info("research.session.deleted", event_type="db", session_id=session_id)
+
+    async def append_event(self, session_id: str, phase: str, payload: dict[str, Any], *, ts: str) -> ResearchEvent:
+        cur = await self._db.conn.execute(_INSERT_EVENT, (session_id, phase, json.dumps(payload), ts))
+        await self._db.conn.commit()
+        # AUTOINCREMENT sequence assigned by SQLite — the SSE cursor / Last-Event-ID key.
+        return ResearchEvent(sequence=int(cur.lastrowid or 0), session_id=session_id, phase=phase, payload=payload, ts=ts)
+
+    async def list_events(
+        self, session_id: str, *, after_sequence: int = 0, limit: int = 1000
+    ) -> tuple[ResearchEvent, ...]:
+        cur = await self._db.conn.execute(_SELECT_EVENTS, (session_id, after_sequence, limit))
+        rows = await cur.fetchall()
+        return tuple(_event_from_row(r) for r in rows)
 
 
 class PostgresResearchSessionStore:
@@ -144,3 +190,19 @@ class PostgresResearchSessionStore:
         await self._conn.execute("DELETE FROM research_query_sessions WHERE session_id=?", (session_id,))
         await self._conn.commit()
         _log.info("research.session.deleted", event_type="db", backend="postgres", session_id=session_id)
+
+    async def append_event(self, session_id: str, phase: str, payload: dict[str, Any], *, ts: str) -> ResearchEvent:
+        # RETURNING the serial sequence keeps the SSE cursor authoritative on the remote
+        # backend too — same dialect-neutral shape, `?` translated to `$n` by infra/backends.
+        row = await self._conn.fetchone(
+            _INSERT_EVENT + " RETURNING sequence", (session_id, phase, json.dumps(payload), ts)
+        )
+        sequence = int(row["sequence"]) if row is not None else 0
+        await self._conn.commit()
+        return ResearchEvent(sequence=sequence, session_id=session_id, phase=phase, payload=payload, ts=ts)
+
+    async def list_events(
+        self, session_id: str, *, after_sequence: int = 0, limit: int = 1000
+    ) -> tuple[ResearchEvent, ...]:
+        rows = await self._conn.fetchall(_SELECT_EVENTS, (session_id, after_sequence, limit))
+        return tuple(_event_from_row(r) for r in rows)

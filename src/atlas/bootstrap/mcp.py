@@ -32,6 +32,7 @@ def build_mcp(
     tooling_registry: ToolingRegistry,
     catalog: ToolCatalog | None,
     bus: MessageBus | None = None,
+    safety: object | None = None,
 ) -> MCPComponents:
     definitions = load_mcp_server_definitions(config_dir)
 
@@ -48,6 +49,7 @@ def build_mcp(
         tooling_registry=tooling_registry,
         bus=bus,
         catalog_refresher=catalog_refresher,
+        safety=safety,
     )
 
     # Warm the catalog: servers configured `enabled: true` with cached

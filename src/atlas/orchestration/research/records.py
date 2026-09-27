@@ -19,7 +19,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class ResearchStatus(StrEnum):
@@ -43,6 +43,53 @@ class ResearchStatus(StrEnum):
 TERMINAL_RESEARCH_STATUSES = frozenset(
     {ResearchStatus.COMPLETED.value, ResearchStatus.REFUSED.value, ResearchStatus.FAILED.value}
 )
+
+
+class ResearchPhase(StrEnum):
+    """A real phase a streamed research run passes through, in emission order.
+
+    Every phase has a REAL backend origin — it is emitted only when the run
+    actually reaches that state, never as a fabricated token stream (§69).
+    ``STARTED``/``RETRIEVING`` are emitted live before/around the governed dispatch;
+    ``ROUND`` replays each real supervisor round from the envelope; the rest are
+    derived from the actual grounded outcome (source count, answer text, citation
+    count, honesty gate). Exactly one terminal phase closes the stream.
+    """
+
+    STARTED = "started"
+    RETRIEVING = "retrieving"
+    ROUND = "round"
+    SOURCES_FOUND = "sources_found"
+    SYNTHESIZING = "synthesizing"
+    ANSWER = "answer"
+    CITATIONS = "citations"
+    GROUNDING = "grounding"
+    COMPLETED = "completed"
+    REFUSED = "refused"
+    FAILED = "failed"
+
+
+TERMINAL_RESEARCH_PHASES = frozenset(
+    {ResearchPhase.COMPLETED.value, ResearchPhase.REFUSED.value, ResearchPhase.FAILED.value}
+)
+
+
+class ResearchEvent(BaseModel):
+    """One persisted trace event for a streamed research session — the SSE unit.
+
+    A faithful projection of a ``research_query_events`` row: ``sequence`` is the
+    AUTOINCREMENT cursor (stable, monotonic, gap-tolerant — the ``id:`` frame and
+    ``Last-Event-ID`` resume key), ``phase`` is a ``ResearchPhase`` value, and
+    ``payload`` carries that phase's real facts (e.g. ``{"count": 5}`` for
+    ``sources_found``). Frozen: a delivered event never mutates.
+    """
+
+    model_config = {"frozen": True}
+    sequence: int = 0
+    session_id: str = ""
+    phase: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
+    ts: str = ""
 
 
 class ResearchCitation(BaseModel):

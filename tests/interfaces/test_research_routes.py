@@ -22,6 +22,7 @@ from atlas.interfaces.api.routes_research import router as research_router
 from atlas.orchestration.research.records import (
     ResearchAnswer,
     ResearchCitation,
+    ResearchEvent,
     ResearchSessionRecord,
     ResearchSource,
 )
@@ -82,6 +83,18 @@ class FakeResearchService:
             return _failed("sess-fail", question)
         return _completed("sess-sync", question)
 
+    async def start_session_background(self, question: str, *, mode: str | None = None) -> ResearchSessionRecord:
+        self.calls.append(("start_session_background", question))
+        return ResearchSessionRecord(
+            session_id="sess-bg",
+            correlation_id="cid",
+            question=question,
+            mode="deep_research",
+            status="running",
+            created_ts="2026-09-26T00:00:00+00:00",
+            updated_ts="2026-09-26T00:00:00+00:00",
+        )
+
     async def follow_up(self, session_id: str, question: str, *, mode: str | None = None) -> ResearchSessionRecord:
         self.calls.append(("follow_up", session_id))
         if session_id == "missing":
@@ -90,6 +103,14 @@ class FakeResearchService:
 
     async def get_session(self, session_id: str) -> ResearchSessionRecord | None:
         return None if session_id == "missing" else _completed(session_id, "prior")
+
+    async def session_events(self, session_id: str, *, after_sequence: int = 0) -> tuple[ResearchEvent, ...]:
+        events = (
+            ResearchEvent(sequence=1, session_id=session_id, phase="started", ts="t"),
+            ResearchEvent(sequence=2, session_id=session_id, phase="sources_found", payload={"count": 1}, ts="t"),
+            ResearchEvent(sequence=3, session_id=session_id, phase="completed", payload={"status": "completed"}, ts="t"),
+        )
+        return tuple(e for e in events if e.sequence > after_sequence)
 
     async def list_sessions(self, *, limit: int = 50) -> tuple[ResearchSessionRecord, ...]:
         return (_completed("sess-sync", "a"), _failed("sess-fail", "b"))
@@ -166,3 +187,44 @@ def test_follow_up_links_to_parent() -> None:
 def test_follow_up_unknown_parent_is_404() -> None:
     resp = _client(service=FakeResearchService()).post(f"{BASE}/sessions/missing/follow-up", json={"question": "q"})
     assert resp.status_code == 404
+
+
+def test_background_start_returns_running_stub() -> None:
+    svc = FakeResearchService()
+    resp = _client(service=svc).post(f"{BASE}/sessions", json={"question": "stream me", "background": True})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "running"
+    assert body["answer"] is None
+    assert ("start_session_background", "stream me") in svc.calls
+
+
+def test_stream_unknown_session_is_404() -> None:
+    resp = _client(service=FakeResearchService()).get(f"{BASE}/sessions/missing/stream")
+    assert resp.status_code == 404
+
+
+def test_stream_emits_connected_phase_frames_and_closes() -> None:
+    resp = _client(service=FakeResearchService()).get(f"{BASE}/sessions/sess-x/stream")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    body = resp.text
+    assert "event: connected" in body
+    # Each real phase event is framed with its sequence as the SSE id.
+    assert "event: research_event" in body
+    assert "id: 1" in body and "id: 3" in body
+    assert '"phase":"sources_found"' in body
+    # Terminal session closes the stream.
+    assert "event: stream_closed" in body
+    assert '"status":"completed"' in body
+
+
+def test_stream_resumes_from_last_event_id() -> None:
+    resp = _client(service=FakeResearchService()).get(
+        f"{BASE}/sessions/sess-x/stream", headers={"Last-Event-ID": "2"}
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    # Resuming past sequence 2 replays only the strict tail (event 3), never 1 or 2.
+    assert "id: 3" in body
+    assert "id: 1\n" not in body and "id: 2\n" not in body

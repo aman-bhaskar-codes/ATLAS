@@ -24,8 +24,10 @@ import { CommandPalette } from "@/components/command/CommandPalette";
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isWorkbench = pathname === "/dev" || pathname.startsWith("/dev/");
+  // Only a research SESSION (/research/<id>) is bare; /research stays framed.
+  const isResearchSession = pathname.startsWith("/research/");
 
-  if (isWorkbench) {
+  if (isWorkbench || isResearchSession) {
     return <>{children}</>;
   }
 

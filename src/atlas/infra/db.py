@@ -1898,6 +1898,24 @@ _MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_research_sessions_updated
         ON research_query_sessions(updated_ts DESC);
     """,
+    # ── Research surface (Phase 1, Slice R3) ───────────────────────────────── #
+    # Durable per-session event trace behind the streaming research console. Each
+    # row is one REAL phase the run passed through (started → retrieving → round →
+    # sources_found → synthesizing → answer → citations → grounding → terminal) —
+    # never a fabricated token stream (§69). `sequence` is a global AUTOINCREMENT
+    # primary key, giving the SSE stream a stable, monotonic, gap-tolerant cursor
+    # (`id:` frames + `Last-Event-ID` resume) scoped per session by the index.
+    """
+    CREATE TABLE IF NOT EXISTS research_query_events (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        phase TEXT NOT NULL DEFAULT '',
+        payload TEXT NOT NULL DEFAULT '{}',
+        ts TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_research_events_session
+        ON research_query_events(session_id, sequence);
+    """,
 )
 
 

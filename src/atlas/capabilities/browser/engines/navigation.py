@@ -8,6 +8,7 @@ from typing import Any
 from atlas.capabilities.browser.domain.page import PageHandle, PageState
 from atlas.capabilities.browser.errors import NavigationError, UnsafeURLError
 from atlas.capabilities.browser.page.page_manager import PageManager
+from atlas.capabilities.browser.security.egress import EgressPolicy
 from atlas.capabilities.browser.security.reputation import ReputationVerdict
 from atlas.infra.ids import CorrelationId
 
@@ -15,12 +16,27 @@ _log = logging.getLogger("atlas.browser.navigation")
 
 
 class NavigationEngine:
-    def __init__(self, page_manager: PageManager, state_builder: Any, reputation_checker: Any = None) -> None:
+    def __init__(
+        self,
+        page_manager: PageManager,
+        state_builder: Any,
+        reputation_checker: Any = None,
+        egress_policy: EgressPolicy | None = None,
+    ) -> None:
         self._pages = page_manager
         self._builder = state_builder
         self._reputation = reputation_checker
+        # Fail-closed egress gate. Defaults to the global SSRF guard so every
+        # NavigationEngine denies internal/non-http targets even when no explicit
+        # policy or reputation checker is configured (§23 untrusted redirects).
+        self._egress = egress_policy if egress_policy is not None else EgressPolicy()
 
     async def goto(self, handle: PageHandle, url: str, cid: CorrelationId) -> PageState:
+        # Default-deny egress runs BEFORE reputation: it fails closed, whereas the
+        # reputation checker fails open. An out-of-scope or internal target never
+        # reaches the page provider.
+        self._egress.check(url)
+
         if self._reputation is not None:
             result = await self._reputation.check(url)
             if result.verdict == ReputationVerdict.MALICIOUS:

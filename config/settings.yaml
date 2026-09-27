@@ -142,6 +142,18 @@ ide:
   max_tree_entries: 20000 # ceiling on a single tree() walk
   max_open_file_bytes: 2000000 # refuse to open files larger than this
 
+# ── Research surface (Phase 1, Perplexity-class) ──────────────────────── #
+# Off by default (mirrors ide/agents). Enabling mounts /api/v1/research and
+# builds ResearchService, which drives the SAME governed `knowledge` tool
+# (search / research / deep_research) through SafetyEngine.guard — no second
+# execution path, no second RAG. default_mode=deep_research gives real live
+# web reach via the fabric's keyless discovery providers.
+research:
+  enabled: true
+  default_mode: deep_research
+  max_question_chars: 4000
+  max_sessions_listed: 50
+
 
 
 # ── Routing fabric (Part 3) ──────────────────────────────────────────── #

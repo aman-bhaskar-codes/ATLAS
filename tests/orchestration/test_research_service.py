@@ -21,7 +21,12 @@ import pytest
 from atlas.infra.db import Database
 from atlas.infra.ids import CorrelationId, ExecutionId, TaskId
 from atlas.orchestration.research.persistence import SqliteResearchSessionStore
-from atlas.orchestration.research.records import ResearchSessionRecord, ResearchStatus, build_result
+from atlas.orchestration.research.records import (
+    ResearchPhase,
+    ResearchSessionRecord,
+    ResearchStatus,
+    build_result,
+)
 from atlas.orchestration.research.service import ResearchError, ResearchService
 from atlas.orchestration.types import Action, Observation
 
@@ -201,6 +206,77 @@ async def test_follow_up_unknown_session_raises(db: Database) -> None:
     svc = _service(db, FakeDispatcher([]))
     with pytest.raises(ResearchError):
         await svc.follow_up("missing", "q")
+
+
+async def test_background_session_streams_real_phase_trace(db: Database) -> None:
+    obs = Observation(step=0, ok=True, content=_deep_payload(answered=True))
+    dispatcher = FakeDispatcher([obs])
+    svc = _service(db, dispatcher)
+
+    stub = await svc.start_session_background("what is RAG?")
+    # The stub is addressable and RUNNING the instant it returns; no answer yet.
+    assert stub.status == ResearchStatus.RUNNING.value
+    assert stub.answer is None
+
+    # Await convergence, then the stored record is terminal + grounded.
+    final = await svc.wait_for(stub.session_id)
+    assert final is not None
+    assert final.status == ResearchStatus.COMPLETED.value
+    assert final.answer is not None and final.answer.answered is True
+
+    # The durable phase trace is REAL and derived from the observation (§69):
+    events = await svc.session_events(stub.session_id)
+    phases = [e.phase for e in events]
+    assert phases[0] == ResearchPhase.STARTED.value
+    assert phases[1] == ResearchPhase.RETRIEVING.value
+    # One ROUND event per real supervisor round (the payload has 2).
+    assert phases.count(ResearchPhase.ROUND.value) == 2
+    assert ResearchPhase.SOURCES_FOUND.value in phases
+    assert ResearchPhase.SYNTHESIZING.value in phases
+    assert ResearchPhase.CITATIONS.value in phases
+    assert phases[-1] == ResearchPhase.COMPLETED.value
+    # sequence is strictly monotonic — the SSE cursor.
+    seqs = [e.sequence for e in events]
+    assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
+    # sources_found carries the REAL count.
+    found = next(e for e in events if e.phase == ResearchPhase.SOURCES_FOUND.value)
+    assert found.payload["count"] == 2
+
+
+async def test_session_events_resumable_from_cursor(db: Database) -> None:
+    obs = Observation(step=0, ok=True, content=_deep_payload(answered=True))
+    svc = _service(db, FakeDispatcher([obs]))
+    stub = await svc.start_session_background("resume?")
+    await svc.wait_for(stub.session_id)
+
+    everything = await svc.session_events(stub.session_id)
+    assert len(everything) > 3
+    # A reader that resumes past the 2nd event sees only the strict tail.
+    tail = await svc.session_events(stub.session_id, after_sequence=everything[1].sequence)
+    assert [e.sequence for e in tail] == [e.sequence for e in everything[2:]]
+
+
+async def test_background_refusal_closes_trace_with_refused(db: Database) -> None:
+    obs = Observation(step=0, ok=True, content=_deep_payload(answered=False))
+    svc = _service(db, FakeDispatcher([obs]))
+    stub = await svc.start_session_background("ungrounded?", mode="search")
+    final = await svc.wait_for(stub.session_id)
+
+    assert final is not None and final.status == ResearchStatus.REFUSED.value
+    phases = [e.phase for e in await svc.session_events(stub.session_id)]
+    assert phases[-1] == ResearchPhase.REFUSED.value
+
+
+async def test_background_denied_dispatch_closes_trace_with_failed(db: Database) -> None:
+    obs = Observation(step=0, ok=False, error="denied (tier CONFIRM): web egress blocked")
+    svc = _service(db, FakeDispatcher([obs]))
+    stub = await svc.start_session_background("blocked?")
+    final = await svc.wait_for(stub.session_id)
+
+    assert final is not None and final.status == ResearchStatus.FAILED.value
+    assert final.error is not None and "denied" in final.error
+    phases = [e.phase for e in await svc.session_events(stub.session_id)]
+    assert phases[-1] == ResearchPhase.FAILED.value
 
 
 def test_build_result_handles_flat_search_payload() -> None:

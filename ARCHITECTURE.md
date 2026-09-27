@@ -116,10 +116,12 @@ anything above it. `safety`/`tools` may not import provider SDKs.
 | `cli.py` | Typer, ~30 commands. |
 
 ### infra/
-`Database` (aiosqlite, WAL, 13 hand-rolled migrations), `MessageBus` (durable dual-write
-`event_queue` + append-only `event_log`, batch dispatch), `CronScheduler`, `ServiceRegistry`
-(lifecycle ordering), circuit breaker, metrics, structlog logging, tracer, ids, clock, backup,
-feedback/workflow stores, typed error hierarchy.
+`Database` (aiosqlite, WAL, hand-rolled migrations in `_MIGRATIONS`), `BackendRouter`
+(the single domain→`Connection` persistence seam — see **Domain-Routed Persistence** below),
+`SchemaProvisioner` (idempotent per-account Postgres provisioning), `MessageBus` (durable
+dual-write `event_queue` + append-only `event_log`, batch dispatch), `CronScheduler`,
+`ServiceRegistry` (lifecycle ordering), circuit breaker, metrics, structlog logging, tracer,
+ids, clock, backup, feedback/workflow stores, typed error hierarchy.
 
 ### frontend/ (Next.js)
 Pages: dashboard, tasks (+ [task_id], live), approvals, memory, capabilities, audit, events/search.
@@ -141,6 +143,54 @@ schedules, tools, models.
 | Audit | SQLite, hash-chained | Durable, tamper-evident |
 | Bus events | `event_queue` + `event_log` | Durable (at-least-once) |
 
+## Domain-Routed Persistence (Storage Backbone)
+
+ATLAS persists through **one seam**, not scattered connection construction:
+`BackendRouter.resolve_backend(domain) -> Connection` (`infra/routing_backends.py`).
+Every store obtains its backend here and nowhere else, so distinct components can
+each live on a SEPARATE Postgres (Supabase) account — selectable by env config —
+while zero-config still resolves everything to the shared SQLite file. Nothing
+breaks when a DSN is unset.
+
+**Eight logical accounts** (`infra/storage_domains.py`) — six active, two reserved:
+
+| Domain | Acct | Holds | Criticality |
+|---|---|---|---|
+| `CORE` | 1 | orchestration hot path, event bus, safety/audit, tooling, routing | **critical** |
+| `IDENTITY` | 2 | secrets, identities (blast-radius isolation) | high |
+| `MEMORY` | 3 | episodes, semantic facts, user_model, curated memory, trajectories | high |
+| `IDE` | 4 | ide_sessions, ide_workspaces, dev-agent ledger/checkpoints | optional |
+| `RESEARCH` | 5 | research sessions/feedback, fabric_*, knowledge docs/chunks, rag | optional |
+| `TELEMETRY` | 6 | llm_calls, cognitive/eval/adaptation/canary telemetry | optional |
+| `ANALYTICS` | 7 | RESERVED — warehouse/telemetry overflow | reserved |
+| `ENVIRONMENT` | 8 | RESERVED — prod/dev split or MCP registry DB | reserved |
+
+**Eight design rules:**
+1. **ONE seam** — `resolve_backend(domain) -> Connection`; no store builds a `PostgresConnection` directly.
+2. **Pool dedupe keyed by DSN, not domain** — six domains co-located on one account open ONE asyncpg pool.
+3. **Fallback chain** — explicit domain DSN → legacy alias → CORE DSN → SQLite. Enables incremental account adoption.
+4. **Backward compat** — `ATLAS_DATABASE_URL` → CORE; `SUPABASE_DB_CONNECTION_STRING` → IDE. Existing single-Postgres setups keep working with no rename.
+5. **No cross-domain FKs** — a foreign key never crosses a domain boundary (enforced by `tests/infra/test_domain_fk_invariant.py`), so accounts split cleanly.
+6. **Lifecycle-owned resolver** — the router is a `Service`; pools are lazy (opened on first query), closed in reverse open order on shutdown, idempotent.
+7. **SafetyEngine / tool dispatch / audit funnel UNTOUCHED** — this is persistence routing only, never a second execution path.
+8. **Idempotent, transactional provisioning** — `SchemaProvisioner` brings each account up the same `_MIGRATIONS` chain with a per-account `schema_version` row; the SQLite DDL is translated to Postgres at provision time (`INTEGER PRIMARY KEY AUTOINCREMENT`→`BIGSERIAL`, `REAL`→`DOUBLE PRECISION`, `ADD COLUMN`→`ADD COLUMN IF NOT EXISTS`), which makes replay after a mid-chain failure safe.
+
+**Degradation posture** — CORE unreachable is FATAL (the orchestration hot path);
+any optional account unreachable is a WARN that degrades to fallback — enforced at
+startup (`SchemaProvisioner.provision`) and reported per account by `atlas doctor`
+(`backends.<domains>`: connectivity + `schema_version`). DSNs are secrets and are
+never logged or returned — accounts are identified by domain name only.
+
+**Severed cross-domain references** — the split kept every FK intra-domain; edges
+that would otherwise couple accounts are expressed as plain id columns (no
+`REFERENCES`), e.g. audit/telemetry rows referencing a `task_id` (CORE) or a
+`trajectory`'s originating task, and research/IDE session rows referencing a
+`correlation_id`. Only same-domain FKs remain: `knowledge_chunks→knowledge_documents`
+and `fabric_chunks→fabric_documents` (RESEARCH); `decision_traces/failure_records/
+experiences→trajectories` and `experience_applications→experiences` (MEMORY);
+`tool_namespaces/tool_definitions→tool_sources`, `tool_definitions→tool_namespaces`,
+`tool_operations→tool_definitions` (CORE).
+
 ## Extension Points
 
 - `Verifier` protocol (goal.py) — add domain verifiers
@@ -156,3 +206,4 @@ schedules, tools, models.
 - `Event` subclasses on the bus — new observability streams
 - `bootstrap/` builders — new bounded construction modules
 - `CapabilitySpec` registration — new capabilities with safety tiers
+- `StorageDomain` + `BackendRouter` (infra/routing_backends.py) — route a component's store onto its own Postgres account by setting `ATLAS_SUPABASE_<DOMAIN>_DSN`; stores resolve through `resolve_backend(domain)` / `resolve_postgres(domain)` with SQLite fallback, no code change. See **Domain-Routed Persistence** above.

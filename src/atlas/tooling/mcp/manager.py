@@ -41,6 +41,7 @@ class MCPServerManager:
         catalog_refresher: Any | None = None,  # async (source_id) -> None — Part-2 catalog hook (§41)
         refresh_debounce_s: float = _DEFAULT_REFRESH_DEBOUNCE_S,
         command_policy: Any | None = None,
+        safety: Any | None = None,  # SafetyEngine — the single funnel every MCP call passes (§53/§74)
     ) -> None:
         self._definitions = {d.server_id: d for d in definitions}
         self._registry = tooling_registry
@@ -51,7 +52,7 @@ class MCPServerManager:
         self._connections: dict[str, MCPConnection] = {}
         self._live_definitions: dict[str, list[UniversalToolDefinition]] = {}
         self._refresh_tasks: dict[str, asyncio.Task[None]] = {}
-        self._mcp_adapter = MCPToolAdapter(self)
+        self._mcp_adapter = MCPToolAdapter(self, safety=safety)
         self._shutting_down = False
 
     # ── Definitions / config (§7-§8) ──────────────────────────────── #

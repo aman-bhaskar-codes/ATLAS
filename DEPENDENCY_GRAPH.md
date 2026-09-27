@@ -31,7 +31,9 @@ Three whitelisted exceptions exist (documented in `importlinter.ini`).
 
 ```
 build()
- ├── bootstrap.infrastructure ─▶ Settings, AppConfig, Database, MessageBus, AuditLog,
+ ├── bootstrap.infrastructure ─▶ Settings, AppConfig, Database, BackendRouter
+ │                               (domain→Connection seam, registered "backend_router"
+ │                               deps=("db",)), MessageBus, AuditLog,
  │                               KillSwitch, IdGenerator, Clock, Metrics, Tracer
  ├── bootstrap.safety ─────────▶ TierClassifier, SafetyEngine (manifest-driven)
  ├── IdentityPlatform           (secret store on Database; outbound credentials only)
@@ -83,6 +85,12 @@ build()
 
 **Event fan-out:**
 `EventPublisher → MessageBus → event_queue/event_log (SQLite) → handlers + API SSE/WS broadcasters`
+
+**Persistence resolution (Storage Backbone):**
+`store → BackendRouter.resolve_backend(domain) → {PostgresConnection (deduped per DSN, lazy asyncpg pool) | shared SQLite Database} — fallback chain: domain DSN → legacy alias → CORE DSN → SQLite`
+
+**Schema provisioning (Atlas.start):**
+`Atlas.start() → lifecycle.start() → SchemaProvisioner.provision() → per distinct Postgres DSN: translate _MIGRATIONS → apply with per-account schema_version (CORE unreachable=fatal, optional=warn+degrade)`
 
 **Capability call:**
 `Action → ToolDispatcher → CapabilityDispatcher → SafetyEngine.guard() → platform provider → audit`

@@ -42,6 +42,7 @@ from atlas.infra.llm_tracker import LLMCallTracker
 from atlas.infra.logging import configure_logging, get_logger
 from atlas.infra.metrics import Metrics
 from atlas.infra.registry import ServiceRegistry
+from atlas.infra.routing_backends import BackendRouter
 from atlas.infra.scheduler import CronScheduler
 from atlas.infra.tracing import Tracer
 from atlas.infra.workflows import WorkflowStore
@@ -96,6 +97,7 @@ class Atlas:
     db: Database
     registry: ServiceRegistry
     lifecycle: Lifecycle
+    router: BackendRouter
     ids: IdGenerator
     clock: Clock
     metrics: Metrics
@@ -177,6 +179,14 @@ class Atlas:
         # The supervisor verifies infrastructure during its startup phases. The
         # lifecycle owns the database connection, so it must run first.
         await self.lifecycle.start()
+
+        # Storage Backbone (T3/T4): provision the schema on any Postgres account a
+        # StorageDomain routes to, using the lifecycle-owned router (its pool is
+        # then reused by the stores). Pure no-op under zero-config — every domain
+        # resolves to SQLite, which Database already provisioned above.
+        from atlas.infra.schema_provisioner import SchemaProvisioner
+
+        await SchemaProvisioner(self.router).provision()
 
         # Ensure both curated surfaces exist before anything reads or swaps them.
         # Consolidation compare-and-swaps on a content hash, so it needs a row to
@@ -283,6 +293,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     ids, clock, metrics, tracer = infra.ids, infra.clock, infra.metrics, infra.tracer
     db, registry, lifecycle, bus = infra.db, infra.registry, infra.lifecycle, infra.bus
     audit, killswitch = infra.audit, infra.killswitch
+    router = infra.router  # the single persistence seam (T4); lifecycle-owned
 
     # ── Safety ───────────────────────────────────────────────────── #
     from atlas.bootstrap.safety import build_safety
@@ -571,6 +582,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         clock=clock,
         db=db,
         command_tool=tools.get("shell"),
+        router=router,
     )
 
     notifier_adapter = NotificationPlatformAdapter(notification_platform, clock, ids)
@@ -654,6 +666,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         ids=ids,
         clock=clock,
         db=db,
+        router=router,
     )
 
     # ── Research surface (Phase 1) ────────────────────────────────── #
@@ -672,6 +685,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         ids=ids,
         clock=clock,
         db=db,
+        router=router,
     )
 
     # ── Universal tooling fabric ──────────────────────────────────── #
@@ -740,6 +754,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         tooling_registry=tooling.registry,
         catalog=tooling.catalog,
         bus=bus,
+        safety=safety,
     )
 
     # ── Feedback, Scheduler, Workflows ───────────────────────────── #
@@ -782,6 +797,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         db=db,
         registry=registry,
         lifecycle=lifecycle,
+        router=router,
         ids=ids,
         clock=clock,
         metrics=metrics,

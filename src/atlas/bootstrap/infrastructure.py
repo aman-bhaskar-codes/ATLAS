@@ -13,6 +13,7 @@ from atlas.infra.lifecycle import Lifecycle
 from atlas.infra.logging import get_logger
 from atlas.infra.metrics import Metrics
 from atlas.infra.registry import ServiceRegistry
+from atlas.infra.routing_backends import BackendRouter
 from atlas.infra.tracing import Tracer
 from atlas.safety.audit import AuditLog
 from atlas.safety.killswitch import KillSwitch
@@ -32,6 +33,7 @@ class InfraComponents:
     bus: MessageBus
     audit: AuditLog
     killswitch: KillSwitch
+    router: BackendRouter
 
 
 def build_infrastructure(settings: Settings, config: AppConfig) -> InfraComponents:
@@ -44,6 +46,12 @@ def build_infrastructure(settings: Settings, config: AppConfig) -> InfraComponen
     db = Database(settings.db_path())
     registry = ServiceRegistry()
     registry.register("db", db)
+    # The single persistence seam: every store obtains its Connection here (T4).
+    # Depends on db so it starts after / stops before the SQLite file it falls
+    # back to; stop() closes every Postgres pool it opened. Lazy — no pool opens
+    # until a store issues its first query, so zero-config pays nothing.
+    router = BackendRouter(settings, db)
+    registry.register("backend_router", router, deps=("db",))
     lifecycle = Lifecycle(registry)
 
     bus = MessageBus(db)
@@ -86,4 +94,5 @@ def build_infrastructure(settings: Settings, config: AppConfig) -> InfraComponen
         bus=bus,
         audit=audit,
         killswitch=killswitch,
+        router=router,
     )
