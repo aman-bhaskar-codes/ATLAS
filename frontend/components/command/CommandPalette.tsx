@@ -105,6 +105,7 @@ export function CommandPalette() {
         label: `Create task: “${trimmed}”`,
         hint: "Enter to run",
         run: async () => {
+          if (creating) return;
           setCreating(true);
           setError(null);
           try {
@@ -134,7 +135,7 @@ export function CommandPalette() {
       });
     }
     return list;
-  }, [trimmed, filteredNav, close, router]);
+  }, [trimmed, filteredNav, close, router, creating]);
 
   // Keep the active index inside the (changing) list bounds without a state
   // write in an effect — derive a clamped value at render time.

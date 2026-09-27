@@ -12,6 +12,7 @@ export function useDecideApproval() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['trust', 'approvals', 'pending'] });
+      queryClient.invalidateQueries({ queryKey: ['approvals'] });
       queryClient.setQueryData(['trust', 'approvals', data.id], data);
     },
   });
