@@ -131,3 +131,48 @@ class TestNativeSandboxStreaming:
         # Past the child's own delay: if it were still alive it would have written.
         await asyncio.sleep(1.0)
         assert not marker.exists(), "child kept running after the stream was closed"
+
+
+class TestRequestedCwd:
+    """The ADE runs every workspace command in the workspace ROOT. A sandbox that
+    dropped `cwd` would run a confirmed `git commit` / `pytest` in whatever directory
+    the server was started in — the wrong repository. Pins the REAL behaviour."""
+
+    @pytest.mark.asyncio
+    async def test_run_honors_the_requested_cwd(self, tmp_path: Path) -> None:
+        sandbox = NativeSandbox(env="dev")
+        workdir = tmp_path / "workspace"
+        workdir.mkdir()
+        result = await sandbox.run(["pwd"], mounts={}, network=False, timeout_s=5.0, cwd=str(workdir))
+        assert result.exit_code == 0
+        assert Path(result.stdout_tail.strip()).resolve() == workdir.resolve()
+
+    @pytest.mark.asyncio
+    async def test_run_remaps_a_container_cwd_to_its_host_mount(self, tmp_path: Path) -> None:
+        sandbox = NativeSandbox(env="dev")
+        host = tmp_path / "work"
+        host.mkdir()
+        result = await sandbox.run(["pwd"], mounts={str(host): "/work"}, network=False, timeout_s=5.0, cwd="/work")
+        assert result.exit_code == 0
+        assert Path(result.stdout_tail.strip()).resolve() == host.resolve()
+
+    @pytest.mark.asyncio
+    async def test_run_without_a_cwd_still_inherits_the_process_cwd(self, tmp_path: Path) -> None:
+        sandbox = NativeSandbox(env="dev")
+        result = await sandbox.run(["pwd"], mounts={}, network=False, timeout_s=5.0)
+        assert result.exit_code == 0
+        assert Path(result.stdout_tail.strip()).resolve() == Path.cwd().resolve()
+
+    @pytest.mark.asyncio
+    async def test_run_stream_honors_the_requested_cwd(self, tmp_path: Path) -> None:
+        from atlas.safety.sandbox import SandboxChunk, SandboxResult
+
+        sandbox = NativeSandbox(env="dev")
+        workdir = tmp_path / "streamed"
+        workdir.mkdir()
+        final: SandboxResult | None = None
+        async for item in sandbox.run_stream(["pwd"], mounts={}, network=False, timeout_s=5.0, cwd=str(workdir)):
+            if not isinstance(item, SandboxChunk):
+                final = item
+        assert final is not None and final.exit_code == 0
+        assert Path(final.stdout_tail.strip()).resolve() == workdir.resolve()

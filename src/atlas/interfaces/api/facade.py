@@ -364,7 +364,12 @@ class DefaultAtlasControlPlane:
         return []
 
     async def decide_approval(self, approval_id: str, command: ApprovalDecisionRequest) -> ApprovalResponse:
-        raise NotImplementedError("decide_approval requires approval storage (Phase Three)")
+        # Approval storage is deferred (see pending_approvals): nothing is ever
+        # queued, so no approval_id can resolve. A 404 is the honest answer —
+        # NOT a 500 (approval_id is well-formed, the server is not broken) and
+        # NOT a fabricated "approved"/"denied" decision (§69). When Phase 3 wires
+        # the approvals table this looks up the row and applies the decision.
+        raise NotFoundError(f"Approval not found: {approval_id}")
 
     async def get_capabilities(self) -> list[CapabilityResponse]:
         """Report what the runtime actually has, per capability.

@@ -51,16 +51,14 @@ class NativeSandbox:
         network: bool = False,
         timeout_s: float = 60.0,
         stdin: bytes | None = None,
+        cwd: str | None = None,
     ) -> SandboxResult:
         # Remap mount_target paths back to their host equivalents in the argv.
         # e.g. /work/answer.txt -> /Users/.../scratch/answer.txt
-        remapped = []
-        for arg in command:
-            for host_path, container_path in mounts.items():
-                if arg.startswith(container_path):
-                    arg = arg.replace(container_path, host_path, 1)
-                    break
-            remapped.append(arg)
+        # `cwd` gets the SAME treatment: the ADE names its workspace root, and a
+        # container-style target (/work/...) must resolve to the real host directory —
+        # running in the server's own cwd would act on the wrong repository.
+        remapped = self._remap(command, mounts)
 
         _log.info("sandbox.native.run", event_type="sandbox", cmd=remapped, network=network)
 
@@ -76,6 +74,7 @@ class NativeSandbox:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env={**os.environ},
+                cwd=self._remap_path(cwd, mounts) if cwd else None,
             )
             out_bytes, err_bytes = await asyncio.wait_for(proc.communicate(input=stdin), timeout=timeout_s)
             code = proc.returncode if proc.returncode is not None else -1
@@ -107,14 +106,18 @@ class NativeSandbox:
 
     def _remap(self, command: list[str], mounts: dict[str, str]) -> list[str]:
         """Map container mount targets in argv back to their host paths."""
-        remapped = []
-        for arg in command:
-            for host_path, container_path in mounts.items():
-                if arg.startswith(container_path):
-                    arg = arg.replace(container_path, host_path, 1)
-                    break
-            remapped.append(arg)
-        return remapped
+        return [self._remap_path(arg, mounts) for arg in command]
+
+    @staticmethod
+    def _remap_path(value: str, mounts: dict[str, str]) -> str:
+        """Map ONE container mount target back to its host path — argv entries and the
+        command's `cwd` alike. A value with no matching mount returns unchanged."""
+        for host_path, container_path in mounts.items():
+            if value == container_path:
+                return host_path
+            if value.startswith(container_path.rstrip("/") + "/"):
+                return host_path.rstrip("/") + value[len(container_path) :]
+        return value
 
     async def run_stream(
         self,
@@ -124,6 +127,7 @@ class NativeSandbox:
         network: bool = False,
         timeout_s: float = 60.0,
         stdin: bytes | None = None,
+        cwd: str | None = None,
     ) -> AsyncIterator[SandboxChunk | SandboxResult]:
         """Run a command on the host, yielding output as it arrives, then a final
         SandboxResult. DEV ONLY — no isolation. Same semantics as `run`, only the
@@ -142,6 +146,7 @@ class NativeSandbox:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env={**os.environ},
+                cwd=self._remap_path(cwd, mounts) if cwd else None,
             )
         except Exception as exc:
             yield SandboxResult(

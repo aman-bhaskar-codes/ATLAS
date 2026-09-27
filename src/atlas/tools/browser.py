@@ -7,6 +7,7 @@ from typing import Any
 from atlas.capabilities.browser.domain.locator import Locator, LocatorKind
 from atlas.capabilities.browser.domain.page import PageHandle
 from atlas.capabilities.browser.platform import BrowserPlatform
+from atlas.capabilities.browser.security.framing import frame_untrusted
 from atlas.infra.ids import CorrelationId
 from atlas.infra.logging import get_logger
 from atlas.infra.types import ToolResult
@@ -79,7 +80,12 @@ class BrowserTool:
                         {
                             "title": a.title,
                             "markdown_length": len(a.markdown),
-                            "preview": a.markdown[:500] + "..." if len(a.markdown) > 500 else a.markdown,
+                            # §23: page text is untrusted data — frame the preview
+                            # so the agent never obeys an instruction hidden in it.
+                            "preview": frame_untrusted(
+                                "web_page",
+                                a.markdown[:500] + "..." if len(a.markdown) > 500 else a.markdown,
+                            ),
                         }
                         for a in result.articles
                     ],
@@ -95,7 +101,11 @@ class BrowserTool:
             elif op == "extract":
                 handle = await self._ensure_handle()
                 article = await self._platform.extract_article(handle, cid)
-                return ToolResult(ok=True, output={"title": article.title, "markdown": article.markdown})
+                # §23: the extracted article body is untrusted page text.
+                return ToolResult(
+                    ok=True,
+                    output={"title": article.title, "markdown": frame_untrusted("web_page", article.markdown)},
+                )
 
             elif op == "click":
                 handle = await self._ensure_handle()

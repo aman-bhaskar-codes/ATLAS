@@ -15,12 +15,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict
 
 from atlas.infra.bus import Event, MessageBus
 from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
+from atlas.interfaces.api.auth import Principal, require_admin
 from atlas.interfaces.api.websocket import ConnectionManager
 
 _log = get_logger("atlas.api.events")
@@ -341,8 +342,8 @@ class EmitRequest(BaseModel):
 
 
 @router.post("/api/v1/events/emit")
-async def emit_event(req: EmitRequest) -> dict[str, Any]:
-    """Emit a manual event to the MessageBus."""
+async def emit_event(req: EmitRequest, _admin: Principal = Depends(require_admin)) -> dict[str, Any]:
+    """Emit a manual event to the MessageBus (admin-only: mutates the live bus)."""
     if _deps is None or _deps.bus is None:
         return {"error": "Server or bus not initialized"}
 
@@ -360,8 +361,8 @@ async def emit_event(req: EmitRequest) -> dict[str, Any]:
 
 
 @router.post("/api/v1/events/{event_id}/replay")
-async def replay_event(event_id: str) -> dict[str, Any]:
-    """Replay an historical event onto the MessageBus."""
+async def replay_event(event_id: str, _admin: Principal = Depends(require_admin)) -> dict[str, Any]:
+    """Replay an historical event onto the MessageBus (admin-only: mutates the live bus)."""
     if _deps is None or _deps.bus is None:
         return {"error": "Server or bus not initialized"}
 
@@ -388,11 +389,52 @@ async def replay_event(event_id: str) -> dict[str, Any]:
         return {"error": str(exc)}
 
 
+def _parse_webhook_secrets(raw: str) -> dict[str, str]:
+    """Parse ``source:secret,source2:secret2`` into a mapping. Blank -> {}."""
+    out: dict[str, str] = {}
+    for pair in raw.split(","):
+        pair = pair.strip()
+        if not pair or ":" not in pair:
+            continue
+        source, secret = pair.split(":", 1)
+        source, secret = source.strip(), secret.strip()
+        if source and secret:
+            out[source] = secret
+    return out
+
+
 @router.post("/api/v1/webhooks/{source}")
-async def receive_webhook(source: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Canonical event ingestion for external webhooks (e.g., GitHub, Stripe)."""
+async def receive_webhook(
+    source: str,
+    request: Request,
+    x_hub_signature_256: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Canonical event ingestion for external webhooks (e.g., GitHub, Stripe).
+
+    If a per-source HMAC secret is configured (``ATLAS_WEBHOOK_SECRETS``), the
+    request MUST carry a matching ``X-Hub-Signature-256`` over the raw body;
+    otherwise the source stays open (local/dev). Verification happens on the raw
+    bytes BEFORE parsing, so a forged body never reaches the bus.
+    """
     if _deps is None or _deps.bus is None:
         return {"error": "Server or bus not initialized"}
+
+    raw_body = await request.body()
+
+    atlas = getattr(request.app.state, "atlas", None)
+    settings = getattr(atlas, "settings", None)
+    secrets = _parse_webhook_secrets(getattr(settings, "webhook_secrets", "") or "")
+    expected_secret = secrets.get(source)
+    if expected_secret is not None:
+        import hashlib
+        import hmac
+
+        if not x_hub_signature_256:
+            raise HTTPException(401, "webhook signature required")
+        digest = hmac.new(expected_secret.encode(), raw_body, hashlib.sha256).hexdigest()
+        provided = x_hub_signature_256.removeprefix("sha256=")
+        if not hmac.compare_digest(digest, provided):
+            raise HTTPException(401, "invalid webhook signature")
 
     topic = f"webhook.{source}"
 
@@ -401,9 +443,14 @@ async def receive_webhook(source: str, payload: dict[str, Any]) -> dict[str, Any
         correlation_id: str = f"webhook-{source}"
 
     try:
+        import json
+
+        payload = json.loads(raw_body) if raw_body else {}
         event = WebhookEvent.model_validate(payload)
         await _deps.bus.publish(topic, event)
         return {"status": "ok", "topic": topic}
+    except HTTPException:
+        raise
     except Exception as exc:
         _log.error("events.webhook_failed", event_type="api", source=source, error=str(exc))
         return {"error": str(exc)}

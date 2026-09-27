@@ -103,19 +103,34 @@ class ShellTool:
         except (TypeError, ValueError):
             timeout_s = 120.0
 
+        # The ADE runs every workspace command IN the workspace root. The cwd travels on
+        # the audited request, so forward it when a caller supplied one; without one
+        # (every agent/CLI dispatch today) the historical call shape is preserved, so a
+        # duck-typed sandbox that lacks the `cwd` parameter keeps working untouched.
+        raw_cwd = args.get("cwd")
+        cwd = raw_cwd if isinstance(raw_cwd, str) and raw_cwd else None
+
         # If a streaming sink is bound in the ambient context (the interactive
         # terminal path) AND the sandbox can stream, push output as it arrives and
         # assemble the final result from the terminal SandboxResult. Otherwise the
         # ordinary one-shot path — unchanged for every agent run and API command.
         sink = current_sink()
         if sink is not None and isinstance(self._sandbox, StreamingSandbox):
-            result = await self._run_streaming(argv, network=network, sink=sink, timeout_s=timeout_s)
+            result = await self._run_streaming(argv, network=network, sink=sink, timeout_s=timeout_s, cwd=cwd)
+        elif cwd is None:
+            result = await self._sandbox.run(
+                argv,
+                mounts=self._mounts,
+                network=network,
+                timeout_s=timeout_s,
+            )
         else:
             result = await self._sandbox.run(
                 argv,
                 mounts=self._mounts,
                 network=network,
                 timeout_s=timeout_s,
+                cwd=cwd,
             )
         is_side_effect = _matches_prefix(argv, self._side_effect)
         effects: tuple[SideEffect, ...] = ()
@@ -134,15 +149,19 @@ class ShellTool:
         )
 
     async def _run_streaming(
-        self, argv: list[str], *, network: bool, sink: Any, timeout_s: float = 120.0
+        self, argv: list[str], *, network: bool, sink: Any, timeout_s: float = 120.0, cwd: str | None = None
     ) -> SandboxResult:
         """Drive the streaming sandbox, forwarding each chunk to `sink`, and return
         the terminal SandboxResult. Isolation/policy is identical to one-shot `run`
         — only the delivery differs. Only reached after `execute` has narrowed the
         sandbox to a `StreamingSandbox`, so the cast is sound."""
         streaming = cast(StreamingSandbox, self._sandbox)
+        if cwd is None:
+            stream = streaming.run_stream(argv, mounts=self._mounts, network=network, timeout_s=timeout_s)
+        else:
+            stream = streaming.run_stream(argv, mounts=self._mounts, network=network, timeout_s=timeout_s, cwd=cwd)
         final: SandboxResult | None = None
-        async for item in streaming.run_stream(argv, mounts=self._mounts, network=network, timeout_s=timeout_s):
+        async for item in stream:
             if isinstance(item, SandboxChunk):
                 await sink(item)
             else:

@@ -31,6 +31,16 @@ class SandboxChunk:
 
 
 class Sandbox(Protocol):
+    """Runs a command under isolation.
+
+    ``cwd`` is the HOST directory the command must run in. The ADE runs every
+    workspace command in the workspace root (a confirmed `git commit` must commit
+    THAT repository), so a sandbox that silently ran it somewhere else would act on
+    the wrong tree. A Docker sandbox maps a cwd under a mount into the container and
+    falls back to its own workdir when the path is not representable — the isolation
+    boundary wins over the request, and it is never silently substituted elsewhere.
+    """
+
     async def run(
         self,
         command: list[str],
@@ -39,6 +49,7 @@ class Sandbox(Protocol):
         network: bool = False,
         timeout_s: float = 60.0,
         stdin: bytes | None = None,
+        cwd: str | None = None,
     ) -> SandboxResult: ...
 
 
@@ -65,6 +76,7 @@ class StreamingSandbox(Protocol):
         network: bool = False,
         timeout_s: float = 60.0,
         stdin: bytes | None = None,
+        cwd: str | None = None,
     ) -> AsyncIterator[SandboxChunk | SandboxResult]: ...
 
 
@@ -77,6 +89,7 @@ class NullSandbox:
         network: bool = False,
         timeout_s: float = 60.0,
         stdin: bytes | None = None,
+        cwd: str | None = None,
     ) -> SandboxResult:
         raise SystemError_(
             "NullSandbox cannot execute commands — the Docker sandbox arrives in "
@@ -91,6 +104,7 @@ class NullSandbox:
         network: bool = False,
         timeout_s: float = 60.0,
         stdin: bytes | None = None,
+        cwd: str | None = None,
     ) -> AsyncIterator[SandboxChunk | SandboxResult]:
         # Refuse identically to `run`: streaming is delivery, not a policy bypass.
         raise SystemError_(

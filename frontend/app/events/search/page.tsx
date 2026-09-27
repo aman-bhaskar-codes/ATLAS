@@ -9,44 +9,20 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { EventFeed } from '../../../components/events';
-import type { AtlasEvent } from '../../../lib/websocket';
+import { eventsApi, type EventSearchParams } from '../../../lib/api/client';
 
-interface SearchParams {
-  task_id?: string;
-  topic?: string;
-  from_ts?: string;
-  to_ts?: string;
+// Required-defaults form state; `eventsApi.search` drops empty filters.
+type SearchFormState = {
+  task_id: string;
+  topic: string;
+  from_ts: string;
+  to_ts: string;
   limit: number;
   offset: number;
-}
-
-interface SearchResult {
-  events: AtlasEvent[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-async function searchEvents(params: SearchParams): Promise<SearchResult> {
-  // NEXT_PUBLIC_ATLAS_API_URL already includes the /api/v1 prefix, so the path
-  // must NOT repeat it (doing so produced /api/v1/api/v1/... -> 404). The
-  // fallback matches the port ATLAS actually serves (8730).
-  const baseUrl = process.env.NEXT_PUBLIC_ATLAS_API_URL || 'http://localhost:8730/api/v1';
-  const url = new URL(`${baseUrl}/events/search`);
-  
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== null && value !== undefined && value !== '') {
-      url.searchParams.set(key, String(value));
-    }
-  });
-  
-  const response = await fetch(url.toString());
-  if (!response.ok) throw new Error('Search failed');
-  return response.json();
-}
+};
 
 export default function EventSearchPage() {
-  const [params, setParams] = useState<SearchParams>({
+  const [params, setParams] = useState<SearchFormState>({
     task_id: '',
     topic: '',
     from_ts: '',
@@ -54,12 +30,12 @@ export default function EventSearchPage() {
     limit: 100,
     offset: 0,
   });
-  
+
   const [searchKey, setSearchKey] = useState(0);
-  
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['event-search', searchKey, params],
-    queryFn: () => searchEvents(params),
+    queryFn: () => eventsApi.search(params satisfies EventSearchParams),
     enabled: searchKey > 0,
   });
   

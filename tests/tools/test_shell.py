@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -194,3 +195,51 @@ class TestShellToolStreaming:
         assert current_sink() is None  # no sink bound → ordinary one-shot path
         result = await tool.execute({"command": "echo hello"})
         assert result.ok is True and "hello" in result.output["stdout"]
+
+
+class TestCwdForwarding:
+    """The ADE's per-command cwd must reach the sandbox. The governed request carries
+    the workspace root; a tool that dropped it there would run a confirmed command in
+    the server's own directory — the wrong repository."""
+
+    @pytest.mark.asyncio
+    async def test_cwd_reaches_the_sandbox(self) -> None:
+        sandbox = AsyncMock()
+        sandbox.run.return_value = SandboxResult(exit_code=0, stdout_tail="", stderr_tail="", duration_ms=1)
+        tool = ShellTool(read_only=["git status"], side_effect=[], sandbox=sandbox, mounts={})
+
+        await tool.execute({"command": "git status", "cwd": "/tmp/workspace"})
+
+        assert sandbox.run.call_args[1]["cwd"] == "/tmp/workspace"
+
+    @pytest.mark.asyncio
+    async def test_absent_cwd_keeps_the_historical_call_shape(self) -> None:
+        # Agent/CLI dispatches pass no cwd: the call must stay byte-for-byte what it was,
+        # so a duck-typed sandbox without the new `cwd` parameter keeps working.
+        sandbox = AsyncMock()
+        sandbox.run.return_value = SandboxResult(exit_code=0, stdout_tail="", stderr_tail="", duration_ms=1)
+        tool = ShellTool(read_only=["git status"], side_effect=[], sandbox=sandbox, mounts={})
+
+        await tool.execute({"command": "git status"})
+
+        assert "cwd" not in sandbox.run.call_args[1]
+
+    @pytest.mark.asyncio
+    async def test_streaming_path_honors_cwd(self, tmp_path: Path) -> None:
+        from atlas.safety.sandbox import SandboxChunk
+        from atlas.safety.sandbox_native import NativeSandbox
+        from atlas.tools.command_stream import bind_sink, unbind
+
+        tool = ShellTool(read_only=["pwd"], side_effect=[], sandbox=NativeSandbox(env="dev"), mounts={})
+
+        async def _sink(chunk: SandboxChunk) -> None:
+            return None
+
+        token = bind_sink(_sink)
+        try:
+            result = await tool.execute({"command": "pwd", "cwd": str(tmp_path)})
+        finally:
+            unbind(token)
+
+        assert result.ok is True
+        assert Path(str(result.output["stdout"]).strip()).resolve() == tmp_path.resolve()

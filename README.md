@@ -467,10 +467,21 @@ Two safety properties are worth stating because they were the hard part:
   expects; if the file changed underneath, the writer returns `stale=True` and writes
   nothing. Concurrent edits cannot silently clobber.
 - **The governed-command path is real.** Commands are tiered by an explicit
-  `operation: run` rule and matched against a **token-prefix** allowlist, so
-  `git status` / `git diff` are allowed while `git push` and unknown executables fall
-  to deny-by-default. Read-only git runs at T1; `git commit` / `pytest` demand
-  confirmation.
+  `operation: run` rule and matched against a **token-prefix** allowlist — the same two
+  buckets (`read_only` / `side_effect`) `ShellTool` enforces itself, so a command in
+  neither is refused even *after* a confirmation. Read-only git (`status`, `diff`, and
+  the `rev-parse` / `for-each-ref` reads the checkpoint verbs resolve through) runs at
+  T1; `git commit`, the git write verbs (`checkout` / `restore` / `update-ref` /
+  `stash`) and the verification commands the IDE runs (`pytest`, `mypy`, `ruff`,
+  `eslint`, `tsc`, `cargo test`, `go test`, and the npm/pnpm/yarn/bun test scripts)
+  demand confirmation. `git push` stays absent on purpose: the agent never publishes.
+  `tests/safety/test_ide_shell_allowlist.py` drives the real IDE engines against this
+  manifest, so no verb can silently rot into a dead one.
+
+- **The cwd is real too.** The workspace root rides the audited `ToolRequest` and is
+  threaded down to the sandbox (as a host path; Docker maps it under the mount), so a
+  confirmed `git commit` / `pytest` acts on the workspace — never on whatever directory
+  the server happened to be started in.
 
 Both surfaces are thin projections over one `IDEService`:
 

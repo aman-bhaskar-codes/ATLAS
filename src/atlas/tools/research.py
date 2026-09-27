@@ -23,6 +23,8 @@ from __future__ import annotations
 import time
 from typing import Any, Protocol
 
+from atlas.capabilities.browser.errors import UnsafeURLError
+from atlas.capabilities.browser.security.egress import EgressPolicy
 from atlas.infra.logging import get_logger
 from atlas.infra.types import ToolResult
 from atlas.tools.extract import extract_pdf_text, html_to_text, looks_like_pdf
@@ -386,6 +388,7 @@ class ResearchTool:
 
 MAX_QUESTIONS_REPORTED = 12
 MAX_FETCH_BYTES = 2_000_000
+_MAX_REDIRECT_HOPS = 5
 
 
 class HttpTextFetcher:
@@ -400,16 +403,38 @@ class HttpTextFetcher:
 
     def __init__(self, timeout_s: float = 20.0) -> None:
         self._timeout = timeout_s
+        # Global SSRF guard (no host scope): any public http(s) target is allowed,
+        # every file://, localhost, RFC-1918, link-local (incl. 169.254.169.254
+        # cloud metadata) or non-http target is denied — fail closed (§23). The
+        # same policy the browser NavigationEngine enforces, so read_url cannot be
+        # the ungoverned back door that reaches internal resources.
+        self._egress = EgressPolicy()
 
     async def __call__(self, url: str) -> tuple[str, str, str]:
         import httpx
 
+        # Redirects are followed by hand so EACH hop clears the egress policy: a
+        # public URL that 30x-redirects to http://169.254.169.254/ or file:// must
+        # be denied at the hop, not silently chased by httpx.
+        self._egress.check(url)
         async with httpx.AsyncClient(
             timeout=self._timeout,
-            follow_redirects=True,
+            follow_redirects=False,
             headers={"User-Agent": "ATLAS/1.0 (research agent)"},
         ) as client:
-            response = await client.get(url)
+            current = url
+            for _ in range(_MAX_REDIRECT_HOPS):
+                response = await client.get(current)
+                if response.is_redirect:
+                    location = response.headers.get("location", "")
+                    if not location:
+                        break
+                    current = str(httpx.URL(current).join(location))
+                    self._egress.check(current)  # re-check every hop, fail closed
+                    continue
+                break
+            else:
+                raise UnsafeURLError(f"read_url denied: exceeded {_MAX_REDIRECT_HOPS} redirect hops")
             response.raise_for_status()
             content_type = response.headers.get("content-type", "text/plain").split(";")[0].strip()
             body = response.content[:MAX_FETCH_BYTES]

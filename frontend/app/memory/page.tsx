@@ -15,7 +15,7 @@ import { ErrorRow } from '@/components/primitives/ErrorState';
 import { useMemoryLive, useLiveCounts } from '../../features/memory/useMemoryLive';
 import {
   useMemoryStats, useEpisodes, useFacts,
-  useKnowledgeDocs, useKnowledgeSearch, usePreferences,
+  useKnowledgeDocs, useKnowledgeSearch, usePreferences, useClearMemories,
 } from '../../features/memory/queries';
 import type { Episode, Fact, KnowledgeDoc, MemoryEvent } from '../../features/memory/contracts';
 
@@ -466,7 +466,8 @@ function EmptyLayer({ label }: { label: string }) {
 
 export default function MemoryPage() {
   const [activeLayer, setActiveLayer] = useState<Layer>('episodes');
-  const [isClearing, setIsClearing] = useState(false);
+  const clearMemories = useClearMemories();
+  const isClearing = clearMemories.isPending;
   const { events, snapshot, status, updateCount, clearEvents } = useMemoryLive(200);
   const liveCounts = useLiveCounts(events);
   // No isError branch here on purpose: each card already falls back to the WS
@@ -479,11 +480,9 @@ export default function MemoryPage() {
 
   const handleClearMemories = useCallback(async () => {
     if (!confirm("Are you sure you want to permanently delete ALL memories, facts, preferences, and knowledge documents? This cannot be undone.")) return;
-    
-    setIsClearing(true);
+
     try {
-      const res = await fetch('/api/v1/memory', { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to clear memories');
+      await clearMemories.mutateAsync();
       await refetchStats();
       clearEvents();
       alert("All memories cleared.");
@@ -492,10 +491,8 @@ export default function MemoryPage() {
     } catch (e) {
       alert("Error clearing memories.");
       console.error(e);
-    } finally {
-      setIsClearing(false);
     }
-  }, [refetchStats, clearEvents]);
+  }, [clearMemories, refetchStats, clearEvents]);
 
   return (
     <>

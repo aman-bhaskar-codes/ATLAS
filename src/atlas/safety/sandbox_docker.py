@@ -25,6 +25,20 @@ _log = get_logger("atlas.sandbox.docker")
 _MAX_OUTPUT = 16_000  # chars; tool output is structured + truncated, never a raw dump
 
 
+def _container_cwd(cwd: str | None, mounts: dict[str, str]) -> str | None:
+    """Translate a HOST working directory into its path INSIDE the container. `None`
+    when there is no cwd or it does not live under a mount — the container then keeps
+    its own workdir, so a directory it cannot see can never be conjured into being."""
+    if not cwd:
+        return None
+    for host, container in mounts.items():
+        if cwd == host:
+            return container
+        if cwd.startswith(host.rstrip("/") + "/"):
+            return container.rstrip("/") + cwd[len(host) :]
+    return None
+
+
 @dataclass(frozen=True)
 class SandboxSpec:
     """Everything needed to launch one locked-down container run."""
@@ -133,7 +147,13 @@ class DockerSandbox:
         self._breaker = CircuitBreaker(fail_threshold=3, cooldown_s=30.0)
 
     def _build_argv(
-        self, command: list[str], mounts: dict[str, str], *, network: bool, stdin: bytes | None = None
+        self,
+        command: list[str],
+        mounts: dict[str, str],
+        *,
+        network: bool,
+        stdin: bytes | None = None,
+        cwd: str | None = None,
     ) -> list[str]:
         argv: list[str] = [
             "docker",
@@ -165,7 +185,7 @@ class DockerSandbox:
             "--tmpfs",
             "/tmp:rw,size=64m,noexec",  # scratch, non-executable
             "--workdir",
-            self._spec.workdir,
+            _container_cwd(cwd, mounts) or self._spec.workdir,
         ]
         # Only the explicitly permitted host paths are visible in the container.
         for host, container in mounts.items():
@@ -182,6 +202,7 @@ class DockerSandbox:
         network: bool = False,
         timeout_s: float = 60.0,
         stdin: bytes | None = None,
+        cwd: str | None = None,
     ) -> SandboxResult:
         if not self._breaker.allow():
             _log.error("sandbox.circuit_open", event_type="sandbox")
@@ -189,7 +210,7 @@ class DockerSandbox:
                 exit_code=-1, stdout_tail="", stderr_tail="Sandbox circuit breaker OPEN", duration_ms=0
             )
 
-        argv = self._build_argv(command, mounts, network=network, stdin=stdin)
+        argv = self._build_argv(command, mounts, network=network, stdin=stdin, cwd=cwd)
         _log.info(
             "sandbox.run", event_type="sandbox", cmd=shlex.join(command), mounts=list(mounts.values()), network=network
         )
@@ -226,6 +247,7 @@ class DockerSandbox:
         network: bool = False,
         timeout_s: float = 60.0,
         stdin: bytes | None = None,
+        cwd: str | None = None,
     ) -> AsyncIterator[SandboxChunk | SandboxResult]:
         """Incremental variant of `run` with the SAME hardened container flags. If
         the injected runner streams (`run_stream`), output is yielded as it
@@ -238,7 +260,7 @@ class DockerSandbox:
             yield SandboxResult(exit_code=-1, stdout_tail="", stderr_tail="Sandbox circuit breaker OPEN", duration_ms=0)
             return
 
-        argv = self._build_argv(command, mounts, network=network, stdin=stdin)
+        argv = self._build_argv(command, mounts, network=network, stdin=stdin, cwd=cwd)
         _log.info(
             "sandbox.run_stream",
             event_type="sandbox",

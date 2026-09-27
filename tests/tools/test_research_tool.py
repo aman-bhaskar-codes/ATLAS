@@ -425,6 +425,55 @@ async def test_read_url_requires_a_url() -> None:
     assert not result.ok and "url" in (result.error or "")
 
 
+# ── read_url SSRF guard (§23: an internal target is never a research source) ──
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://169.254.169.254/latest/meta-data/",  # cloud metadata
+        "http://localhost:8080/admin",
+        "http://127.0.0.1/",
+        "http://10.0.0.5/internal",
+        "http://192.168.1.1/router",
+        "file:///etc/passwd",  # non-http scheme
+        "http://db.internal/dump",
+    ],
+)
+async def test_fetcher_denies_internal_targets_before_any_request(url: str) -> None:
+    """The egress policy fires on the URL string, so denial happens with NO socket
+    opened — the same guard re-runs on every redirect hop inside __call__."""
+    from atlas.capabilities.browser.errors import UnsafeURLError
+
+    with pytest.raises(UnsafeURLError):
+        await HttpTextFetcher()(url)
+
+
+async def test_fetcher_denies_a_redirect_into_an_internal_host() -> None:
+    """A public URL that 30x-redirects to the metadata IP must be denied at the
+    hop. We drive __call__ with a stubbed httpx client so no real egress occurs."""
+    import httpx
+
+    from atlas.capabilities.browser.errors import UnsafeURLError
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # First (public) hop redirects to the cloud-metadata IP.
+        return httpx.Response(302, headers={"location": "http://169.254.169.254/latest/meta-data/"})
+
+    fetcher = HttpTextFetcher()
+    real_client = httpx.AsyncClient
+
+    def _client(*_a: object, **kw: object) -> httpx.AsyncClient:
+        kw.pop("follow_redirects", None)
+        return real_client(transport=httpx.MockTransport(handler), follow_redirects=False)
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(httpx, "AsyncClient", _client)
+    try:
+        with pytest.raises(UnsafeURLError):
+            await fetcher("https://public.example.test/start")
+    finally:
+        monkey.undo()
+
+
 # ── sources ─────────────────────────────────────────────────────────────
 async def test_sources_lists_deduped_indexed_sources() -> None:
     fabric = FakeFabric(
@@ -573,6 +622,7 @@ async def test_fetcher_declines_binary_bodies_rather_than_indexing_garbage(monke
         headers: ClassVar[dict[str, str]] = {"content-type": "application/pdf"}
         content = b"%PDF-1.7 binary junk"
         encoding = None
+        is_redirect = False
 
         def raise_for_status(self) -> None: ...
 
@@ -600,6 +650,7 @@ async def test_fetcher_converts_html_and_sends_a_research_user_agent(monkeypatch
         headers: ClassVar[dict[str, str]] = {"content-type": "text/html; charset=utf-8"}
         content = b"<html><head><title>Paper</title></head><body><p>Findings.</p></body></html>"
         encoding = "utf-8"
+        is_redirect = False
 
         def raise_for_status(self) -> None: ...
 
@@ -622,7 +673,9 @@ async def test_fetcher_converts_html_and_sends_a_research_user_agent(monkeypatch
     assert title == "Paper" and "Findings." in text
     assert content_type == "text/markdown"
     assert "ATLAS" in seen["headers"]["User-Agent"]
-    assert seen["follow_redirects"] is True
+    # Redirects are followed by hand (each hop re-checked against the egress
+    # policy), so the httpx client itself must NOT auto-follow.
+    assert seen["follow_redirects"] is False
 
 
 async def test_fetcher_extracts_a_pdf_text_layer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -639,6 +692,7 @@ async def test_fetcher_extracts_a_pdf_text_layer(monkeypatch: pytest.MonkeyPatch
         headers: ClassVar[dict[str, str]] = {"content-type": "application/pdf"}
         content = pdf
         encoding = None
+        is_redirect = False
 
         def raise_for_status(self) -> None: ...
 

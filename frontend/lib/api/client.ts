@@ -332,142 +332,103 @@ export const trustApi = {
 };
 
 // --- Autonomy Fabric Endpoints (Phase 4) ---
-import { Automation } from "./contracts";
+import { Automation, AutomationSchema } from "./contracts";
 export const autonomyApi = {
-  listAutomations: async (enabledOnly: boolean = false) => {
-    return requestJSON(`/automations?enabled_only=${enabledOnly}`) as Promise<Automation[]>;
-  },
-  getAutomation: async (id: string) => {
-    return requestJSON(`/automations/${encodeURIComponent(id)}`) as Promise<Automation>;
-  },
-  createAutomation: async (auto: Partial<Automation>) => {
-    return requestJSON(`/automations`, {
+  listAutomations: (enabledOnly: boolean = false) =>
+    request(`/automations?enabled_only=${enabledOnly}`, z.array(AutomationSchema)),
+  getAutomation: (id: string) =>
+    request(`/automations/${encodeURIComponent(id)}`, AutomationSchema),
+  createAutomation: (auto: Partial<Automation>) =>
+    request(`/automations`, AutomationSchema, {
       method: "POST",
       body: JSON.stringify(auto),
-    }) as Promise<Automation>;
-  },
-  updateAutomation: async (id: string, auto: Partial<Automation>) => {
-    return requestJSON(`/automations/${encodeURIComponent(id)}`, {
+    }),
+  updateAutomation: (id: string, auto: Partial<Automation>) =>
+    request(`/automations/${encodeURIComponent(id)}`, AutomationSchema, {
       method: "PUT",
       body: JSON.stringify(auto),
-    }) as Promise<Automation>;
-  },
-  deleteAutomation: async (id: string) => {
-    return requestJSON(`/automations/${encodeURIComponent(id)}`, {
+    }),
+  deleteAutomation: (id: string) =>
+    request(`/automations/${encodeURIComponent(id)}`, z.record(z.string(), z.string()), {
       method: "DELETE",
-    });
-  }
+    }),
 };
 
 // --- Learning & Ops endpoints (Batch 6) — typed via runtime validation ---
-export interface AtlasSkill {
-  id: string; name: string; description: string; version: number; status: string;
-  success_rate: number; usage_count: number; confidence: number;
-  preferred_tools: string[]; known_failure_modes: string[]; procedure_steps: string[];
-  updated_ts: string;
-}
-export interface AtlasStrategy {
-  id: string; task_type_pattern: string; approach: string; model_preference: string | null;
-  tool_preference: string[]; status: string; success_rate: number; evidence_count: number;
-  eval_score: number | null; updated_ts: string;
-}
-export interface AtlasWorldEntity {
-  entity_type: string; entity_id: string; attributes: Record<string, unknown>; updated_ts: string;
-}
-export interface AtlasEvalResult {
-  golden_id: string; run_id: string; evaluator: string; passed: boolean; score: number; created_ts: string;
-}
-export interface AtlasLearningAnalytics {
-  trajectory_success_rate: number | null; total_trajectories: number;
-  total_experiences: number; active_skills: number; candidate_skills: number;
-  active_strategies: number; recent_verification_pass_rate: number | null; generated_at: string;
-}
-export interface AtlasTool {
-  name: string; operations: string[]; description: string;
-  estimated_latency_ms: number | null; estimated_cost_usd: number | null;
-  idempotent: boolean | null; side_effects: boolean | null; supports_rollback: boolean | null;
-  health: number; latency_ewma_ms: number;
-}
-export interface AtlasModel {
-  id: string; provider: string; context_length: number;
-  usd_per_1m_input: number; usd_per_1m_output: number; latency_estimate_ms: number;
-  capabilities: string[]; supports_streaming: boolean; supports_tool_calling: boolean;
-  quality_score: number; enabled: boolean; cost_class?: string;
-}
-export interface AtlasProvider { name: string; is_local: boolean; available: boolean }
-export interface AtlasSchedule { id: string; name: string; cron: string; enabled: boolean }
-
-export interface AtlasExperience {
-  id: string; category: string; lesson_text: string; applicability_context: string;
-  confidence: number; reuse_count: number; success_rate: number; extracted_ts: string;
-}
+// Contracts + derived types live in ./contracts (single source of truth, §70).
+import {
+  SkillSchema, StrategySchema, WorldEntitySchema, EvalResultSchema,
+  LearningAnalyticsSchema, OpsToolSchema, OpsModelSchema, OpsProviderSchema,
+  OpsScheduleSchema, ExperienceSchema, ProviderHealthSchema, ProfileInfoSchema,
+  QuotaSnapshotSchema, CapabilityMatrixSchema,
+  EventSearchResultSchema,
+} from "./contracts";
 
 export const learningApi = {
   skills: (status?: string) =>
-    requestJSON(`/learning/skills${status ? `?status=${status}` : ""}`) as Promise<AtlasSkill[]>,
+    request(`/learning/skills${status ? `?status=${status}` : ""}`, z.array(SkillSchema)),
   disableSkill: (skillId: string) =>
-    requestJSON(`/learning/skills/${encodeURIComponent(skillId)}/disable`, { method: "POST" }) as Promise<AtlasSkill>,
+    request(`/learning/skills/${encodeURIComponent(skillId)}/disable`, SkillSchema, { method: "POST" }),
   strategies: (activeOnly = false) =>
-    requestJSON(`/learning/strategies?active_only=${activeOnly}`) as Promise<AtlasStrategy[]>,
+    request(`/learning/strategies?active_only=${activeOnly}`, z.array(StrategySchema)),
   world: (entityType?: string) =>
-    requestJSON(`/learning/world${entityType ? `?entity_type=${encodeURIComponent(entityType)}` : ""}`) as Promise<AtlasWorldEntity[]>,
+    request(
+      `/learning/world${entityType ? `?entity_type=${encodeURIComponent(entityType)}` : ""}`,
+      z.array(WorldEntitySchema),
+    ),
   evaluations: (limit = 50) =>
-    requestJSON(`/learning/evaluation/recent?limit=${limit}`) as Promise<AtlasEvalResult[]>,
+    request(`/learning/evaluation/recent?limit=${limit}`, z.array(EvalResultSchema)),
   analytics: () =>
-    requestJSON(`/learning/analytics`) as Promise<AtlasLearningAnalytics>,
+    request(`/learning/analytics`, LearningAnalyticsSchema),
 };
 
 export const opsApi = {
-  tools: () => requestJSON(`/ops/tools`) as Promise<AtlasTool[]>,
+  tools: () => request(`/ops/tools`, z.array(OpsToolSchema)),
   models: (includeDisabled = false) =>
-    requestJSON(`/ops/models?include_disabled=${includeDisabled}`) as Promise<AtlasModel[]>,
-  providers: () => requestJSON(`/ops/providers`) as Promise<AtlasProvider[]>,
-  schedules: () => requestJSON(`/ops/schedules`) as Promise<AtlasSchedule[]>,
+    request(`/ops/models?include_disabled=${includeDisabled}`, z.array(OpsModelSchema)),
+  providers: () => request(`/ops/providers`, z.array(OpsProviderSchema)),
+  schedules: () => request(`/ops/schedules`, z.array(OpsScheduleSchema)),
   toggleSchedule: (id: string) =>
-    requestJSON(`/ops/schedules/${encodeURIComponent(id)}/toggle`, { method: "POST" }) as Promise<AtlasSchedule>,
+    request(`/ops/schedules/${encodeURIComponent(id)}/toggle`, OpsScheduleSchema, { method: "POST" }),
 };
 
 export const trajectoryApi = {
   // NOT `/api/v1/trajectory/...`: API_BASE already ends in /api/v1, so the old
   // path requested /api/v1/api/v1/trajectory/experiences — a guaranteed 404.
   experiences: (limit = 50) =>
-    requestJSON(`/trajectory/experiences?limit=${limit}`) as Promise<AtlasExperience[]>,
+    request(`/trajectory/experiences?limit=${limit}`, z.array(ExperienceSchema)),
 };
 
 // --- Zero-Cost-First: Provider/Cost/Profile API ---
-export interface ProviderHealth {
-  name: string; healthy: boolean; avg_latency_ms: number; is_local: boolean;
-  quota_pct?: number; quota_requests_remaining?: number; quota_tokens_remaining?: number;
-}
-export interface ProfileInfo {
-  profile: string; cost_policy: string; network_policy: string;
-  allow_cloud: boolean; enable_quota_governor: boolean; daily_usd: number;
-  allowed_cost_classes: string[];
-}
-export interface QuotaSnapshot {
-  enabled: boolean;
-  providers: Record<string, {
-    requests_remaining: number; tokens_remaining: number;
-    requests_used: number; tokens_used: number;
-    daily_requests_limit: number; daily_tokens_limit: number;
-    pct_remaining: number;
-  }>;
-}
-export interface CapabilityMatrix {
-  matrix: Record<string, { local: string[]; free_quota: string[]; paid: string[] }>;
-  total_models: number;
+export const providersApi = {
+  health: () => request(`/providers/health`, z.array(ProviderHealthSchema)),
+  free: () => request(`/providers/free`, z.array(ProviderHealthSchema)),
+  profile: () => request(`/profile`, ProfileInfoSchema),
+  quota: () => request(`/providers/quota`, QuotaSnapshotSchema),
+  capabilityMatrix: () => request(`/capabilities/matrix`, CapabilityMatrixSchema),
+};
+
+// --- Historical event search (forensics / debugging) ---
+export interface EventSearchParams {
+  task_id?: string;
+  topic?: string;
+  from_ts?: string;
+  to_ts?: string;
+  limit?: number;
+  offset?: number;
 }
 
-export const providersApi = {
-  health: () =>
-    requestJSON(`/providers/health`) as Promise<ProviderHealth[]>,
-  free: () =>
-    requestJSON(`/providers/free`) as Promise<ProviderHealth[]>,
-  profile: () =>
-    requestJSON(`/profile`) as Promise<ProfileInfo>,
-  quota: () =>
-    requestJSON(`/providers/quota`) as Promise<QuotaSnapshot>,
-  capabilityMatrix: () =>
-    requestJSON(`/capabilities/matrix`) as Promise<CapabilityMatrix>,
+export const eventsApi = {
+  search: (params: EventSearchParams) => {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      // Skip empty/undefined so cleared filters don't become `?topic=` noise.
+      if (value !== undefined && value !== null && value !== "") {
+        qs.set(key, String(value));
+      }
+    }
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request(`/events/search${suffix}`, EventSearchResultSchema);
+  },
 };
 

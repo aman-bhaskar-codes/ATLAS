@@ -30,7 +30,23 @@ from atlas.knowledge.injection import untrusted_prefix
 
 # Sources whose content is DATA, never authority (§23). Framed in-line so the
 # model treats their quotes as untrusted even when they made it into evidence.
-_UNTRUSTED_TYPES = frozenset({SourceType.WEB_PAGE, SourceType.BROWSER_PAGE, SourceType.RSS, SourceType.PUBLIC_API})
+# ALL externally-fetched content qualifies — a scholarly API or a GitHub README is
+# no less injectable than an arbitrary web page (an abstract or code comment can
+# carry "ignore your instructions"). Only local/user/first-party memory is exempt.
+_UNTRUSTED_TYPES = frozenset(
+    {
+        SourceType.WEB_PAGE,
+        SourceType.BROWSER_PAGE,
+        SourceType.RSS,
+        SourceType.PUBLIC_API,
+        SourceType.GITHUB,
+        SourceType.ARXIV,
+        SourceType.SEMANTIC_SCHOLAR,
+        SourceType.CROSSREF,
+        SourceType.WOLFRAM_ALPHA,
+        SourceType.KNOWLEDGE_GRAPH,
+    }
+)
 
 _WORD = re.compile(r"[a-z0-9]+")
 

@@ -192,3 +192,211 @@ export function elapsedSeconds(task: Task): number {
   const updated = new Date(task.updated_at).getTime();
   return Math.floor((updated - created) / 1000);
 }
+
+// ─── Learning & Ops contracts (Batch 6) ────────────────────────────────────────
+// These mirror the used subset of the backend response models (routes_learning.py,
+// routes_ops.py, routes_trajectory.py). Zod strips unknown keys by default, so a
+// backend that returns a superset (e.g. ExperienceOut has more fields than we read)
+// still validates — we only assert the fields the UI depends on.
+
+export const SkillSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  version: z.number().int(),
+  status: z.string(),
+  success_rate: z.number(),
+  usage_count: z.number().int(),
+  confidence: z.number(),
+  preferred_tools: z.array(z.string()),
+  known_failure_modes: z.array(z.string()),
+  procedure_steps: z.array(z.string()),
+  updated_ts: z.string(),
+});
+
+export const StrategySchema = z.object({
+  id: z.string(),
+  task_type_pattern: z.string(),
+  approach: z.string(),
+  model_preference: z.string().nullable(),
+  tool_preference: z.array(z.string()),
+  status: z.string(),
+  success_rate: z.number(),
+  evidence_count: z.number().int(),
+  eval_score: z.number().nullable(),
+  updated_ts: z.string(),
+});
+
+export const WorldEntitySchema = z.object({
+  entity_type: z.string(),
+  entity_id: z.string(),
+  attributes: z.record(z.string(), z.unknown()),
+  updated_ts: z.string(),
+});
+
+export const EvalResultSchema = z.object({
+  golden_id: z.string(),
+  run_id: z.string(),
+  evaluator: z.string(),
+  passed: z.boolean(),
+  score: z.number(),
+  created_ts: z.string(),
+});
+
+export const LearningAnalyticsSchema = z.object({
+  trajectory_success_rate: z.number().nullable(),
+  total_trajectories: z.number().int(),
+  total_experiences: z.number().int(),
+  active_skills: z.number().int(),
+  candidate_skills: z.number().int(),
+  active_strategies: z.number().int(),
+  recent_verification_pass_rate: z.number().nullable(),
+  generated_at: z.string(),
+});
+
+export const OpsToolSchema = z.object({
+  name: z.string(),
+  operations: z.array(z.string()),
+  description: z.string(),
+  estimated_latency_ms: z.number().nullable(),
+  estimated_cost_usd: z.number().nullable(),
+  idempotent: z.boolean().nullable(),
+  side_effects: z.boolean().nullable(),
+  supports_rollback: z.boolean().nullable(),
+  health: z.number(),
+  latency_ewma_ms: z.number(),
+});
+
+export const OpsModelSchema = z.object({
+  id: z.string(),
+  provider: z.string(),
+  context_length: z.number().int(),
+  usd_per_1m_input: z.number(),
+  usd_per_1m_output: z.number(),
+  latency_estimate_ms: z.number().int(),
+  capabilities: z.array(z.string()),
+  supports_streaming: z.boolean(),
+  supports_tool_calling: z.boolean(),
+  quality_score: z.number(),
+  enabled: z.boolean(),
+  cost_class: z.string().optional(),
+});
+
+export const OpsProviderSchema = z.object({
+  name: z.string(),
+  is_local: z.boolean(),
+  available: z.boolean(),
+});
+
+export const OpsScheduleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  cron: z.string(),
+  enabled: z.boolean(),
+});
+
+export const ExperienceSchema = z.object({
+  id: z.string(),
+  category: z.string(),
+  lesson_text: z.string(),
+  applicability_context: z.string(),
+  confidence: z.number(),
+  reuse_count: z.number().int(),
+  success_rate: z.number(),
+  extracted_ts: z.string(),
+});
+
+// ─── Providers / cost / profile contracts (Zero-Cost-First) ────────────────────
+export const ProviderHealthSchema = z.object({
+  name: z.string(),
+  healthy: z.boolean(),
+  avg_latency_ms: z.number(),
+  is_local: z.boolean(),
+  quota_pct: z.number().optional(),
+  quota_requests_remaining: z.number().optional(),
+  quota_tokens_remaining: z.number().optional(),
+});
+
+export const ProfileInfoSchema = z.object({
+  profile: z.string(),
+  cost_policy: z.string(),
+  network_policy: z.string(),
+  allow_cloud: z.boolean(),
+  enable_quota_governor: z.boolean(),
+  daily_usd: z.number(),
+  allowed_cost_classes: z.array(z.string()),
+});
+
+export const QuotaSnapshotSchema = z.object({
+  enabled: z.boolean(),
+  providers: z.record(
+    z.string(),
+    z.object({
+      requests_remaining: z.number(),
+      tokens_remaining: z.number(),
+      requests_used: z.number(),
+      tokens_used: z.number(),
+      daily_requests_limit: z.number(),
+      daily_tokens_limit: z.number(),
+      pct_remaining: z.number(),
+    }),
+  ),
+});
+
+export const CapabilityMatrixSchema = z.object({
+  matrix: z.record(
+    z.string(),
+    z.object({
+      local: z.array(z.string()),
+      free_quota: z.array(z.string()),
+      paid: z.array(z.string()),
+    }),
+  ),
+  total_models: z.number().int(),
+});
+
+export type Skill = z.infer<typeof SkillSchema>;
+export type Strategy = z.infer<typeof StrategySchema>;
+export type WorldEntity = z.infer<typeof WorldEntitySchema>;
+export type EvalResult = z.infer<typeof EvalResultSchema>;
+export type LearningAnalytics = z.infer<typeof LearningAnalyticsSchema>;
+export type OpsTool = z.infer<typeof OpsToolSchema>;
+export type OpsModel = z.infer<typeof OpsModelSchema>;
+export type OpsProvider = z.infer<typeof OpsProviderSchema>;
+export type OpsSchedule = z.infer<typeof OpsScheduleSchema>;
+export type Experience = z.infer<typeof ExperienceSchema>;
+export type ProviderHealth = z.infer<typeof ProviderHealthSchema>;
+export type ProfileInfo = z.infer<typeof ProfileInfoSchema>;
+export type QuotaSnapshot = z.infer<typeof QuotaSnapshotSchema>;
+export type CapabilityMatrix = z.infer<typeof CapabilityMatrixSchema>;
+
+/**
+ * One row from `/events/search`. The per-event payload is an untyped bus event
+ * (see `AtlasEvent` in `lib/websocket`) — the backend serialises the raw event
+ * and injects `_topic`/`_timestamp` metadata. We model the fields the legacy
+ * event cards read and keep the rest with `looseObject` so nothing is dropped;
+ * the two card-required fields default so the inferred type satisfies
+ * `AtlasEvent`. Validating the envelope (below) is the §70 win — an error
+ * envelope or a shape drift now surfaces as a typed contract error, not a crash
+ * deep in the render.
+ */
+export const EventSearchEventSchema = z.looseObject({
+  correlation_id: z.string().default(""),
+  task_id: z.string().optional(),
+  kind: z.string().default(""),
+  state: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  _timestamp: z.string().optional(),
+  _topic: z.string().optional(),
+  historical: z.boolean().optional(),
+});
+
+export const EventSearchResultSchema = z.object({
+  events: z.array(EventSearchEventSchema),
+  total: z.number().int(),
+  limit: z.number().int(),
+  offset: z.number().int(),
+});
+
+export type EventSearchEvent = z.infer<typeof EventSearchEventSchema>;
+export type EventSearchResult = z.infer<typeof EventSearchResultSchema>;

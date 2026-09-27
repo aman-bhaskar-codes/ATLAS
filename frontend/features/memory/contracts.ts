@@ -153,3 +153,10 @@ export type MemoryWireMessage =
   | ({ type?: undefined } & MemoryEvent)
   | { type: 'ping'; timestamp?: number }
   | { type: 'replay_complete' };
+
+/** Response of DELETE /api/v1/memory (destructive wipe). */
+export const ClearMemoriesResultSchema = z.object({
+  status: z.string(),
+  message: z.string(),
+});
+export type ClearMemoriesResult = z.infer<typeof ClearMemoriesResultSchema>;

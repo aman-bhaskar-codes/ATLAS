@@ -8,8 +8,10 @@ from dataclasses import dataclass
 from atlas.capabilities.browser.domain.content import Article
 from atlas.capabilities.browser.engines.extraction import ExtractionEngine
 from atlas.capabilities.browser.engines.navigation import NavigationEngine
+from atlas.capabilities.browser.errors import UnsafeURLError
 from atlas.capabilities.browser.page.page_manager import PageManager
 from atlas.capabilities.browser.research.source_ranker import SourceRanker
+from atlas.capabilities.browser.security.egress import EgressPolicy
 from atlas.infra.ids import CorrelationId
 from atlas.infra.logging import get_logger
 
@@ -45,6 +47,14 @@ class CrawlerEngine:
         """Crawl starting from seed_url, returning extracted articles."""
         visited: set[str] = set()
         articles: list[Article] = []
+
+        # Confine the crawl to the seed's registrable domain and its subdomains,
+        # fail-closed. A substring host check (`seed in link or link in seed`) let
+        # `evil-example.com` or `example.com.attacker.net` pass; EgressPolicy does
+        # proper host-scope matching AND blocks internal/loopback/metadata targets
+        # a followed link (or an injected redirect, §23) might point at.
+        seed_host = urllib.parse.urlparse(seed_url).netloc.split("@")[-1].split(":")[0].lower()
+        link_egress = EgressPolicy(allowed_hosts=frozenset({seed_host}) if seed_host else frozenset())
 
         handle = await self._pages.new_page(session_id)
 
@@ -90,11 +100,16 @@ class CrawlerEngine:
                         links = re.findall(r'<a\s+(?:[^>]*?\s+)?href="([^"]*)"', html, re.IGNORECASE)
                         for link in links:
                             link = urllib.parse.urljoin(current_url, link)
-                            if link.startswith("http") and link not in visited:
-                                seed_domain = urllib.parse.urlparse(seed_url).netloc
-                                link_domain = urllib.parse.urlparse(link).netloc
-                                if seed_domain in link_domain or link_domain in seed_domain:
-                                    frontier.append((link, current_depth + 1))
+                            if link in visited:
+                                continue
+                            # Fail-closed: only http(s), public, in-scope links are
+                            # followed. Anything else (internal host, off-domain,
+                            # non-http scheme) is skipped without a request.
+                            try:
+                                link_egress.check(link)
+                            except UnsafeURLError:
+                                continue
+                            frontier.append((link, current_depth + 1))
                     except Exception as exc:
                         _log.debug("crawler.link_extraction_failed", url=current_url, error=str(exc))
 

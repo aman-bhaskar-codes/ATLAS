@@ -9,9 +9,28 @@ allowed_paths:
     - "~/**"   # reads are tier-0; path is a belt-and-suspenders guard, not the primary gate
   write: ["~/projects/scratch/**", "~/atlas/outbox/**", "/tmp/atlas/**", "~/Agentic & AI Agent Projects/**"]
 
+# Two buckets, consulted by BOTH gates — they must agree, or the verb is DEAD:
+#   1. the classifier's `cmd_in_read_only` / `cmd_in_side_effect` constraints, and
+#   2. `ShellTool`'s own deny-by-default gate (built from this block in app.py).
+# A command in NEITHER bucket is refused by the tool even AFTER the user confirms.
+# Policy: `read_only` = reads + read-only plumbing — nothing a command is expected to
+# write → auto-approve (Tier 1, notified + logged). Everything else the IDE may run
+# sits in `side_effect` → executable, but confirm-gated (Tier 2), because running a
+# project's code is consequential.
+# Deliberately absent: `git push` / `git fetch` — the agent never talks to a remote.
 allowed_commands:
-  read_only:   ["ls", "cat", "grep", "find", "git status", "git log", "git diff", "curl", "wget", "head", "tail", "wc", "python3 -c"]
-  side_effect: ["git add", "git commit", "npm install", "python"]
+  read_only:   ["ls", "cat", "grep", "find", "git status", "git log", "git diff", "curl", "wget", "head", "tail", "wc",
+                "python3 -c",
+                # pure git reads: the status/diff engine plus checkpoint resolve + list
+                "git rev-parse", "git for-each-ref"]
+  side_effect: ["git add", "git commit", "npm install", "python",
+                # git verbs that write the index, worktree, object DB, or refs.
+                # Checkpoints are writes too: snapshot = stash create + update-ref.
+                "git checkout", "git restore", "git update-ref", "git stash",
+                # verification — the IDE test/diagnostics verbs, plus every test command
+                # `analyze_project` can report (a candidate the tool refuses is dead).
+                "pytest", "mypy", "ruff", "eslint", "tsc",
+                "cargo test", "go test", "npm test", "npm run test", "pnpm test", "yarn test", "bun test"]
 
 whatsapp:
   known_contacts: []

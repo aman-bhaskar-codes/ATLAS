@@ -8,8 +8,10 @@ These pin the HONEST current behavior rather than pretending approvals work:
   approve/deny buttons are never reachable because no rows are ever listed.
 * ``GET /approvals/{id}`` always 404s — ``AtlasTrustPlane.get_approval`` is
   unimplemented (documented in ``routes_trust.py``).
-* ``POST /approvals/{id}/decide`` raises ``NotImplementedError`` →
-  ``internal_error`` (500) — the decide flow is genuinely UNAVAILABLE today.
+* ``POST /approvals/{id}/decide`` always 404s — approval storage is deferred,
+  so no ``approval_id`` can resolve. This is the honest answer: the request is
+  well-formed (the server is not broken → not a 500) and no decision is
+  fabricated (§69). It is not reachable in practice (no rows are ever listed).
 
 When approval storage lands (tracked as a Phase-3 backend gap), these
 assertions must change — that is the intended tripwire.
@@ -32,20 +34,20 @@ async def test_get_single_approval_is_not_found_today(api_client: AsyncClient) -
     assert r.json()["error"] == "not_found"
 
 
-async def test_decide_approval_is_unavailable_today(api_client: AsyncClient) -> None:
-    """decide_approval raises NotImplementedError -> stable 500 envelope.
+async def test_decide_approval_is_not_found_today(api_client: AsyncClient) -> None:
+    """decide_approval 404s: no approval exists to decide on.
 
     This documents the Zero-Dead-UI tension truthfully: the wired approve/deny
-    buttons target an endpoint that is not implemented. It is not reachable in
-    practice (no approvals are ever listed), but if it were called it would 500,
-    not silently succeed.
+    buttons target an id that cannot resolve (no approvals are ever listed). A
+    404 — not a 500 and not a silent success — is the honest response until
+    approval storage is wired.
     """
     r = await api_client.post(
         "/api/v1/approvals/any-id/decide",
         json={"decision": "approve", "idempotency_key": "e2e-key-decide-00001"},
     )
-    assert r.status_code == 500
-    assert r.json()["error"] == "internal_error"
+    assert r.status_code == 404
+    assert r.json()["error"] == "not_found"
 
 
 async def test_decide_approval_validates_decision_enum(api_client: AsyncClient) -> None:

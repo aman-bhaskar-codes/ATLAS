@@ -8,11 +8,12 @@
  * error row rendered zod's own message — internal backend field names — on screen.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { requestContract } from '@/lib/api/client';
 import {
   EpisodeSchema, FactSchema, KnowledgeDocSchema,
   KnowledgeChunkSchema, MemoryStatsSchema, PreferencesSchema,
+  ClearMemoriesResultSchema,
   type Episode, type Fact, type KnowledgeDoc,
   type KnowledgeChunk, type MemoryStats, type Preferences,
 } from './contracts';
@@ -117,5 +118,22 @@ export function usePreferences() {
     queryFn: () => requestContract('/memory/preferences', PreferencesSchema),
     refetchInterval: 15000,
     staleTime: 8000,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Destructive wipe — DELETE /api/v1/memory
+// ---------------------------------------------------------------------------
+
+/**
+ * Clears ALL memory (episodes, facts, knowledge, preferences). Goes through
+ * `requestContract` so the request hits the ATLAS API base URL — a relative
+ * `fetch('/api/v1/memory')` would hit the Next.js origin (which serves no such
+ * route) and silently no-op. The admin key requirement is enforced server-side.
+ */
+export function useClearMemories() {
+  return useMutation({
+    mutationFn: () =>
+      requestContract('/memory', ClearMemoriesResultSchema, { method: 'DELETE' }),
   });
 }

@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 from atlas.infra.clock import Clock
 from atlas.infra.db import Database
+from atlas.infra.errors import UserError
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
 from atlas.memory.embedder import Embedder
@@ -246,12 +247,21 @@ class KnowledgeStore:
     async def _chunk_pdf_file(
         self, file_path: Path, doc_id: str, metadata: dict[str, Any]
     ) -> Any:  # AsyncGenerator[DocumentChunk, None]
-        """Chunk a PDF file."""
-        # TODO: Implement PDF parsing with pypdf
-        # For now, treat as text
-        _log.info("knowledge_store.pdf_fallback", event_type="memory", path=str(file_path))
-        async for chunk in self._chunk_text_file(file_path, doc_id, metadata):
-            yield chunk
+        """Chunk a PDF file.
+
+        Fails CLOSED. There is no PDF parser wired (no pypdf/pdfminer dependency),
+        and the old fallback ran the PDF's raw bytes through ``read_text("utf-8")``
+        — which either raised deep in the reader or, worse, produced mojibake that
+        got embedded and indexed as if it were the document's text (fabricated
+        content, §69). Refuse honestly instead: a real extractor (or an explicit
+        pre-conversion to text/markdown) must land before PDFs can be ingested.
+        """
+        _log.warning("knowledge_store.pdf_unsupported", event_type="memory", path=str(file_path))
+        raise UserError(
+            "PDF ingestion is not supported yet — no PDF text extractor is installed. "
+            "Convert the file to text or markdown and ingest that instead."
+        )
+        yield  # pragma: no cover — keeps this an async generator, never reached
 
     async def _embed_and_index_chunk(
         self, chunk: DocumentChunk, progress_callback: Callable[[dict[str, Any]], Any] | None = None

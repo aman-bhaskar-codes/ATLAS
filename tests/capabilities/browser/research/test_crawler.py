@@ -69,3 +69,39 @@ async def test_crawler_engine_basic() -> None:
     assert "https://example.com" in result.visited_urls
     assert "https://example.com/page2" in result.visited_urls
     assert result.confidence > 0.0
+
+
+class FakeProviderHostileLinks:
+    """Serves links a substring host-check would wrongly follow: a look-alike
+    off-domain host, a subdomain (allowed), and an internal SSRF target."""
+
+    async def content_html(self, session_id, tab_id) -> None:  # type: ignore
+        return (  # type: ignore
+            '<a href="https://example.com.attacker.net/steal">lookalike</a>'
+            '<a href="https://evil-example.com/steal">substring</a>'
+            '<a href="http://169.254.169.254/latest/meta-data/">metadata</a>'
+            '<a href="https://docs.example.com/ok">subdomain</a>'
+        )
+
+
+class HostileLinkPageManager(FakePageManager):
+    def get_provider(self, handle) -> None:  # type: ignore
+        return FakeProviderHostileLinks(), "sess", "tab"  # type: ignore
+
+
+@pytest.mark.asyncio
+async def test_crawler_confines_to_seed_domain_and_blocks_ssrf() -> None:
+    crawler = CrawlerEngine(
+        nav_engine=FakeNavEngine(),  # type: ignore
+        extract_engine=FakeExtractionEngine(),  # type: ignore
+        page_manager=HostileLinkPageManager(),  # type: ignore
+    )
+
+    result = await crawler.crawl("sess-1", "https://example.com", depth=1, budget=10, cid=CorrelationId("t"))
+
+    # The look-alike (example.com.attacker.net), substring (evil-example.com) and
+    # metadata IP must NEVER be visited; the real subdomain is in-scope.
+    assert "https://example.com.attacker.net/steal" not in result.visited_urls
+    assert "https://evil-example.com/steal" not in result.visited_urls
+    assert "http://169.254.169.254/latest/meta-data/" not in result.visited_urls
+    assert "https://docs.example.com/ok" in result.visited_urls

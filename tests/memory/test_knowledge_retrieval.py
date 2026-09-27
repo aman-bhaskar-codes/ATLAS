@@ -11,6 +11,7 @@ import pytest
 
 from atlas.infra.clock import SystemClock
 from atlas.infra.db import Database
+from atlas.infra.errors import UserError
 from atlas.infra.ids import UuidGenerator
 from atlas.memory.episodic import EpisodicMemory
 from atlas.memory.knowledge_store import KnowledgeStore
@@ -50,6 +51,29 @@ def _build(tmp: Path) -> tuple[Database, ChromaVectorStore, _FakeEmbedder]:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_pdf_ingestion_fails_closed(tmp_path: Path) -> None:
+    """A PDF must NOT be silently indexed as utf-8 garbage (§69). With no PDF
+    extractor wired, ingestion raises UserError and writes no chunks."""
+    db, vs, emb = _build(tmp_path)
+    await db.start()
+    clock = SystemClock()
+    ids = UuidGenerator()
+    store = KnowledgeStore(db=db, vector_store=vs, embedder=emb, ids=ids, clock=clock)  # type: ignore[arg-type]
+
+    # Minimal PDF header + binary; the old path would utf-8-decode this to mojibake.
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<< /Type /Catalog >>\n")
+
+    with pytest.raises(UserError):
+        await store.ingest_document(pdf, "pdf", metadata={"title": "Paper"})
+
+    # Nothing was persisted for the refused document.
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_chunks")
+    row = await cur.fetchone()
+    assert row["n"] == 0
 
 
 @pytest.mark.asyncio

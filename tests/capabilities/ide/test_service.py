@@ -645,3 +645,47 @@ def test_detect_ports_is_conservative() -> None:
     assert detect_ports("running at http://127.0.0.1:8000") == {8000}
     # No bare five-digit log noise without a port cue.
     assert detect_ports("built 123456 modules in 900ms") == set()
+
+
+class TestRunCommandCwd:
+    """The IDE's "run in the workspace root" contract must survive the LAST hop too: the
+    cwd rides the audited request and is forwarded by the real `ShellTool`. A fake
+    command tool cannot catch a broken hop — this wires the real one."""
+
+    async def test_the_workspace_root_reaches_the_real_sandbox(self, tmp_path: Path) -> None:
+        from atlas.safety.sandbox import SandboxResult
+        from atlas.tools.shell import ShellTool
+
+        class _RecordingSandbox:
+            def __init__(self) -> None:
+                self.cwds: list[str | None] = []
+
+            async def run(
+                self,
+                command: list[str],
+                *,
+                mounts: dict[str, str],
+                network: bool = False,
+                timeout_s: float = 60.0,
+                stdin: bytes | None = None,
+                cwd: str | None = None,
+            ) -> SandboxResult:
+                self.cwds.append(cwd)
+                return SandboxResult(exit_code=0, stdout_tail="ok", stderr_tail="", duration_ms=1)
+
+        sandbox = _RecordingSandbox()
+        shell = ShellTool(read_only=["git status"], side_effect=[], sandbox=sandbox, mounts={})  # type: ignore[arg-type]
+        svc = IDEService(
+            safety=FakeSafety(),  # type: ignore[arg-type]
+            filesystem_tool=FakeFilesystemTool(),  # type: ignore[arg-type]
+            ids=FakeIds(),
+            clock=FakeClock(),
+            command_tool=shell,
+        )
+        root = _repo(tmp_path)
+        session = await svc.open_workspace(root, "demo")
+
+        result = await svc.run_command(session.workspace.id, "git status")
+
+        assert result.ok is True
+        assert sandbox.cwds == [str(Path(root).resolve())]
