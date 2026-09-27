@@ -184,12 +184,13 @@ class TestFreeQuotaGovernor:
         assert r["requests_used"] == 1
         assert r["tokens_used"] == 500
 
-    def test_reset_daily(self):
+    @pytest.mark.asyncio
+    async def test_reset_daily(self):
         g = FreeQuotaGovernor()
         g.configure("groq", ProviderQuota(daily_requests=2, daily_tokens=100))
         g.record("groq", 50)
         g.record("groq", 50)
-        g.reset_daily()
+        await g.reset_daily()
         g.check("groq")  # should succeed after reset
 
     def test_full_snapshot(self):
