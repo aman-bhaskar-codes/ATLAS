@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict
 
 from atlas.infra.bus import Event, MessageBus
@@ -389,53 +389,96 @@ async def replay_event(event_id: str, _admin: Principal = Depends(require_admin)
         return {"error": str(exc)}
 
 
-def _parse_webhook_secrets(raw: str) -> dict[str, str]:
-    """Parse ``source:secret,source2:secret2`` into a mapping. Blank -> {}."""
-    out: dict[str, str] = {}
-    for pair in raw.split(","):
-        pair = pair.strip()
-        if not pair or ":" not in pair:
-            continue
-        source, secret = pair.split(":", 1)
-        source, secret = source.strip(), secret.strip()
-        if source and secret:
-            out[source] = secret
-    return out
+async def verify_webhook_signature(
+    request: Request, source: str
+) -> None:
+    """FastAPI dependency to verify provider-native webhook signatures."""
+    from atlas.interfaces.api.webhook_auth import (
+        WebhookSignatureError,
+        get_source_secret,
+        get_verifier,
+    )
+
+    atlas = getattr(request.app.state, "atlas", None)
+    settings = getattr(atlas, "settings", None)
+
+    secret = get_source_secret(settings, source) if settings else ""
+    verifier = get_verifier(source)
+
+    if secret and verifier:
+        # Active: secret configured AND verifier exists → MUST verify.
+        # Wait for the body in the dependency. request.body() is safe to call multiple times.
+        raw_body = await request.body()
+        try:
+            verifier.verify(body=raw_body, headers=request.headers, secret=secret)
+            _log.info("events.webhook_verified", event_type="api", source=source)
+        except WebhookSignatureError as exc:
+            _log.warning(
+                "events.webhook_rejected",
+                event_type="api",
+                source=source,
+                reason=exc.reason,
+            )
+            raise HTTPException(401, str(exc))
+    elif secret and not verifier:
+        # Secret configured but no verifier registered → warn, passthrough.
+        _log.warning(
+            "events.webhook_no_verifier",
+            event_type="api",
+            source=source,
+            detail="secret configured but no verifier registered; passthrough",
+        )
+    else:
+        # No secret → verification inactive for this source.
+        _log.debug(
+            "events.webhook_verification_off",
+            event_type="api",
+            source=source,
+        )
 
 
-@router.post("/api/v1/webhooks/{source}")
+@router.post(
+    "/api/v1/webhooks/{source}",
+    dependencies=[Depends(verify_webhook_signature)]
+)
 async def receive_webhook(
     source: str,
     request: Request,
-    x_hub_signature_256: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    """Canonical event ingestion for external webhooks (e.g., GitHub, Stripe).
+    """Canonical event ingestion for external webhooks (e.g. GitHub, Stripe).
 
-    If a per-source HMAC secret is configured (``ATLAS_WEBHOOK_SECRETS``), the
-    request MUST carry a matching ``X-Hub-Signature-256`` over the raw body;
-    otherwise the source stays open (local/dev). Verification happens on the raw
-    bytes BEFORE parsing, so a forged body never reaches the bus.
+    Two independent authentication gates compose on this endpoint:
+
+    1. **ATLAS API key** (``require_principal`` / router-level dependency):
+       proves the caller holds a valid ``ATLAS_API_KEYS`` token. In local mode
+       (no keys configured) this gate is open and returns ``ANONYMOUS_LOCAL``.
+
+    2. **Provider-native signature** (this handler): when the source's secret is
+       configured (e.g. ``GITHUB_WEBHOOK_SECRET``, ``STRIPE_WEBHOOK_SECRET``),
+       the request MUST carry a valid provider-specific HMAC over the raw body
+       bytes. Verification is per-source:
+
+       - **GitHub** — ``X-Hub-Signature-256: sha256=<hex>``; HMAC-SHA256 with
+         the configured secret over the raw body.
+       - **Stripe** — ``Stripe-Signature: t=<ts>,v1=<hex>[,v1=…]``; HMAC-SHA256
+         over ``f"{t}.".encode() + body`` with the configured secret; timestamp
+         must be within 300 seconds (replay protection). Multiple ``v1`` values
+         are accepted for secret rotation.
+
+    **Opt-in rule**: verification for a source is active if and only if that
+    source's secret env var is non-empty. No secret → today's behaviour exactly
+    (API-key gate only). Unknown sources (no verifier in the registry) pass
+    through with a one-time warning log.
+
+    Verification happens on the raw bytes BEFORE JSON parsing, so a forged body
+    never reaches the bus.
     """
     if _deps is None or _deps.bus is None:
         return {"error": "Server or bus not initialized"}
 
     raw_body = await request.body()
 
-    atlas = getattr(request.app.state, "atlas", None)
-    settings = getattr(atlas, "settings", None)
-    secrets = _parse_webhook_secrets(getattr(settings, "webhook_secrets", "") or "")
-    expected_secret = secrets.get(source)
-    if expected_secret is not None:
-        import hashlib
-        import hmac
-
-        if not x_hub_signature_256:
-            raise HTTPException(401, "webhook signature required")
-        digest = hmac.new(expected_secret.encode(), raw_body, hashlib.sha256).hexdigest()
-        provided = x_hub_signature_256.removeprefix("sha256=")
-        if not hmac.compare_digest(digest, provided):
-            raise HTTPException(401, "invalid webhook signature")
-
+    # ── Publish to bus ──────────────────────────────────────────────────
     topic = f"webhook.{source}"
 
     class WebhookEvent(Event):

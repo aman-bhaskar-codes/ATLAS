@@ -52,10 +52,12 @@ class Settings(BaseSettings):
     openrouter_api_key: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
     master_key: str = ""
     api_keys: str = ""  # comma-separated; 'ro:' prefix = readonly key (Batch 7)
-    # comma-separated `source:secret` pairs. When a source has a secret here, its
-    # /api/v1/webhooks/{source} calls MUST carry a valid X-Hub-Signature-256 HMAC;
-    # sources with no configured secret stay open (local/dev). Secret, never logged.
-    webhook_secrets: str = Field(default="", validation_alias="ATLAS_WEBHOOK_SECRETS")
+    github_webhook_secret: str = Field(
+        default="", validation_alias="GITHUB_WEBHOOK_SECRET"
+    )  # secret — never logged/echoed, by key name only
+    stripe_webhook_secret: str = Field(
+        default="", validation_alias="STRIPE_WEBHOOK_SECRET"
+    )  # secret — never logged/echoed, by key name only
     safe_browsing_api_key: str = ""
     virustotal_api_key: str = ""
     # ── Optional direct-vendor voice keys ─────────────────────────────
