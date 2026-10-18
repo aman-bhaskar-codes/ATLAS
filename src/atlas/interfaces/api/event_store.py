@@ -12,11 +12,12 @@ order from the SSE stream.
 from __future__ import annotations
 
 import bisect
-from collections import OrderedDict, deque
 import itertools
 import json
 import uuid
+from collections import OrderedDict, deque
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from atlas.infra.db import Database
@@ -127,10 +128,11 @@ class TaskEventStore:
         await self._db.conn.commit()
 
         # Update in-memory ring buffer
+        dt_ts = datetime.fromisoformat(ts.replace("Z", "+00:00")) if isinstance(ts, str) else ts
         event_resp = TaskEventResponse(
             event_id=event_id,
             event_type=event_type,
-            ts=ts,
+            ts=dt_ts,
             task_id=task_id,
             correlation_id=correlation_id,
             execution_id=None,
@@ -196,7 +198,7 @@ class TaskEventStore:
             TaskEventResponse(
                 event_id=r["event_id"],
                 event_type=r["event_type"],
-                ts=r["ts"],
+                ts=datetime.fromisoformat(r["ts"].replace("Z", "+00:00")) if isinstance(r["ts"], str) else r["ts"],
                 task_id=r["task_id"],
                 correlation_id=r["correlation_id"],
                 execution_id=None,

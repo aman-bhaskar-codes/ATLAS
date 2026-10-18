@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 from atlas.infra.logging import get_logger
 

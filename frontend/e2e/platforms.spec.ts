@@ -6,7 +6,7 @@ test('command centre launches separately framed platforms with blocked-popup fal
   await expect(page.getByRole('navigation', { name: 'Component pages' })).toBeVisible();
   await page.evaluate(() => { window.open = () => null; });
   await page.getByRole('button', { name: 'Launch Research' }).click();
-  await expect(page).toHaveURL(/\/research$/);
+  await expect(page).toHaveURL(/\/research(?:\?.*)?$/);
   await expect(page.getByRole('navigation', { name: 'Research navigation' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toHaveCount(0);
   await expect(page.locator('header.topbar')).toHaveCount(0);
@@ -14,7 +14,7 @@ test('command centre launches separately framed platforms with blocked-popup fal
   await expect(page).toHaveURL(/\/$/);
   await page.evaluate(() => { window.open = () => null; });
   await page.getByRole('button', { name: 'Launch IDE' }).click();
-  await expect(page).toHaveURL(/\/workspaces$/);
+  await expect(page).toHaveURL(/\/workspaces(?:\?.*)?$/);
   await expect(page.getByRole('navigation', { name: 'IDE navigation' })).toBeVisible();
   await expect(page.locator('header.topbar')).toHaveCount(0);
 });

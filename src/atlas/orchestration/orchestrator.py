@@ -19,22 +19,25 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from atlas.infra.clock import Clock
-from atlas.infra.ids import IdGenerator, UuidGenerator
 from atlas.infra.execution_lease import (
-    ExecutionOwner, OwnershipLostError, bind_execution_owner, lease_times,
+    ExecutionOwner,
+    OwnershipLostError,
+    bind_execution_owner,
+    lease_times,
 )
+from atlas.infra.ids import IdGenerator, UuidGenerator
 from atlas.infra.logging import get_logger
 from atlas.infra.tasks import spawn
 from atlas.infra.types import InboundEvent
 from atlas.orchestration.agents.types import RunOutcome
 from atlas.orchestration.checkpoint import CheckpointStore
-from atlas.orchestration.recovery import recover_interrupted_tasks
 from atlas.orchestration.context_builder import ContextBuilder
 from atlas.orchestration.events import EventPublisher
 from atlas.orchestration.goal import GoalState
 from atlas.orchestration.managers.cancellation import CancellationToken
 from atlas.orchestration.planner import Planner
 from atlas.orchestration.reasoning import ReasoningLoop
+from atlas.orchestration.recovery import recover_interrupted_tasks
 from atlas.orchestration.registry import ToolRegistry
 from atlas.orchestration.state import TaskState, TaskStateMachine
 from atlas.orchestration.stores import CancellationStore, ExecutionStore
@@ -201,13 +204,14 @@ class Orchestrator:
                 try:
                     await self.recover_interrupted()
                     database = getattr(self._exec_store, "database", None)
-                    cur = await database.conn.execute(
-                        "SELECT 1 FROM tasks WHERE state NOT IN ('completed','failed','archived') LIMIT 1"
-                    )
-                    pending = await cur.fetchone()
-                    await cur.close()
-                    if pending is None:
-                        break
+                    if database is not None:
+                        cur = await database.conn.execute(
+                            "SELECT 1 FROM tasks WHERE state NOT IN ('completed','failed','archived') LIMIT 1"
+                        )
+                        pending = await cur.fetchone()
+                        await cur.close()
+                        if pending is None:
+                            break
                 except Exception:
                     _log.exception("task.recovery_monitor_failed")
         finally:

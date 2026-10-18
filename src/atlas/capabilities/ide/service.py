@@ -141,7 +141,7 @@ class IDEService:
         self._workspaces[wid] = _OpenWorkspace(engine, writer, session)
         self._workspaces.move_to_end(wid)
         if len(self._workspaces) > self._max_active_workspaces:
-            evicted_id, evicted_ow = self._workspaces.popitem(last=False)
+            evicted_id, _evicted_ow = self._workspaces.popitem(last=False)
             _log.info("ide.workspace_lru_evicted", workspace_id=str(evicted_id))
         if self._store is not None:
             await self._store.save_workspace(engine.ref)
@@ -495,7 +495,7 @@ class IDEService:
         self._workspaces[wid] = ow
         self._workspaces.move_to_end(wid)
         if len(self._workspaces) > self._max_active_workspaces:
-            evicted_id, evicted_ow = self._workspaces.popitem(last=False)
+            evicted_id, _evicted_ow = self._workspaces.popitem(last=False)
             _log.info("ide.workspace_lru_evicted", workspace_id=str(evicted_id))
         _log.info("ide.workspace.resumed", event_type="lifecycle", workspace_id=str(wid), root=str(engine.root))
         return ow

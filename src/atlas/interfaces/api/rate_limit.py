@@ -8,8 +8,8 @@ implementation would expose, so swapping later is a constructor change.
 
 from __future__ import annotations
 
-from collections import deque
 import time
+from collections import deque
 
 from fastapi import Request
 from fastapi.responses import JSONResponse

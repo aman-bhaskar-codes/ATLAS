@@ -8,8 +8,8 @@ reason about, not a crash.
 
 from __future__ import annotations
 
-from atlas.infra.ids import CorrelationId
 from atlas.infra.execution_lease import require_execution_owner
+from atlas.infra.ids import CorrelationId
 from atlas.infra.types import ToolRequest
 from atlas.orchestration.errors import ToolExecutionError
 from atlas.orchestration.registry import ToolRegistry

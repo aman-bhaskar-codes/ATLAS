@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from atlas.infra.db import Database
 from atlas.infra.backends import SQLiteConnection
+from atlas.infra.db import Database
 from atlas.infra.execution_lease import OWNER_GUARD, ExecutionLeaseStore, OwnershipLostError, current_execution_owner
 
 

@@ -241,7 +241,6 @@ def test_merkle_prefix_trie(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_ide_service_lru_pool(tmp_path: Path) -> None:
     """IDEService maintains at most max_active_workspaces=3 resident workspaces."""
-    from atlas.capabilities.ide.service import IDEService
     from atlas.infra.clock import SystemClock
     from atlas.infra.ids import UuidGenerator
 

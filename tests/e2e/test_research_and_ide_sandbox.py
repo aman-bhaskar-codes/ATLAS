@@ -18,7 +18,6 @@ from atlas.engineering.myers import (
     myers_diff,
 )
 from atlas.knowledge.dedup import MinHashLSH, UrlBloomFilter
-from atlas.safety.sandbox import SandboxResult
 from atlas.safety.sandbox_docker import DockerSandbox, SandboxSpec
 
 
@@ -75,7 +74,7 @@ def test_minhash_lsh_duplicate_detection() -> None:
     )
 
     # Index doc1
-    is_dup1, match1, sim1 = lsh.is_duplicate_or_add("doc1", doc1_text)
+    is_dup1, match1, _sim1 = lsh.is_duplicate_or_add("doc1", doc1_text)
     assert not is_dup1
     assert match1 is None
 
@@ -86,7 +85,7 @@ def test_minhash_lsh_duplicate_detection() -> None:
     assert sim2 >= 0.85
 
     # Test distinct doc3
-    is_dup3, match3, sim3 = lsh.is_duplicate_or_add("doc3", doc3_text)
+    is_dup3, _match3, sim3 = lsh.is_duplicate_or_add("doc3", doc3_text)
     assert not is_dup3
     assert sim3 < 0.2
 

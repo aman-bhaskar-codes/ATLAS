@@ -21,10 +21,13 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from atlas.infra.clock import Clock
-from atlas.infra.ids import IdGenerator
 from atlas.infra.execution_lease import (
-    OWNER_GUARD, ORPHAN_GUARD, OwnershipLostError, current_execution_owner,
+    ORPHAN_GUARD,
+    OWNER_GUARD,
+    OwnershipLostError,
+    current_execution_owner,
 )
+from atlas.infra.ids import IdGenerator
 
 
 @dataclass(frozen=True)

@@ -346,7 +346,8 @@ class RuntimeSupervisor:
         available = [p for p, h in health.items() if h]
         if not available:
             _log.warning("intelligence.no_providers", health=health)
-            status = ComponentStatus.FAILED if getattr(self._settings, "strict_bootstrap", False) else ComponentStatus.DEGRADED
+            is_strict = getattr(self._settings, "strict_bootstrap", False)
+            status = ComponentStatus.FAILED if is_strict else ComponentStatus.DEGRADED
             self._set_component_health(
                 "intelligence_gateway", status, detail="No providers available"
             )

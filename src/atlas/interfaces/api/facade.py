@@ -17,13 +17,14 @@ import json
 import secrets
 import shutil
 import urllib.parse
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from fastapi import HTTPException
 
 from atlas.app import Atlas
-from atlas.infra.logging import get_logger
 from atlas.infra.execution_lease import ORPHAN_GUARD
+from atlas.infra.ids import TaskId
+from atlas.infra.logging import get_logger
 from atlas.infra.tasks import spawn
 from atlas.infra.types import InboundEvent
 from atlas.interfaces.api.errors import NotFoundError
@@ -548,8 +549,9 @@ class DefaultAtlasControlPlane:
 
                 ide_svc = getattr(self.atlas, "ide_service", None)
                 if ide_svc is not None:
-                    session = await ide_svc.open_workspace(str(ws_dir), command.workspace_name or f"workspace-{workspace_id[:8]}")
-                    workspace_id = str(session.workspace.id)
+                    ws_label = command.workspace_name or f"workspace-{str(workspace_id)[:8]}"
+                    session = await ide_svc.open_workspace(str(ws_dir), ws_label)
+                    workspace_id = TaskId(str(session.workspace.id))
 
                     def undo_ide() -> None:
                         ide_svc.close_workspace(str(workspace_id))

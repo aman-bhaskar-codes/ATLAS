@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -25,7 +24,11 @@ from atlas.orchestration.orchestrator import Orchestrator
 from atlas.orchestration.recovery import recover_interrupted_tasks
 from atlas.orchestration.types import Observation, Plan, PlanStep
 from tests.orchestration.agents.test_orchestrator_delegation import (
-    FakeContextBuilder, FakeEvents, FakeReasoning, FakeRegistry, FakeUnderstanding,
+    FakeContextBuilder,
+    FakeEvents,
+    FakeReasoning,
+    FakeRegistry,
+    FakeUnderstanding,
 )
 
 
@@ -98,7 +101,9 @@ async def test_second_startup_preserves_live_task_and_checkpoint(task_databases:
         await asyncio.gather(worker, return_exceptions=True)
 
 
-async def test_duplicate_live_task_is_rejected_before_second_dispatch(task_databases: tuple[Database, Database]) -> None:
+async def test_duplicate_live_task_is_rejected_before_second_dispatch(
+    task_databases: tuple[Database, Database],
+) -> None:
     first, second = task_databases
     owner_dispatch = BlockingDagDispatcher(checkpoints(first), "same")
     other_dispatch = BlockingDagDispatcher(checkpoints(second), "same")
@@ -116,7 +121,9 @@ async def test_duplicate_live_task_is_rejected_before_second_dispatch(task_datab
         await asyncio.gather(worker, return_exceptions=True)
 
 
-async def test_api_admission_is_owned_before_background_worker_starts(task_databases: tuple[Database, Database]) -> None:
+async def test_api_admission_is_owned_before_background_worker_starts(
+    task_databases: tuple[Database, Database],
+) -> None:
     first, second = task_databases
     gate = asyncio.Event()
     runtime = orchestrator(first, BlockingDagDispatcher(checkpoints(first), "unused"))

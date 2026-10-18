@@ -393,6 +393,7 @@ async def get_tree_delta(
     atlas: Atlas = Depends(get_atlas),
 ) -> TreeDeltaResponse:
     from pathlib import Path
+
     from atlas.engineering.merkle import MerklePrefixTrie
 
     svc = _service(atlas)

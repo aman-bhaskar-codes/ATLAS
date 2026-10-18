@@ -16,7 +16,6 @@ from typing import Any
 import pytest
 
 from atlas.infra.cognition import Complexity, RiskLevel, TaskDomain, TaskIntent
-from atlas.infra.db import Database
 from atlas.infra.execution_lease import OwnershipLostError
 from atlas.infra.ids import CorrelationId, ExecutionId, TaskId
 from atlas.infra.types import InboundEvent

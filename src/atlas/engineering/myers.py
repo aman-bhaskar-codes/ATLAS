@@ -7,12 +7,13 @@ and structured IDE edit operations.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Sequence
+from enum import StrEnum
+from typing import Any
 
 
-class DiffOpKind(str, Enum):
+class DiffOpKind(StrEnum):
     KEEP = "keep"
     INSERT = "insert"
     DELETE = "delete"

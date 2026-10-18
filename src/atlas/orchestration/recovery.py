@@ -10,8 +10,8 @@ until those exist everywhere, silent re-execution would risk duplicates.
 from __future__ import annotations
 
 from atlas.infra.clock import Clock
-from atlas.infra.logging import get_logger
 from atlas.infra.execution_lease import ORPHAN_GUARD
+from atlas.infra.logging import get_logger
 from atlas.orchestration.checkpoint import CheckpointStore
 
 _log = get_logger("atlas.orch.recovery")

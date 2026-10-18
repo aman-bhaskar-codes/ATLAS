@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from atlas.bootstrap.runtime import RuntimeSupervisor, SystemState
+from atlas.bootstrap.runtime import ComponentStatus, RuntimeSupervisor, SystemState
 from atlas.capabilities.browser.platform import BrowserPlatform
 from atlas.capabilities.dispatcher import CapabilityDispatcher
 from atlas.capabilities.identity.platform import IdentityPlatform

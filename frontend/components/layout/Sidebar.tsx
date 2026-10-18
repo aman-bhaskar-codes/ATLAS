@@ -150,7 +150,7 @@ export function Sidebar() {
     setCollapsed((prev) => ({ ...prev, [title]: !prev[title] }));
 
   return (
-    <aside className="rail" aria-label="Primary navigation">
+    <aside className="rail" aria-label="Primary sidebar">
       <div className="brand">
         <div className="sigil">A</div>
         <div className="brand-copy">
@@ -161,6 +161,7 @@ export function Sidebar() {
 
       <nav
         className="nav"
+        aria-label="Primary navigation"
         style={{ display: "flex", flexDirection: "column", gap: "1.25rem", marginTop: "1rem" }}
       >
         {GROUPS.map((group) => {
