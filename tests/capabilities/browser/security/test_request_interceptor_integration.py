@@ -60,9 +60,12 @@ class InMemoryResponses:
             if url == "https://public.test/private-start":
                 code = 302
                 headers.append({"name": "location", "value": "https://blocked.test/private"})
-            elif url.endswith("/start"):
+            elif url == "https://public.test/start":
                 code = 302
-                headers.append({"name": "location", "value": "/final"})
+                headers.append({"name": "location", "value": "https://public.test/final"})
+            elif url == "https://popup.test/start":
+                code = 302
+                headers.append({"name": "location", "value": "https://popup.test/final"})
             elif url == "https://public.test/final":
                 body = """<img src="/image.png"><img src="https://blocked.test/private">
                 <iframe src="https://frame.test/frame"></iframe>
@@ -116,6 +119,8 @@ async def test_native_redirect_frame_popup_and_subresource_checks_preserve_url(
             async with page.expect_popup(timeout=60_000) as popup_info:
                 await page.goto("https://public.test/start", wait_until="domcontentloaded", timeout=60_000)
             popup = await popup_info.value
+            await page.wait_for_url("https://public.test/final", timeout=60_000)
+            await popup.wait_for_url("https://popup.test/final", timeout=60_000)
             await popup.wait_for_load_state("domcontentloaded", timeout=60_000)
             for _ in range(50):
                 if (
