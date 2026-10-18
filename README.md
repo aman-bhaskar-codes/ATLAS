@@ -2,84 +2,176 @@
 
 **Autonomous Task & Learning Agent System**
 
-ATLAS is a personal agent runtime project built with Python and a Next.js dashboard. It brings together task orchestration, model-provider routing, persistent memory, document retrieval, and development-workspace tools.
+ATLAS is an open-source, local-first autonomous agent runtime implemented in Python and accompanied by a Next.js web dashboard. It unifies task orchestration, multi-provider model routing, five-tier cognitive memory, document retrieval, and sandboxed developer workspace tools into a single, safety-governed architecture.
 
-The repository explores how these components can share configuration, execution records, and permission checks across a command-line interface and an HTTP API. It also contains research-session workflows and experimental adaptation and local-training components.
+The repository investigates how autonomous reasoning agents can operate within strict execution controls—enforcing deterministic risk classification, human approval gates, forward-linked cryptographic audit records, and reproducible quality gates across CLI, HTTP, and WebSocket interfaces.
 
-## Main components
+---
 
-| Component | Technical scope |
-| --- | --- |
-| Task orchestration | Task state, planning, bounded reasoning loops, tool dispatch, cancellation, and execution records |
-| Model access | A shared model gateway, provider adapters, selection rules, fallback handling, usage tracking, and configurable budgets |
-| Memory | Working context, episodic records, semantic facts, user preferences, and stored task trajectories |
-| Knowledge and research | Document ingestion, lexical and vector retrieval, rank fusion, source records, and persisted research sessions |
-| Development workspaces | File trees, document editing, change previews, command execution, Git operations, diagnostics, and workspace sessions |
-| Execution controls | Permission classification, approval requests, a stop flag, audit records, and Docker or development-mode host execution |
-| Interfaces | Typer command-line interfaces, FastAPI routes, server-sent events, WebSockets, and a browser dashboard |
+## Architecture and Execution Model
 
-These entries describe the codebase's scope. Available workflows depend on configuration, provider access, installed dependencies, and the execution environment.
+Every interaction—whether initiated via the CLI, HTTP REST endpoints, WebSockets, speech, or recurring scheduled automations—is ingested into a unified execution pipeline:
 
-## Technology stack
+```text
+                      ┌──────────────────────────────────────────────┐
+                      │    Ingress: CLI / REST / WebSocket / Cron    │
+                      └──────────────────────┬───────────────────────┘
+                                             │ InboundEvent
+                                             ▼
+                      ┌──────────────────────────────────────────────┐
+                      │       Task Orchestration (OTAR Engine)       │
+                      │  Bounded Reasoning: Observe-Think-Act-Reflect │
+                      │  Memory Context Injection & Tool Selection   │
+                      └──────────────────────┬───────────────────────┘
+                                             │ ToolRequest
+                                             ▼
+                      ┌──────────────────────────────────────────────┐
+                      │          Safety Classifier & Engine          │
+                      │  Risk Tiers (T0–T4) & Policy Enforcement     │
+                      └──────────────┬────────────────┬──────────────┘
+                        Allowed / Approved          Denied
+                                     │                │
+                                     ▼                ▼
+                      ┌──────────────────────┐ ┌─────────────────────┐
+                      │    Tool Execution    │ │  Rejection Notice   │
+                      │   Docker / Native    │ │  Terminal / Event   │
+                      └──────────────┬───────┘ └──────┬──────────────┘
+                                     │                │
+                                     └────────┬───────┘
+                                              │
+                                              ▼
+                      ┌──────────────────────────────────────────────┐
+                      │      Forward-Linked Cryptographic Audit      │
+                      │     SHA-256 Hash Chaining in SQLite Database │
+                      └──────────────────────────────────────────────┘
+```
 
-| Area | Technologies |
-| --- | --- |
-| Backend | Python 3.13+, asyncio, FastAPI, Uvicorn |
-| Configuration and contracts | Pydantic, Pydantic Settings, YAML |
-| Persistence | SQLite with aiosqlite; PostgreSQL adapters with asyncpg for selected stores |
-| Retrieval | ChromaDB, BM25, reciprocal-rank fusion, feature-based reranking |
-| Model integrations | Ollama, Gemini, OpenRouter-compatible endpoints, and optional provider adapters |
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
-| Client data and validation | TanStack Query, Zod |
-| Tool integrations | Playwright and the Model Context Protocol SDK |
-| Development tools | uv, pytest, Ruff, mypy, import-linter, Vitest, Playwright tests, GitHub Actions |
-| Packaging | Hatchling, npm, Docker |
+### Request Lifecycle
 
-The Python and frontend lockfiles record dependency versions. Optional service definitions in `docker-compose.yml` cover SearXNG, Valkey, and Phoenix; starting those services does not start the ATLAS application.
+1. **Ingress Normalization**: All incoming requests are converted into an immutable `InboundEvent` with source metadata and provenance tracking. Transports cannot bypass execution controls.
+2. **Orchestrator Cycle (OTAR)**: The runtime executes an Observe-Think-Act-Reflect loop. Active context is assembled from working memory, episodic recollections, and knowledge retrieval before delegating to the configured model.
+3. **Deterministic Safety Classification**: Proposed tool invocations are mapped to a five-tier risk taxonomy. Classification is fail-closed: unrecognized operations default to requiring human confirmation.
+4. **Policy Evaluation & Approval**:
+   - **T0 / T1**: Executed immediately or with asynchronous notification.
+   - **T2 / T3**: Suspended into the human approval queue, requiring interactive CLI confirmation or dashboard review (T3 requires an explicit approval code).
+   - **T4**: Terminated immediately by policy.
+   - **Kill Switch**: Re-verified immediately prior to dispatch to respect concurrent stop commands.
+5. **Tool Execution**: Tools execute within a resource-capped Docker container (`python:3.13-slim`) or via the host-level native executor for local development.
+6. **Cryptographic Audit Log**: Execution records, inputs, hashes, and timestamps are recorded in an append-only SQLite audit log forward-linked by SHA-256 hash chains.
 
-## Code organization
+---
 
-| Path | Responsibility |
-| --- | --- |
-| `src/atlas/app.py` and `src/atlas/bootstrap/` | Component construction and runtime wiring |
-| `src/atlas/orchestration/` | Tasks, reasoning, research runs, and execution coordination |
-| `src/atlas/intelligence/` | Model gateway, providers, selection, budgets, and inference |
-| `src/atlas/memory/` and `src/atlas/knowledge/` | Persistent context, ingestion, retrieval, and research evidence |
-| `src/atlas/safety/` and `src/atlas/tools/` | Permission handling, approval queue, audit records, and tool implementations |
-| `src/atlas/tooling/` | Tool registry, catalog, routing, execution graph, and MCP connections |
-| `src/atlas/capabilities/` | Browser, workspace, voice, identity, and service-integration components |
-| `src/atlas/infra/` | Database access, events, configuration, execution leases, and observability |
-| `src/atlas/adaptation/`, `src/atlas/agents/`, and `src/atlas/training/` | Experimental strategy, agent, and retrieval-training components |
-| `src/atlas/engineering/`, `src/atlas/perception/`, and `src/atlas/control/` | Engineering utilities and environment-specific perception/control adapters |
-| `src/atlas/interfaces/` and `src/atlas_cli/` | API transports and command-line entry points |
-| `frontend/` | Dashboard, research views, and development-workspace interface |
-| `config/`, `tests/`, `eval/`, and `docs/` | Configuration, automated checks, evaluation fixtures, and technical notes |
+## Subsystem Overview
 
-The composition root builds shared services and passes them to the interfaces. The primary task path connects orchestration to tool dispatch and permission handling. Additional paths provide research sessions and workspace operations. Import-linter checks declared dependency boundaries.
+### 1. Task Orchestration
+- **Loop Bounds**: Enforces maximum execution steps (default: 25), per-step timeouts (default: 120s), and cumulative task timeouts (default: 1800s).
+- **Execution Leases**: Heartbeat-monitored runtime execution leases allow detection and recovery of abandoned or crashed tasks.
+- **Task Trajectories**: Captures structured reasoning steps, model inputs, tool arguments, observations, and error reflections into persisted trajectory datasets for offline inspection.
 
-## Local development
+### 2. Five-Tier Cognitive Memory
+- **Working Memory**: Manages active task state, scratchpad thoughts, and running conversation context with token-budget truncation.
+- **Episodic Memory**: Stores historical task records, outcomes, and failure reflections for retrospective lookup.
+- **Semantic Memory**: Stores extracted entities, relationships, and structured domain facts.
+- **User Profile**: Tracks operator preferences, environmental constraints, and approved working directories.
+- **Dual-Lane Retrieval**: Combines dense semantic search (ChromaDB with local `bge-m3:latest` embeddings) and lexical keyword matching (BM25) fused via Reciprocal Rank Fusion (RRF, $k=60$) and feature-based reranking.
 
-### Requirements
+### 3. Safety & Policy Engine
+- **Risk Taxonomy**:
+  - `Tier 0 (Auto)`: Read-only, non-destructive inspection (e.g., file reading, directory listing, system diagnostics).
+  - `Tier 1 (Notify)`: Low-risk operations or informational search queries.
+  - `Tier 2 (Confirm)`: State mutations requiring explicit operator approval (e.g., file modifications, dependency updates).
+  - `Tier 3 (Confirm Code)`: High-risk mutations (e.g., file overwrites, code execution, destructive Git commands) requiring approval code entry.
+  - `Tier 4 (Deny)`: Hard-blocked patterns (e.g., credential access, unauthorized system paths, destructive disk utilities).
+- **Audit Records**: Forward-linked hash chain using SHA-256 linking `(prior_hash, timestamp, action, payload)` to ensure audit continuity.
 
-- Python 3.13 or later and `uv`.
-- Node.js 22 and npm for the dashboard.
-- Ollama with the configured chat and embedding models for local inference.
-- Docker for container-based tool execution. Host execution is a separate development-mode option.
-- Additional native dependencies for optional OCR, audio, and operating-system integrations.
+### 4. Model Routing & Budget Gateway
+- **Multi-Provider Fleet**: Abstraction supporting local Ollama models, Google Gemini, and OpenRouter endpoints.
+- **Profiles**: Configurable profiles (`local_free`, `hybrid`, `performance`) to control provider selection and avoid unintended paid route invocation.
+- **Rate & Cost Guards**: Token bucket rate limiters, per-request token ceilings, and daily/monthly budget tracking.
 
-### 1. Install the backend
+### 5. Developer Workspaces & Tooling
+- **Tool Registry**: Catalog with Pydantic schema validation, permission annotations, and dynamic discovery.
+- **Execution Sandboxing**: Docker container runner with configurable CPU and memory limits. Development host executor available for local debugging.
+- **Workspace Tools**: Directory navigation, file editing with Myers shortest edit script (SES) diff previews, syntax checking, and Git status/commit operations.
+- **Model Context Protocol (MCP)**: Implements MCP client support over `stdio` and `sse` transports with automated tool discovery and argument mapping.
+
+---
+
+## Technology Stack
+
+| Domain | Technologies | Details |
+| --- | --- | --- |
+| **Backend Core** | Python 3.13+, Asyncio, Uvicorn | Async runtime architecture |
+| **API & Contracts** | FastAPI, Pydantic v2, Pydantic Settings | Type-safe REST endpoints and schemas |
+| **Persistence** | SQLite (`aiosqlite`), PostgreSQL (`asyncpg`) | 36 forward-only schema migrations |
+| **Vector & Retrieval** | ChromaDB, BM25, Reciprocal Rank Fusion | Local dense/lexical search pipeline |
+| **Frontend Dashboard** | Next.js 16, React 19, TypeScript, Tailwind CSS 4 | App Router, Server Components, Lucide Icons |
+| **Client State** | TanStack Query v5, Zod | Type-safe client queries and payload validation |
+| **Protocol Support** | Model Context Protocol (MCP) SDK, SSE, WebSockets | Standardized tool and streaming protocols |
+| **Tool Integrations** | Playwright, Docker Engine SDK | Web automation and isolated container execution |
+| **Verification** | Pytest, Ruff, Mypy, Import-Linter, Vitest | Multi-layer static and dynamic quality gates |
+| **Package Management**| `uv`, `npm` | Deterministic lockfiles (`uv.lock`, `package-lock.json`) |
+
+---
+
+## Repository Structure
+
+```text
+ATLAS/
+├── config/                  # Configuration files (models, permissions, settings, MCP)
+├── docs/                    # Technical architecture, startup, routing, and tooling docs
+├── eval/                    # Evaluation fixtures and recorded answer benchmarks
+├── frontend/                # Next.js 16 / React 19 dashboard application
+│   ├── app/                 # App Router pages (chat, tasks, research, ide, settings)
+│   ├── components/          # Reusable UI component library
+│   └── lib/                 # API client, types, and authentication utilities
+├── scripts/                 # Maintenance, evaluation, and database migration scripts
+├── src/
+│   ├── atlas/               # Core backend library
+│   │   ├── adaptation/      # Experimental strategy evaluation and reflection tuning
+│   │   ├── bootstrap/       # Service wiring and composition root
+│   │   ├── capabilities/    # Browser, workspace, voice, and identity integrations
+│   │   ├── infra/           # Persistence, SQLite/Postgres adapters, event bus, leases
+│   │   ├── intelligence/    # Model gateway, provider adapters, budget tracking
+│   │   ├── interfaces/      # FastAPI API router and WebSocket handlers
+│   │   ├── knowledge/       # Document ingestion, OCR, and vector indexing
+│   │   ├── memory/          # Working, episodic, semantic, and user profile stores
+│   │   ├── orchestration/   # Task loop, OTAR reasoning, planner, and dispatcher
+│   │   ├── safety/          # Classifier, approval queue, audit chain, kill switch
+│   │   ├── tooling/         # Tool registry, catalog, and MCP client implementation
+│   │   ├── tools/           # Built-in tool implementations (filesystem, shell, git)
+│   │   └── training/        # Experimental local IDE fine-tuning and triplet pipelines
+│   └── atlas_cli/           # Typer CLI application entry point
+├── tests/                   # Pytest test suite (unit, integration, safety, e2e)
+├── importlinter.ini         # Architectural boundary and layering contracts
+└── pyproject.toml           # Python package metadata and tool configurations
+```
+
+---
+
+## Local Development Setup
+
+### Prerequisites
+
+- **Python**: Version 3.13 or newer.
+- **uv**: Modern Python package and project manager.
+- **Node.js**: Version 22 LTS with `npm`.
+- **Ollama**: Required for local-only inference (`qwen3:4b` and `bge-m3:latest`).
+- **Docker**: (Optional) Required for containerized tool sandboxing.
+
+### 1. Clone and Install Dependencies
 
 ```bash
 git clone https://github.com/aman-bhaskar-codes/ATLAS.git
 cd ATLAS
+
+# Sync backend virtual environment from locked dependencies
 uv sync --frozen
 ```
 
-Run backend commands from the repository root: configuration and `.env` loading use that working directory.
+### 2. Configure Environment
 
-### 2. Configure a local instance
-
-Create a root `.env` file. The following is a local starting configuration using model entries present in the repository:
+Create an instance configuration file (`.env`) in the repository root:
 
 ```dotenv
 ATLAS_ENV=dev
@@ -95,36 +187,36 @@ ATLAS_API_KEYS=
 ATLAS_MASTER_KEY=
 ```
 
-Generate a private master key with the command below and place its output in `ATLAS_MASTER_KEY`. Keep it stable for an existing data directory.
+Generate a secure master key for local credential encryption:
 
 ```bash
 uv run python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-With Ollama installed and running, download the models referenced above:
+Paste the generated hex string into `ATLAS_MASTER_KEY`. Pull the local models via Ollama:
 
 ```bash
 ollama pull qwen3:4b
 ollama pull bge-m3:latest
 ```
 
-Review `.env.example` for additional settings, replacing illustrative values rather than treating them as credentials. Model IDs, context limits, hardware requirements, and provider availability should be checked for the chosen configuration.
+### 3. Start Backend API Service
 
-### 3. Start the API
+Run Uvicorn via the application factory on loopback port `8730`:
 
 ```bash
 uv run uvicorn atlas.interfaces.api.app:create_app --factory --host 127.0.0.1 --port 8730
 ```
 
-The API documentation is served at `http://127.0.0.1:8730/api/docs`. In another terminal, the in-process diagnostics command is:
+Verify runtime health and configuration in a separate terminal:
 
 ```bash
 uv run python -m atlas.interfaces.cli doctor
 ```
 
-The installed `atlas` command provides an HTTP client for task submission and inspection. Use `uv run atlas --help` to inspect its commands.
+Interactive OpenAPI documentation is available at `http://127.0.0.1:8730/api/docs`.
 
-### 4. Start the dashboard
+### 4. Start Next.js Web Dashboard
 
 ```bash
 cd frontend
@@ -132,77 +224,97 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:3030`. The default API base is `http://localhost:8730/api/v1`; use `NEXT_PUBLIC_ATLAS_API_URL` in `frontend/.env.local` when changing it.
+The web dashboard is served at `http://localhost:3030`. It connects by default to `http://localhost:8730/api/v1`.
 
-If backend authentication is enabled, enter the instance API key in the dashboard's Settings page. Keep provider keys and the master key on the backend; do not put them in `NEXT_PUBLIC_*` variables.
+---
 
-## Configuration and integrations
+## Configuration Reference
 
-| File | Purpose |
+| Configuration File | Scope & Responsibility |
 | --- | --- |
-| `config/settings.yaml` | Runtime options, inference preferences, feature switches, and execution limits |
-| `config/models.yaml` | Model registry and provider metadata |
-| `config/permissions.yaml` | Tool-operation rules, command categories, and filesystem paths |
-| `config/knowledge_sources.yaml` | Research-source configuration |
-| `config/mcp.yaml` | MCP server definitions and connection settings |
-| Root `.env` | Instance settings and backend credentials |
+| `config/settings.yaml` | Runtime parameters, inference profiles, memory retention, timeouts |
+| `config/models.yaml` | Model fleet registry, context windows, cost models, provider endpoints |
+| `config/permissions.yaml` | Operation risk classifications, allowed filesystem paths, blocked command patterns |
+| `config/knowledge_sources.yaml`| Research document sources, scraping rules, ingestion targets |
+| `config/mcp.yaml` | External Model Context Protocol server configurations and transport definitions |
+| Root `.env` | Instance credentials, provider API keys, and environment overrides |
 
-SQLite is the default application database. Selected persistence stores can use PostgreSQL through domain-specific DSNs. ChromaDB stores vector indexes separately.
+For document OCR capabilities on scanned PDFs and images, refer to [Local documents and OCR](docs/knowledge/local-ocr.md). Optional dependencies can be installed via `uv sync --frozen --extra ocr`.
 
-Cloud inference, web research, speech providers, and remote tools can send data to external services. Their availability, quotas, and charges depend on the service and account configuration. The `local_free` inference profile does not by itself disable every network-capable research or tool integration.
+---
 
-Browser automation requires a Playwright browser installation. Voice requires its feature flag, provider configuration, and optional audio dependencies. Desktop and device adapters depend on platform permissions and available software. MCP servers are owner-configured and disabled in the example configuration.
+## Quality Gates and Verification
 
-For PDFs and scanned documents, see [Local documents and OCR](docs/knowledge/local-ocr.md). The optional Python dependencies are installed with `uv sync --frozen --extra ocr`; scans additionally require Tesseract and Poppler.
+The repository enforces eight distinct verification gates across code formatting, static typing, architectural boundaries, unit tests, integration tests, and evaluation fixtures.
 
-## Development and evaluation
-
-Backend checks:
+### Backend Verification
 
 ```bash
+# 1. Linting and code style
 uv run ruff check .
+
+# 2. Static type analysis
 uv run mypy
+
+# 3. Architectural layering contracts (enforces import rules across 14 layers)
 uv run lint-imports --config importlinter.ini
+
+# 4. Backend test suite
 uv run pytest
 ```
 
-Frontend checks, run from `frontend/`:
+### Frontend Verification
+
+Run from the `frontend/` directory:
 
 ```bash
+# 5. ESLint code analysis
 npm run lint
+
+# 6. Unit and component tests
 npm run test:unit
+
+# 7. Production bundle compilation
 npm run build
+
+# 8. End-to-end browser integration tests
 npm run test:e2e
 ```
 
-Browser tests require their documented browser and backend prerequisites. The CI workflow is defined in [ci.yml](.github/workflows/ci.yml).
+### Evaluation Benchmark Gate
 
-The recorded-answer gate scores stored fixtures; it does not run a fresh live-model benchmark:
+A dedicated verification gate evaluates model answers against stored fixtures to verify regression safety without requiring live model quota:
 
 ```bash
 uv run python scripts/eval_gate.py --answers eval/recorded/answers.json
 ```
 
-Adaptation and training code includes trajectory processing, strategy evaluation, retrieval-weight tuning, and an optional local IDE training workflow. These are experimental components; dataset preparation, fixture scores, and stored reflections do not establish general self-improvement. See [IDE training](docs/ide/training.md) for compute prerequisites and evaluation boundaries.
+Continuous integration runs all checks on pull requests and pushes to `main`. See [.github/workflows/ci.yml](.github/workflows/ci.yml) for full pipeline configuration.
 
-## Runtime considerations
+---
 
-ATLAS is a development project for a trusted local environment. Review permitted paths, enabled integrations, and command rules before allowing it to act on a workspace.
+## Operational Considerations and Security Boundaries
 
-The development-mode native executor runs on the host and is not an isolation boundary. Docker tool execution and the application Docker image serve different purposes. Keep an unauthenticated instance bound to loopback; configure authentication before exposing an instance beyond the local machine.
+1. **Host Execution vs. Docker Sandboxing**: The development native executor runs commands directly on the host machine and does not establish an isolation boundary. For untrusted code or tasks, configure and enable the Docker tool sandbox.
+2. **Filesystem Boundaries**: Path allowlists configured in `config/permissions.yaml` define intended directory scopes. For strict access segregation, run the service within an isolated container or dedicated user account.
+3. **Audit Log Persistence**: SQLite audit logging provides forward-linked SHA-256 chain verification for chronological integrity. In high-concurrency environments, appends are serialized to prevent chain fork errors.
+4. **Network Exposure**: By default, the API binds to loopback (`127.0.0.1`). If exposing the API beyond localhost, configure non-empty `ATLAS_API_KEYS` and terminate traffic behind a reverse proxy with TLS.
+5. **Experimental Components**: Modules under `src/atlas/adaptation/` and `src/atlas/training/` provide experimental pipelines for trajectory evaluation and weight fine-tuning. See [IDE training documentation](docs/ide/training.md) for details on compute requirements and experimental constraints.
 
-## Further documentation
+---
 
-- [Architecture overview](ARCHITECTURE.md)
-- [Runtime startup](docs/runtime/STARTUP_SEQUENCE.md)
-- [Runtime readiness](docs/runtime/READINESS_MODEL.md)
-- [Tool catalog](docs/tooling/catalog.md)
-- [Routing architecture](docs/routing/architecture.md)
-- [Execution architecture](docs/execution/architecture.md)
-- [MCP configuration](docs/tooling/mcp/configuration.md)
+## Technical Documentation Index
 
-Some technical notes describe earlier development stages. Check the implementation and current configuration when following subsystem-specific instructions.
+- [Architecture Overview](ARCHITECTURE.md)
+- [Runtime Startup Sequence](docs/runtime/STARTUP_SEQUENCE.md)
+- [Runtime Readiness Model](docs/runtime/READINESS_MODEL.md)
+- [Tool Catalog & Schema](docs/tooling/catalog.md)
+- [Routing Architecture](docs/routing/architecture.md)
+- [Execution Engine Architecture](docs/execution/architecture.md)
+- [MCP Integration & Configuration](docs/tooling/mcp/configuration.md)
+
+---
 
 ## License
 
-[MIT](LICENSE). Copyright 2026 Aman Bhaskar.
+This project is licensed under the [MIT License](LICENSE). Copyright 2026 Aman Bhaskar.
