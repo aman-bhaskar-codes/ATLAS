@@ -1,177 +1,234 @@
-# ATLAS
+<div align="center">
 
-**Autonomous Task & Learning Agent System**
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/motion/atlas-titlecard-static.svg">
+  <img src="assets/readme/motion/atlas-titlecard.svg" width="100%" alt="ATLAS — Autonomous Task & Learning Agent System">
+</picture>
 
-ATLAS is an open-source, local-first autonomous agent runtime implemented in Python and accompanied by a Next.js web dashboard. It unifies task orchestration, multi-provider model routing, five-tier cognitive memory, document retrieval, and sandboxed developer workspace tools into a single, safety-governed architecture.
+<br/>
 
-The repository investigates how autonomous reasoning agents can operate within strict execution controls—enforcing deterministic risk classification, human approval gates, forward-linked cryptographic audit records, and reproducible quality gates across CLI, HTTP, and WebSocket interfaces.
+[![Python](https://img.shields.io/badge/python-3.13%2B-3776AB?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?style=flat-square&logo=fastapi&logoColor=white)](src/atlas/interfaces/api)
+[![Next.js](https://img.shields.io/badge/Next.js-16.2-black?style=flat-square&logo=next.js&logoColor=white)](frontend)
+[![React](https://img.shields.io/badge/React-19.2-61DAFB?style=flat-square&logo=react&logoColor=black)](frontend)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)](frontend)
+[![SQLite](https://img.shields.io/badge/storage-SQLite%203-003B57?style=flat-square&logo=sqlite&logoColor=white)](src/atlas/infra)
+[![ChromaDB](https://img.shields.io/badge/retrieval-ChromaDB-FC521F?style=flat-square)](src/atlas/knowledge)
+[![Docker](https://img.shields.io/badge/sandbox-Docker%20Engine-2496ED?style=flat-square&logo=docker&logoColor=white)](src/atlas/tools)
+[![License](https://img.shields.io/badge/license-MIT-e3b341?style=flat-square)](LICENSE)
 
----
+**[Overview](#overview)** · **[Architecture](#architecture-and-execution-model)** · **[Core Subsystems](#subsystems--specifications)** · **[Technology Stack](#technology-stack)** · **[Local Development](#local-development)** · **[Quality Gates](#quality-gates-and-verification)** · **[Security Boundaries](#operational-considerations-and-security-boundaries)**
+
+</div>
+
+<img src="assets/divider.svg" width="100%" alt="">
+
+## Overview
+
+**ATLAS (Autonomous Task & Learning Agent System)** is a local-first, personal agent runtime engineered in Python and coupled with a Next.js 16 operator dashboard. It integrates bounded task orchestration, multi-provider model routing, five-tier cognitive memory, reciprocal-rank document retrieval, and sandboxed developer workspace tooling into a unified, safety-governed runtime.
+
+The system explores deterministic execution controls for agentic reasoning loops—combining strict risk tier classification, interactive human approval queues, forward-linked cryptographic audit records, and continuous quality verification across CLI, REST, and WebSocket transports.
+
+<img src="assets/divider.svg" width="100%" alt="">
 
 ## Architecture and Execution Model
 
-Every interaction—whether initiated via the CLI, HTTP REST endpoints, WebSockets, speech, or recurring scheduled automations—is ingested into a unified execution pipeline:
+Every interaction—whether dispatched from the command line, REST API, WebSocket streams, or automated cron schedules—travels through a centralized execution funnel:
 
-```text
-                      ┌──────────────────────────────────────────────┐
-                      │    Ingress: CLI / REST / WebSocket / Cron    │
-                      └──────────────────────┬───────────────────────┘
-                                             │ InboundEvent
-                                             ▼
-                      ┌──────────────────────────────────────────────┐
-                      │       Task Orchestration (OTAR Engine)       │
-                      │  Bounded Reasoning: Observe-Think-Act-Reflect │
-                      │  Memory Context Injection & Tool Selection   │
-                      └──────────────────────┬───────────────────────┘
-                                             │ ToolRequest
-                                             ▼
-                      ┌──────────────────────────────────────────────┐
-                      │          Safety Classifier & Engine          │
-                      │  Risk Tiers (T0–T4) & Policy Enforcement     │
-                      └──────────────┬────────────────┬──────────────┘
-                        Allowed / Approved          Denied
-                                     │                │
-                                     ▼                ▼
-                      ┌──────────────────────┐ ┌─────────────────────┐
-                      │    Tool Execution    │ │  Rejection Notice   │
-                      │   Docker / Native    │ │  Terminal / Event   │
-                      └──────────────┬───────┘ └──────┬──────────────┘
-                                     │                │
-                                     └────────┬───────┘
-                                              │
-                                              ▼
-                      ┌──────────────────────────────────────────────┐
-                      │      Forward-Linked Cryptographic Audit      │
-                      │     SHA-256 Hash Chaining in SQLite Database │
-                      └──────────────────────────────────────────────┘
-```
+<div align="center">
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/motion/atlas-pipeline-static.svg">
+  <img src="assets/readme/motion/atlas-pipeline.svg" width="100%" alt="ATLAS Execution Pipeline Architecture">
+</picture>
+</div>
 
 ### Request Lifecycle
 
-1. **Ingress Normalization**: All incoming requests are converted into an immutable `InboundEvent` with source metadata and provenance tracking. Transports cannot bypass execution controls.
-2. **Orchestrator Cycle (OTAR)**: The runtime executes an Observe-Think-Act-Reflect loop. Active context is assembled from working memory, episodic recollections, and knowledge retrieval before delegating to the configured model.
-3. **Deterministic Safety Classification**: Proposed tool invocations are mapped to a five-tier risk taxonomy. Classification is fail-closed: unrecognized operations default to requiring human confirmation.
-4. **Policy Evaluation & Approval**:
-   - **T0 / T1**: Executed immediately or with asynchronous notification.
-   - **T2 / T3**: Suspended into the human approval queue, requiring interactive CLI confirmation or dashboard review (T3 requires an explicit approval code).
-   - **T4**: Terminated immediately by policy.
-   - **Kill Switch**: Re-verified immediately prior to dispatch to respect concurrent stop commands.
-5. **Tool Execution**: Tools execute within a resource-capped Docker container (`python:3.13-slim`) or via the host-level native executor for local development.
-6. **Cryptographic Audit Log**: Execution records, inputs, hashes, and timestamps are recorded in an append-only SQLite audit log forward-linked by SHA-256 hash chains.
+```text
+  [ Ingress Transport ] ───▶ [ InboundEvent Normalization ]
+                                          │
+                                          ▼
+                               [ OTAR Orchestration Loop ] ◀───┐
+                                (Observe ➔ Think ➔ Act ➔ Reflect)│
+                                          │                      │
+                                          ▼                      │
+                               [ Tool Request Extraction ]       │
+                                          │                      │
+                                          ▼                      │
+                               [ Safety Risk Classifier ]        │ (Next Step)
+                                (T0 ➔ T1 ➔ T2 ➔ T3 ➔ T4)         │
+                                          │                      │
+                   ┌──────────────────────┴──────────────────────┐
+                   │                                             │
+             [ Approved ]                                   [ Denied ]
+                   │                                             │
+                   ▼                                             ▼
+       [ Sandboxed Execution ]                        [ Rejection Event ]
+        Docker / Host Runner                                     │
+                   │                                             │
+                   └──────────────────────┬──────────────────────┘
+                                          │
+                                          ▼
+                              [ SHA-256 Audit Record ]
+                               (Append to Hash Chain)
+                                          │
+                                          └──────────────────────┘
+```
+
+1. **Ingress Normalization**: All incoming transports construct a structured, immutable `InboundEvent` with source provenance. Transports cannot bypass execution controls.
+2. **OTAR Reasoning Loop**: The runtime executes an Observe-Think-Act-Reflect cycle. Context is synthesized from active working memory, episodic history, and retrieved knowledge before invoking model inference.
+3. **Deterministic Safety Classification**: Proposed tool calls pass through a fail-closed risk classifier matching arguments against configured policies. Unknown actions default to human approval.
+4. **Approval & Gate Enforcement**:
+   - **Tier 0 (Auto)**: Read-only operations execute immediately.
+   - **Tier 1 (Notify)**: Low-risk mutations execute with operator notification.
+   - **Tier 2 (Confirm)**: State-modifying actions pause in the Approval Queue until approved via the CLI or Dashboard.
+   - **Tier 3 (Confirm Code)**: Destructive actions require input of a generated verification code.
+   - **Tier 4 (Deny)**: Blocked command patterns and prohibited paths are rejected immediately.
+   - **Kill Switch**: Re-verified immediately before tool execution to honor asynchronous cancellation.
+5. **Sandboxed Execution**: Tools run within a resource-limited Docker container (`python:3.13-slim`) or via the host-level native executor for local development.
+6. **Cryptographic Audit Chain**: Execution inputs, outputs, timestamps, and hashes are written into an append-only SQLite audit log forward-linked by SHA-256 hash chains.
+
+<img src="assets/divider.svg" width="100%" alt="">
+
+## Subsystems & Specifications
+
+### 1. Task Orchestration & Reasoning Loop
+
+<div align="center">
+<img src="assets/otar-loop.svg" width="100%" alt="OTAR Reasoning Loop">
+</div>
+
+- **Observe**: Collects current environment state, working memory notes, tool results, and retrieved research documents.
+- **Think**: Constructs bounded model prompts, selects appropriate tools from the registry, and formulates step arguments.
+- **Act**: Dispatches validated tool requests through the safety classifier and sandboxed executors.
+- **Reflect**: Analyzes execution outcomes, updates task progress, logs error reflections, and decides termination or follow-up actions.
+- **Loop Bounds**: Default 25-step execution ceiling, 120-second step timeout, and 1800-second cumulative task timeout.
+- **Task Leases**: Distributed execution leases tracked in SQLite (`runtime_execution_leases`) prevent zombie tasks and recover after unexpected process restarts.
 
 ---
-
-## Subsystem Overview
-
-### 1. Task Orchestration
-- **Loop Bounds**: Enforces maximum execution steps (default: 25), per-step timeouts (default: 120s), and cumulative task timeouts (default: 1800s).
-- **Execution Leases**: Heartbeat-monitored runtime execution leases allow detection and recovery of abandoned or crashed tasks.
-- **Task Trajectories**: Captures structured reasoning steps, model inputs, tool arguments, observations, and error reflections into persisted trajectory datasets for offline inspection.
 
 ### 2. Five-Tier Cognitive Memory
-- **Working Memory**: Manages active task state, scratchpad thoughts, and running conversation context with token-budget truncation.
-- **Episodic Memory**: Stores historical task records, outcomes, and failure reflections for retrospective lookup.
-- **Semantic Memory**: Stores extracted entities, relationships, and structured domain facts.
-- **User Profile**: Tracks operator preferences, environmental constraints, and approved working directories.
-- **Dual-Lane Retrieval**: Combines dense semantic search (ChromaDB with local `bge-m3:latest` embeddings) and lexical keyword matching (BM25) fused via Reciprocal Rank Fusion (RRF, $k=60$) and feature-based reranking.
 
-### 3. Safety & Policy Engine
-- **Risk Taxonomy**:
-  - `Tier 0 (Auto)`: Read-only, non-destructive inspection (e.g., file reading, directory listing, system diagnostics).
-  - `Tier 1 (Notify)`: Low-risk operations or informational search queries.
-  - `Tier 2 (Confirm)`: State mutations requiring explicit operator approval (e.g., file modifications, dependency updates).
-  - `Tier 3 (Confirm Code)`: High-risk mutations (e.g., file overwrites, code execution, destructive Git commands) requiring approval code entry.
-  - `Tier 4 (Deny)`: Hard-blocked patterns (e.g., credential access, unauthorized system paths, destructive disk utilities).
-- **Audit Records**: Forward-linked hash chain using SHA-256 linking `(prior_hash, timestamp, action, payload)` to ensure audit continuity.
+<div align="center">
+<img src="assets/memory-layers.svg" width="100%" alt="Five-Tier Cognitive Memory Architecture">
+</div>
 
-### 4. Model Routing & Budget Gateway
-- **Multi-Provider Fleet**: Abstraction supporting local Ollama models, Google Gemini, and OpenRouter endpoints.
-- **Profiles**: Configurable profiles (`local_free`, `hybrid`, `performance`) to control provider selection and avoid unintended paid route invocation.
-- **Rate & Cost Guards**: Token bucket rate limiters, per-request token ceilings, and daily/monthly budget tracking.
+| Memory Tier | Storage Backend | Function & Retention Policy |
+| --- | --- | --- |
+| **Working** | In-Memory / Context Scratchpad | Active task context, temporary tool observations, token-budgeted truncation per turn |
+| **Episodic** | SQLite (`episodic_memories`) | Event timeline, historical task resolutions, success/failure retrospectives |
+| **Semantic** | ChromaDB (`bge-m3:latest`) | Entity relation graphs, extracted concepts, domain facts, dense vector embeddings |
+| **User Model**| SQLite (`user_profile`) | User preferences, system permissions, operator interaction habits |
+| **Trajectories** | SQLite (`task_trajectories`) | Complete step-by-step reasoning traces, model tokens, and action payloads |
 
-### 5. Developer Workspaces & Tooling
-- **Tool Registry**: Catalog with Pydantic schema validation, permission annotations, and dynamic discovery.
-- **Execution Sandboxing**: Docker container runner with configurable CPU and memory limits. Development host executor available for local debugging.
-- **Workspace Tools**: Directory navigation, file editing with Myers shortest edit script (SES) diff previews, syntax checking, and Git status/commit operations.
-- **Model Context Protocol (MCP)**: Implements MCP client support over `stdio` and `sse` transports with automated tool discovery and argument mapping.
+#### Two-Lane Hybrid Recall
+
+<div align="center">
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/motion/atlas-recall-lanes-static.svg">
+  <img src="assets/readme/motion/atlas-recall-lanes.svg" width="100%" alt="Two-Lane Hybrid Memory Recall">
+</picture>
+</div>
+
+- **Lane 1 (SQL Direct Search)**: Fast indexed SQL lookup over write-time trigger hints. Ranked by importance weighted by exponential time-decay ($importance \times 2^{-\frac{age}{30d}}$). Zero embedding overhead.
+- **Lane 2 (Dense & Lexical Fusion)**: Escalation path triggered when Lane 1 yields insufficient relevance and recall intent is detected. Combines ChromaDB vector similarity (`bge-m3:latest`) and BM25 lexical keyword scoring via Reciprocal Rank Fusion ($k=60$).
 
 ---
+
+### 3. Safety Architecture & Risk Tiers
+
+<div align="center">
+<img src="assets/safety-tiers.svg" width="100%" alt="Safety Risk Tiers T0 to T4">
+</div>
+
+- **Fail-Closed Policy Matching**: Every tool operation and argument payload is evaluated against deterministic regexes and path allowlists defined in `config/permissions.yaml`.
+- **Interactive Approval Queue**: Pending Tier 2 and Tier 3 operations are suspended in SQLite and surfaced in real time to the CLI and Web Dashboard.
+- **Cryptographic Audit Log**: Each audit entry links to the prior entry's hash:
+  $$\text{hash}_n = \text{SHA-256}(\text{hash}_{n-1} \mathbin{\Vert} \text{timestamp} \mathbin{\Vert} \text{action} \mathbin{\Vert} \text{payload})$$
+  Ensures chronological continuity across all executed actions.
+
+---
+
+### 4. Developer Workspaces & Sandboxing
+
+- **Docker Tool Sandbox**: Isolated container execution (`python:3.13-slim`) with constrained CPU (default: 1.0), memory (default: 512 MB), read-only root filesystems, and bounded volume mounts.
+- **Native Host Executor**: Direct execution on the host system intended strictly for local development and debugging (does not establish an isolation boundary).
+- **Workspace Engineering Tools**:
+  - File tree exploration and syntax validation.
+  - Patch generation and editing with Myers Shortest Edit Script (SES) diff previews.
+  - Safe Git staging, status inspection, and branch management.
+- **Model Context Protocol (MCP)**: Full client implementation supporting external tool servers over `stdio` and `sse` transports with automated tool discovery and schema generation.
+
+<img src="assets/divider.svg" width="100%" alt="">
 
 ## Technology Stack
 
-| Domain | Technologies | Details |
+### Backend Infrastructure
+
+| Component | Technology | Version / Spec | Role in ATLAS |
+| --- | --- | --- | --- |
+| **Language** | Python | `3.13+` | Asynchronous core runtime |
+| **Package Management** | `uv` | Modern lockfile | Deterministic dependency tree (`uv.lock`) |
+| **Web Framework** | FastAPI | `0.115+` | High-throughput REST & WebSocket endpoints |
+| **ASGI Server** | Uvicorn | `0.34+` | Async loop server with graceful lifespan handling |
+| **Data Contracts** | Pydantic v2 | `2.10+` | Schema validation and serialization |
+| **Config Engine** | Pydantic Settings | `2.7+` | Layered YAML + `.env` environment loading |
+| **Database** | SQLite + `aiosqlite` | SQLite 3 | Embedded store with 36 schema migrations |
+| **Cloud Persistence** | PostgreSQL + `asyncpg` | Relational | Optional adapter for distributed session persistence |
+| **Vector Store** | ChromaDB | `0.6+` | Semantic vector storage and nearest-neighbor search |
+| **Embeddings** | Ollama (`bge-m3:latest`)| 1024-dim | Local dense multilingual text embeddings |
+| **Lexical Search** | `rank-bm25` | BM25Okapi | Inverted index keyword retrieval |
+| **Tool Protocols** | MCP Python SDK | `1.2+` | Model Context Protocol client (`stdio`, `sse`) |
+| **Browser Driver** | Playwright | `1.49+` | Headless Chromium web automation |
+
+### Frontend Dashboard
+
+| Component | Technology | Version / Spec | Role in ATLAS |
+| --- | --- | --- | --- |
+| **Framework** | Next.js | `16.2.11` | React Server Components & App Router |
+| **UI Library** | React | `19.2.4` | Component architecture |
+| **Language** | TypeScript | `5.7+` | End-to-end type safety |
+| **Styling** | Tailwind CSS | `4.0+` | Modern CSS tokens, dark mode, responsive layouts |
+| **State & Fetching** | TanStack Query | `v5.66+` | Server-state caching and WebSocket subscription |
+| **Client Validation**| Zod | `3.24+` | Client-side runtime schema validation |
+| **Iconography** | Lucide React | Modern set | High-fidelity interface icons |
+
+### Quality & Automation Tooling
+
+| Category | Tools | Configuration |
 | --- | --- | --- |
-| **Backend Core** | Python 3.13+, Asyncio, Uvicorn | Async runtime architecture |
-| **API & Contracts** | FastAPI, Pydantic v2, Pydantic Settings | Type-safe REST endpoints and schemas |
-| **Persistence** | SQLite (`aiosqlite`), PostgreSQL (`asyncpg`) | 36 forward-only schema migrations |
-| **Vector & Retrieval** | ChromaDB, BM25, Reciprocal Rank Fusion | Local dense/lexical search pipeline |
-| **Frontend Dashboard** | Next.js 16, React 19, TypeScript, Tailwind CSS 4 | App Router, Server Components, Lucide Icons |
-| **Client State** | TanStack Query v5, Zod | Type-safe client queries and payload validation |
-| **Protocol Support** | Model Context Protocol (MCP) SDK, SSE, WebSockets | Standardized tool and streaming protocols |
-| **Tool Integrations** | Playwright, Docker Engine SDK | Web automation and isolated container execution |
-| **Verification** | Pytest, Ruff, Mypy, Import-Linter, Vitest | Multi-layer static and dynamic quality gates |
-| **Package Management**| `uv`, `npm` | Deterministic lockfiles (`uv.lock`, `package-lock.json`) |
+| **Linting & Style** | Ruff | `ruff.toml` / `pyproject.toml` |
+| **Type Checking** | Mypy | `mypy.ini` (strict mode across core packages) |
+| **Layer Boundaries** | Import-Linter | `importlinter.ini` (14 architectural layers, 3 contracts) |
+| **Unit & Integration** | Pytest | `tests/unit`, `tests/integration`, `pytest-asyncio` |
+| **Frontend Tests** | Vitest + Playwright | `frontend/vitest.config.ts`, `frontend/e2e/` |
+| **Benchmarking** | Eval Gate | `scripts/eval_gate.py` with recorded answers |
+| **CI / CD** | GitHub Actions | `.github/workflows/ci.yml` |
 
----
+<img src="assets/divider.svg" width="100%" alt="">
 
-## Repository Structure
+## Local Development
 
-```text
-ATLAS/
-├── config/                  # Configuration files (models, permissions, settings, MCP)
-├── docs/                    # Technical architecture, startup, routing, and tooling docs
-├── eval/                    # Evaluation fixtures and recorded answer benchmarks
-├── frontend/                # Next.js 16 / React 19 dashboard application
-│   ├── app/                 # App Router pages (chat, tasks, research, ide, settings)
-│   ├── components/          # Reusable UI component library
-│   └── lib/                 # API client, types, and authentication utilities
-├── scripts/                 # Maintenance, evaluation, and database migration scripts
-├── src/
-│   ├── atlas/               # Core backend library
-│   │   ├── adaptation/      # Experimental strategy evaluation and reflection tuning
-│   │   ├── bootstrap/       # Service wiring and composition root
-│   │   ├── capabilities/    # Browser, workspace, voice, and identity integrations
-│   │   ├── infra/           # Persistence, SQLite/Postgres adapters, event bus, leases
-│   │   ├── intelligence/    # Model gateway, provider adapters, budget tracking
-│   │   ├── interfaces/      # FastAPI API router and WebSocket handlers
-│   │   ├── knowledge/       # Document ingestion, OCR, and vector indexing
-│   │   ├── memory/          # Working, episodic, semantic, and user profile stores
-│   │   ├── orchestration/   # Task loop, OTAR reasoning, planner, and dispatcher
-│   │   ├── safety/          # Classifier, approval queue, audit chain, kill switch
-│   │   ├── tooling/         # Tool registry, catalog, and MCP client implementation
-│   │   ├── tools/           # Built-in tool implementations (filesystem, shell, git)
-│   │   └── training/        # Experimental local IDE fine-tuning and triplet pipelines
-│   └── atlas_cli/           # Typer CLI application entry point
-├── tests/                   # Pytest test suite (unit, integration, safety, e2e)
-├── importlinter.ini         # Architectural boundary and layering contracts
-└── pyproject.toml           # Python package metadata and tool configurations
-```
+### System Requirements
 
----
+- **Python**: 3.13 or newer with `uv`.
+- **Node.js**: 22 LTS with `npm`.
+- **Ollama**: Local inference service running `qwen3:4b` and `bge-m3:latest`.
+- **Docker**: (Optional) For containerized tool isolation.
 
-## Local Development Setup
-
-### Prerequisites
-
-- **Python**: Version 3.13 or newer.
-- **uv**: Modern Python package and project manager.
-- **Node.js**: Version 22 LTS with `npm`.
-- **Ollama**: Required for local-only inference (`qwen3:4b` and `bge-m3:latest`).
-- **Docker**: (Optional) Required for containerized tool sandboxing.
-
-### 1. Clone and Install Dependencies
+### 1. Installation
 
 ```bash
 git clone https://github.com/aman-bhaskar-codes/ATLAS.git
 cd ATLAS
 
-# Sync backend virtual environment from locked dependencies
+# Synchronize virtual environment with locked dependencies
 uv sync --frozen
 ```
 
-### 2. Configure Environment
+### 2. Environment Configuration
 
-Create an instance configuration file (`.env`) in the repository root:
+Create a `.env` file at the repository root:
 
 ```dotenv
 ATLAS_ENV=dev
@@ -187,36 +244,36 @@ ATLAS_API_KEYS=
 ATLAS_MASTER_KEY=
 ```
 
-Generate a secure master key for local credential encryption:
+Generate an instance master key for credential encryption:
 
 ```bash
 uv run python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-Paste the generated hex string into `ATLAS_MASTER_KEY`. Pull the local models via Ollama:
+Save the generated hex key in `ATLAS_MASTER_KEY`. Pull the required local models:
 
 ```bash
 ollama pull qwen3:4b
 ollama pull bge-m3:latest
 ```
 
-### 3. Start Backend API Service
+### 3. Launching the Backend API
 
-Run Uvicorn via the application factory on loopback port `8730`:
+Start Uvicorn via the application factory on `127.0.0.1:8730`:
 
 ```bash
 uv run uvicorn atlas.interfaces.api.app:create_app --factory --host 127.0.0.1 --port 8730
 ```
 
-Verify runtime health and configuration in a separate terminal:
+Verify runtime health in another terminal:
 
 ```bash
 uv run python -m atlas.interfaces.cli doctor
 ```
 
-Interactive OpenAPI documentation is available at `http://127.0.0.1:8730/api/docs`.
+Interactive OpenAPI documentation is served at `http://127.0.0.1:8730/api/docs`.
 
-### 4. Start Next.js Web Dashboard
+### 4. Launching the Next.js Dashboard
 
 ```bash
 cd frontend
@@ -224,84 +281,53 @@ npm ci
 npm run dev
 ```
 
-The web dashboard is served at `http://localhost:3030`. It connects by default to `http://localhost:8730/api/v1`.
+Open `http://localhost:3030` to access the dashboard.
 
----
-
-## Configuration Reference
-
-| Configuration File | Scope & Responsibility |
-| --- | --- |
-| `config/settings.yaml` | Runtime parameters, inference profiles, memory retention, timeouts |
-| `config/models.yaml` | Model fleet registry, context windows, cost models, provider endpoints |
-| `config/permissions.yaml` | Operation risk classifications, allowed filesystem paths, blocked command patterns |
-| `config/knowledge_sources.yaml`| Research document sources, scraping rules, ingestion targets |
-| `config/mcp.yaml` | External Model Context Protocol server configurations and transport definitions |
-| Root `.env` | Instance credentials, provider API keys, and environment overrides |
-
-For document OCR capabilities on scanned PDFs and images, refer to [Local documents and OCR](docs/knowledge/local-ocr.md). Optional dependencies can be installed via `uv sync --frozen --extra ocr`.
-
----
+<img src="assets/divider.svg" width="100%" alt="">
 
 ## Quality Gates and Verification
 
-The repository enforces eight distinct verification gates across code formatting, static typing, architectural boundaries, unit tests, integration tests, and evaluation fixtures.
-
-### Backend Verification
+The repository enforces eight distinct verification gates across linting, static analysis, architectural boundaries, tests, and evaluation benchmarks:
 
 ```bash
-# 1. Linting and code style
+# Gate 1: Code formatting and linting
 uv run ruff check .
 
-# 2. Static type analysis
+# Gate 2: Static type verification
 uv run mypy
 
-# 3. Architectural layering contracts (enforces import rules across 14 layers)
+# Gate 3: Architectural layering contracts
 uv run lint-imports --config importlinter.ini
 
-# 4. Backend test suite
+# Gate 4: Backend unit & integration test suite
 uv run pytest
-```
 
-### Frontend Verification
-
-Run from the `frontend/` directory:
-
-```bash
-# 5. ESLint code analysis
+# Gate 5: Frontend linting (from frontend/)
 npm run lint
 
-# 6. Unit and component tests
+# Gate 6: Frontend unit and component tests (from frontend/)
 npm run test:unit
 
-# 7. Production bundle compilation
+# Gate 7: Production dashboard build (from frontend/)
 npm run build
 
-# 8. End-to-end browser integration tests
-npm run test:e2e
-```
-
-### Evaluation Benchmark Gate
-
-A dedicated verification gate evaluates model answers against stored fixtures to verify regression safety without requiring live model quota:
-
-```bash
+# Gate 8: Recorded benchmark evaluation gate
 uv run python scripts/eval_gate.py --answers eval/recorded/answers.json
 ```
 
-Continuous integration runs all checks on pull requests and pushes to `main`. See [.github/workflows/ci.yml](.github/workflows/ci.yml) for full pipeline configuration.
+Continuous integration runs all gates on pull requests and pushes to `main`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
----
+<img src="assets/divider.svg" width="100%" alt="">
 
 ## Operational Considerations and Security Boundaries
 
-1. **Host Execution vs. Docker Sandboxing**: The development native executor runs commands directly on the host machine and does not establish an isolation boundary. For untrusted code or tasks, configure and enable the Docker tool sandbox.
-2. **Filesystem Boundaries**: Path allowlists configured in `config/permissions.yaml` define intended directory scopes. For strict access segregation, run the service within an isolated container or dedicated user account.
-3. **Audit Log Persistence**: SQLite audit logging provides forward-linked SHA-256 chain verification for chronological integrity. In high-concurrency environments, appends are serialized to prevent chain fork errors.
-4. **Network Exposure**: By default, the API binds to loopback (`127.0.0.1`). If exposing the API beyond localhost, configure non-empty `ATLAS_API_KEYS` and terminate traffic behind a reverse proxy with TLS.
-5. **Experimental Components**: Modules under `src/atlas/adaptation/` and `src/atlas/training/` provide experimental pipelines for trajectory evaluation and weight fine-tuning. See [IDE training documentation](docs/ide/training.md) for details on compute requirements and experimental constraints.
+1. **Host Execution vs. Docker Sandboxing**: The development native executor executes commands directly on the host machine and does not establish a security isolation boundary. For untrusted code, configure and enable the Docker tool sandbox.
+2. **Path Scope Boundaries**: Filesystem allowlists in `config/permissions.yaml` establish expected operational paths. For strict isolation, run ATLAS within an isolated container or dedicated unprivileged user account.
+3. **Audit Log Concurrency**: The SQLite audit log relies on serialized transaction commits to guarantee chronological SHA-256 hash continuity.
+4. **Network Exposure**: By default, the API binds to loopback (`127.0.0.1`). If exposing the API beyond localhost, configure `ATLAS_API_KEYS` and place the service behind a TLS reverse proxy.
+5. **Experimental Modules**: Subsystems in `src/atlas/adaptation/` and `src/atlas/training/` represent experimental research pipelines. See [IDE training documentation](docs/ide/training.md) for compute requirements and evaluation boundaries.
 
----
+<img src="assets/divider.svg" width="100%" alt="">
 
 ## Technical Documentation Index
 
@@ -312,6 +338,7 @@ Continuous integration runs all checks on pull requests and pushes to `main`. Se
 - [Routing Architecture](docs/routing/architecture.md)
 - [Execution Engine Architecture](docs/execution/architecture.md)
 - [MCP Integration & Configuration](docs/tooling/mcp/configuration.md)
+- [Local Documents & OCR](docs/knowledge/local-ocr.md)
 
 ---
 
