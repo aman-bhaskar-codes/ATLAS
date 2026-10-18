@@ -9,10 +9,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install uv
         uses: astral-sh/setup-uv@v3
-        with:
-          python-version: "3.13"
       - name: Sync (dev only; macos extras skipped on Linux)
-        run: uv sync
+        run: uv sync --extra ocr
       - name: Install system dependencies (tesseract-ocr)
         run: |
           sudo apt-get update
@@ -59,10 +57,8 @@ jobs:
       # `uv run uvicorn`), so this job needs the Python toolchain as well as Node.
       - name: Install uv
         uses: astral-sh/setup-uv@v3
-        with:
-          python-version: "3.13"
       - name: Sync backend deps (needed to boot the API under test)
-        run: uv sync
+        run: uv sync --extra ocr
       - name: Install system dependencies (tesseract-ocr)
         run: |
           sudo apt-get update
