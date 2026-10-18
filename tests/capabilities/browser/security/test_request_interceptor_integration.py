@@ -1,5 +1,6 @@
 """Real Chromium protocol with responses supplied before any socket is opened."""
 
+import asyncio
 import base64
 import json
 from typing import Any
@@ -95,7 +96,9 @@ async def test_native_redirect_frame_popup_and_subresource_checks_preserve_url(
         return ["10.0.0.1"] if host == "blocked.test" else ["8.8.8.8"]
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
+        browser = await pw.chromium.launch(
+            headless=True, args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"]
+        )
         cdp = InMemoryResponses(await browser.new_browser_cdp_session())
 
         class GuardedBrowser:
@@ -111,9 +114,17 @@ async def test_native_redirect_frame_popup_and_subresource_checks_preserve_url(
             page.set_default_navigation_timeout(60_000)
             await guard.set_page_policy(context, page, EgressPolicy(resolver=dns))
             async with page.expect_popup(timeout=60_000) as popup_info:
-                await page.goto("https://public.test/start", wait_until="load", timeout=60_000)
+                await page.goto("https://public.test/start", wait_until="domcontentloaded", timeout=60_000)
             popup = await popup_info.value
-            await popup.wait_for_load_state("load", timeout=60_000)
+            await popup.wait_for_load_state("domcontentloaded", timeout=60_000)
+            for _ in range(50):
+                if (
+                    "https://frame.test/frame" in cdp.continued
+                    and "https://popup.test/final" in cdp.continued
+                    and "https://public.test/image.png" in cdp.continued
+                ):
+                    break
+                await asyncio.sleep(0.1)
             assert page.url == "https://public.test/final"
             assert popup.url == "https://popup.test/final"
             assert await page.evaluate("location.origin") == "https://public.test"
@@ -127,7 +138,7 @@ async def test_native_redirect_frame_popup_and_subresource_checks_preserve_url(
             assert "https://blocked.test/private" not in cdp.continued
             guard.check_ready()
             with pytest.raises(Error, match="ERR_BLOCKED_BY_CLIENT"):
-                await page.goto("https://public.test/private-start", wait_until="load")
+                await page.goto("https://public.test/private-start", wait_until="commit")
             assert "https://public.test/private-start" in cdp.continued
             assert "https://blocked.test/private" not in cdp.continued
         finally:
@@ -141,7 +152,9 @@ async def test_external_browser_injection_is_rejected_before_unprotected_context
 
     async with async_playwright() as pw:
         for provider_type in (PlaywrightProvider, CDPProvider):
-            browser = await pw.chromium.launch(headless=True)
+            browser = await pw.chromium.launch(
+                headless=True, args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"]
+            )
             provider = provider_type()
             provider._browser = browser
             try:
