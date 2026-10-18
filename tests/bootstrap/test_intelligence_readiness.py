@@ -63,7 +63,7 @@ async def test_local_bootstrap_registers_ollama_and_local_embeddings(tmp_path: P
             frozenset({Capability.REASONING, Capability.TOOL_CALLING}),
             Constraints(network_policy=NetworkPolicy.OFFLINE),
         )
-        assert [spec.provider_model for spec in ranked] == ["qwen3:4b"]
+        assert [spec.provider_model for spec in ranked] == ["qwen2.5-coder:7b", "qwen3:4b"]
         assert components.registry.get("local-qwen3").max_concurrency == 1
     finally:
         await components.gateway.close()

@@ -135,13 +135,27 @@ async def build_intelligence(
             raise ConfigurationError(
                 f"unknown Gemini model {settings.gemini_model!r}; add verified metadata to models.yaml"
             )
-        gemini_spec = alternatives[0].model_copy(update={"id": gemini_target_id})
-        if settings.gemini_billing_tier == "free" or gemini_spec.cost_class == CostClass.FREE_QUOTA:
-            gemini_spec = gemini_spec.model_copy(
+        base_spec = (
+            gemini_spec
+            if gemini_spec.provider_model == settings.gemini_model
+            else alternatives[0]
+        )
+        if settings.gemini_billing_tier == "free":
+            gemini_spec = base_spec.model_copy(
                 update={
+                    "id": gemini_target_id,
                     "cost_class": CostClass.FREE_QUOTA,
                     "usd_per_1m_input": 0.0,
                     "usd_per_1m_output": 0.0,
+                }
+            )
+        else:
+            gemini_spec = base_spec.model_copy(
+                update={
+                    "id": gemini_target_id,
+                    "cost_class": CostClass.PAID,
+                    "usd_per_1m_input": base_spec.usd_per_1m_input if base_spec.usd_per_1m_input > 0 else 0.75,
+                    "usd_per_1m_output": base_spec.usd_per_1m_output if base_spec.usd_per_1m_output > 0 else 3.75,
                 }
             )
         model_registry.register(gemini_spec)
