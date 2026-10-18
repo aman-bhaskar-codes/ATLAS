@@ -1,6 +1,9 @@
 name: ci
 on: [push, pull_request]
 
+env:
+  ATLAS_DB_MMAP_SIZE: "0"
+
 jobs:
   check:
     name: backend gates

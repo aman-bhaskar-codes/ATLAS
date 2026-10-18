@@ -8,6 +8,7 @@ placeholder tables; memory/KG tables arrive as later-numbered migrations.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import aiosqlite
@@ -1971,8 +1972,11 @@ class Database:
         await self._conn.execute("PRAGMA journal_mode=WAL")
         # 64 MB page cache — keeps hot index pages in RAM, avoids repeat disk reads
         await self._conn.execute("PRAGMA cache_size=-65536")
-        # Memory-mapped I/O: 256 MB — OS handles prefetch, zero-copy reads
-        await self._conn.execute("PRAGMA mmap_size=268435456")
+        # Memory-mapped I/O: 256 MB by default — OS handles prefetch, zero-copy reads
+        # Set to 0 if ATLAS_DB_MMAP_SIZE=0 (prevents SIGBUS in multi-process/container/E2E environments)
+        mmap_env = os.environ.get("ATLAS_DB_MMAP_SIZE")
+        mmap_size = int(mmap_env) if mmap_env is not None else 268435456
+        await self._conn.execute(f"PRAGMA mmap_size={mmap_size}")
         # synchronous=NORMAL: safe with WAL (no full fsync on each write)
         await self._conn.execute("PRAGMA synchronous=NORMAL")
         # temp_store=MEMORY: sort/group-by scratch space stays in RAM

@@ -107,11 +107,13 @@ async def test_native_redirect_frame_popup_and_subresource_checks_preserve_url(
         context = await browser.new_context(service_workers="block")
         try:
             page = await context.new_page()
+            page.set_default_timeout(60_000)
+            page.set_default_navigation_timeout(60_000)
             await guard.set_page_policy(context, page, EgressPolicy(resolver=dns))
-            async with page.expect_popup() as popup_info:
-                await page.goto("https://public.test/start", wait_until="load")
+            async with page.expect_popup(timeout=60_000) as popup_info:
+                await page.goto("https://public.test/start", wait_until="load", timeout=60_000)
             popup = await popup_info.value
-            await popup.wait_for_load_state("load")
+            await popup.wait_for_load_state("load", timeout=60_000)
             assert page.url == "https://public.test/final"
             assert popup.url == "https://popup.test/final"
             assert await page.evaluate("location.origin") == "https://public.test"

@@ -58,6 +58,9 @@ export default defineConfig({
         // 60/min bucket refills. Defaults are unchanged in production.
         ATLAS_RATE_LIMIT_CAPACITY: "1000000",
         ATLAS_RATE_LIMIT_PER_MINUTE: "1000000",
+        ATLAS_DB_MMAP_SIZE: "0",
+        PYTHONUNBUFFERED: "1",
+        TMPDIR: "/tmp",
       },
       timeout: 120_000,
       reuseExistingServer: false,
@@ -67,7 +70,8 @@ export default defineConfig({
     {
       // Production build, served on the CORS-allowed origin. API base URL is a
       // build-time inline (NEXT_PUBLIC_*), so it must be set for `next build`.
-      command: "npm run build && npx next start -p 3000",
+      // In CI, `npm run build` runs as a dedicated prior step, so avoid redundant rebuild.
+      command: process.env.CI ? "npx next start -p 3000" : "npm run build && npx next start -p 3000",
       url: "http://localhost:3000",
       env: { NEXT_PUBLIC_ATLAS_API_URL: API_URL },
       timeout: 180_000,

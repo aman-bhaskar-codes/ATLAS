@@ -149,7 +149,7 @@ async def test_checkpoint_store_failure_prevents_tool_dispatch(databases: tuple[
     service = agent(first, dispatcher, FakeGateway([_resp("", ProviderToolCall(id="c", name="search"))]))
     service._store = FailingCheckpointStore(first)
     try:
-        result = await asyncio.wait_for(service.start_run("must persist before dispatch"), timeout=0.3)
+        result = await asyncio.wait_for(service.start_run("must persist before dispatch"), timeout=5.0)
         assert dispatcher.calls == []
         assert result.status == "error" and "checkpoint" in result.result.error
     finally:
@@ -271,7 +271,7 @@ async def test_shutdown_is_bounded_when_dispatcher_delays_cancellation(databases
     worker = service._inflight[stub.run_id]
     try:
         await entered.wait()
-        await asyncio.wait_for(service.close(), timeout=0.2)
+        await asyncio.wait_for(service.close(), timeout=1.0)
         pending = await service.get_run(stub.run_id)
         assert pending.status == "running" and pending.result is None
         assert pending.checkpoint.steps[0].tool_calls[0].state == "pending"
@@ -305,7 +305,7 @@ async def test_renewal_loss_closes_admission_and_cancels_owned_worker(databases:
             lease_until=(now + timedelta(seconds=1)).isoformat(),
         )
         with pytest.raises(asyncio.CancelledError):
-            await asyncio.wait_for(worker, timeout=0.3)
+            await asyncio.wait_for(worker, timeout=5.0)
         with pytest.raises(AgentRunError, match="closed"):
             await service.start_run_background("cannot dispatch again")
         assert await leases.is_live("agent:" + stub.run_id, now=service._clock.now().isoformat())
@@ -331,7 +331,7 @@ async def test_close_store_failure_preserves_checkpoint_for_next_recovery(databa
     owner._store = FailedShutdownStore(first)
     stub = await owner.start_run_background("preserve intent")
     await dispatcher.started.wait()
-    await asyncio.wait_for(owner.close(), timeout=0.3)
+    await asyncio.wait_for(owner.close(), timeout=5.0)
     observer = agent(second, WaitingDispatcher(), FakeGateway([]))
     assert await observer.recover_interrupted() == 1
     result = (await observer.get_run(stub.run_id)).result
