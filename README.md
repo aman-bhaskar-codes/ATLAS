@@ -1,914 +1,208 @@
-<!--
-  ATLAS README — updated 2026-09-27 against the live tree.
-  Every number, path, flag and command below was verified from source, not
-  from memory (module/line/test/router/migration counts re-measured this pass).
-  Motion graphics are self-hosted animated SVGs (no third-party
-  badge/animation services), each paired with a prefers-reduced-motion
-  static fallback via <picture>.
--->
-
-<div align="center">
-
-<picture>
-  <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/motion/atlas-titlecard-static.svg">
-  <img src="assets/readme/motion/atlas-titlecard.svg" width="100%"
-       alt="ATLAS — Autonomous Task & Learning Agent System. A local-first, safety-governed agent runtime: zero cost by default, five free OpenRouter models, a five-tier safety gate, and a hash-chained audit log.">
-</picture>
-
-<br/>
-
-[![Python](https://img.shields.io/badge/python-3.13%2B-3776AB?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-2%2C205%20collected-3fb950?style=flat-square&logo=pytest&logoColor=white)](tests)
-[![Coverage](https://img.shields.io/badge/coverage-70%25%20%2F%20floor%2063-238636?style=flat-square)](pyproject.toml)
-[![Models](https://img.shields.io/badge/models-5%20free%20%C2%B7%201%20key-58a6ff?style=flat-square)](config/models.yaml)
-[![Cost](https://img.shields.io/badge/runtime%20cost-%240.00-0f2417?style=flat-square&labelColor=238636)](config/settings.yaml)
-[![Safety](https://img.shields.io/badge/safety-T0%E2%80%93T4%20deny%20by%20default-bc8cff?style=flat-square)](src/atlas/safety)
-[![Layers](https://img.shields.io/badge/import--linter-3%20contracts%20kept-f778ba?style=flat-square)](importlinter.ini)
-[![License](https://img.shields.io/badge/license-MIT-e3b341?style=flat-square)](LICENSE)
-
-**[What it is](#what-atlas-is)** · **[Pipeline](#the-pipeline-one-funnel-no-bypasses)** · **[Architecture](#architecture)** · **[Safety](#safety-the-part-that-says-no)** · **[Memory](#memory--two-lane-recall)** · **[Models](#intelligence--cost)** · **[Research](#knowledge--research)** · **[Voice](#voice)** · **[IDE / ADE](#ide--ade-the-agentic-development-environment)** · **[Quick start](#quick-start)** · **[Config](#configuration)** · **[Status](#current-status-honest-version)**
-
-</div>
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## What ATLAS is
-
-ATLAS is a **personal autonomous agent runtime** that runs on your machine, spends
-nothing to think, and cannot take a consequential action without passing a
-deny-by-default safety gate that writes a tamper-evident record of what it did.
-
-It is one process, one composition root, one funnel. A request arriving from the
-CLI, the HTTP API, a WebSocket, a cron automation or a spoken sentence lands in the
-*same* orchestrator, gets classified into the *same* five-tier risk ladder, and is
-executed through the *same* sandboxed tool registry. There is no side door — that
-property is enforced by an import-linter contract, not by convention.
-
-What it is **not**: a chat wrapper, a prompt-template collection, or a hosted
-service. Local operation uses Ollama without a cloud key. The default hybrid
-profile also permits configured free cloud routes; paid routes remain policy-gated.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## At a glance
-
-Everything in this table was measured against the working tree on branch `main`.
-
-| | |
-|---|---|
-| **Source** | 593 Python modules · ~88,900 lines · 20 top-level packages under `src/atlas` |
-| **Tests** | 2,205 collected across 261 test files · ~70% line coverage |
-| **Coverage floors** | 63% global · 70% `safety/` · 83% `orchestration/` (CI-enforced) |
-| **Layering** | 14 layers, 3 import-linter contracts, 0 broken |
-| **Database** | SQLite (`.atlas/atlas.db`) for core data, 36 forward-only migrations · **Supabase Postgres** for domain-routed cloud persistence (IDE sessions today) |
-| **Model fleet** | Local Ollama, Gemini, five curated free OpenRouter routes, and two policy-gated paid routes |
-| **Embeddings** | Local `bge-m3:latest` by default; model-specific namespaces preserve previous indexes |
-| **HTTP surface** | 25 routers under `/api/v1` + WebSocket routes (events, voice) |
-| **Runtime** | Python 3.13+, `uv`-managed, phased startup with health gating |
-| **Web UI** | Next.js 16.2.11 · React 19.2.4 (separate `frontend/` workspace) |
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## The pipeline: one funnel, no bypasses
-
-<div align="center">
-<picture>
-  <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/motion/atlas-pipeline-static.svg">
-  <img src="assets/readme/motion/atlas-pipeline.svg" width="100%"
-       alt="A request travels left to right: ingress from CLI, API, WebSocket, voice or cron; the orchestrator's observe-think-act-reflect loop; tier classification with provenance; the deny-by-default safety gate; sandboxed execution at 1 CPU and 512 MB; and an append-only SHA-256 audit chain.">
-</picture>
-</div>
-
-Read that diagram as a call graph, because it is one:
-
-1. **Ingress** — every transport builds the same `InboundEvent`, tagged with a
-   `source` and a provenance class. A transport cannot smuggle in a pre-approved action.
-2. **Orchestrator** (`orchestration/orchestrator.py`) — runs the OTAR cycle and decides
-   which tool to call with which arguments.
-3. **Classify** (`safety/classifier.py`) — deterministic and fail-closed. Hard-block
-   matchers run *first*, so a credential read is high-tier even if a later rule would
-   have allowed it. On any classifier error the tier defaults to `CONFIRM`, never `AUTO`.
-4. **Gate** (`safety/engine.py`) — allows, notifies, demands approval, demands an
-   approval *code*, or refuses. The kill switch is re-checked *after* confirmation, so
-   a stop issued while you were deciding still wins.
-5. **Execute** (`orchestration/registry.py` → `tools/`) — inside a `python:3.13-slim`
-   container capped at 1 CPU / 512 MB, or the native sandbox where Docker is unavailable.
-6. **Audit** (`safety/audit.py`) — append-only, each record hashing the previous one.
-   Secrets are scrubbed before the record is written, not after.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## The OTAR loop
-
-<div align="center">
-<img src="assets/animations/otar-loop.svg" width="76%"
-     alt="The OTAR cycle: Observe the request and recalled context, Think to produce a plan, Act through the safety-gated tool registry, Reflect on the outcome and write what was learned back into memory.">
-</div>
-
-**O**bserve → **T**hink → **A**ct → **R**eflect. The interesting part is the last
-step: reflection is not logging. It writes structured artifacts back into the stores
-that the *next* task reads — trajectories, extracted experiences, failure records and
-skill-promotion candidates. That is why `trajectories`, `experiences` and `failures`
-are first-class operator commands rather than debug output.
-
-The loop is bounded on purpose. Step limits, wall-clock limits and cost limits live in
-`orchestration/limits.py`, and a self-critique pass (`self_critique.py`) can reject the
-agent's own plan before a single tool fires.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Architecture
-
-<div align="center">
-<img src="assets/readme/architecture/atlas-system.svg" width="100%"
-     alt="ATLAS system architecture: interfaces on top, then diagnostics, adaptation, evaluation, orchestration, knowledge, capabilities, memory, intelligence, safety, tools, control, perception, and infra at the base. Dependencies point downward only.">
-</div>
-
-One composition root, one object graph. `atlas.app.build()` constructs everything and
-returns a single `Atlas` dataclass; every interface receives that same instance.
-Nothing in the tree reaches for a global, and no subsystem constructs its own database
-handle, model provider or safety engine.
-
-Startup is **phased and health-gated** by `RuntimeSupervisor`:
-
-```
-bootstrap → infrastructure → safety → intelligence → memory
-          → capabilities → orchestration → readiness
-```
-
-A phase that fails does not leave a half-built runtime accepting traffic — the API
-reports unready and the CLI tells you which phase broke.
-
-### Dependency direction is a build gate
-
-The 14 layers below are declared in [`importlinter.ini`](importlinter.ini) as three
-contracts. Dependencies point **downward only**, and CI fails on a single upward edge.
-
-```
-interfaces → diagnostics → adaptation → evaluation → orchestration → knowledge
-           → capabilities → memory → intelligence → safety → tools → control
-           → perception → infra
-```
-
-That is what makes the "no bypasses" claim in the pipeline section checkable rather
-than aspirational: the voice engine physically cannot import the orchestrator, so
-speech has to enter through the same front door as everything else.
-
-<details>
-<summary><b>Repository layout</b> — the packages under <code>src/atlas</code></summary>
-
-```
-atlas/
-├─ src/atlas/
-│  ├─ app.py               # composition root — build() returns the Atlas graph
-│  ├─ bootstrap/           # one builder per startup phase; the only place wiring lives
-│  ├─ infra/               # config, db + 36 migrations, backends, clock, logging, types
-│  ├─ perception/          # screen/accessibility perception + sensitivity redaction
-│  ├─ control/             # OS-level control surface (osascript, scripted actions)
-│  ├─ tools/               # filesystem, shell, browser, knowledge primitives (base.py contract)
-│  ├─ tooling/             # universal tool catalog + intent-aware routing (Tool-RAG)
-│  ├─ safety/              # classifier, engine, matchers, policy, sandbox, kill switch, audit
-│  ├─ intelligence/        # provider registry, model catalog, selection, routing
-│  ├─ memory/              # working, episodic, semantic, curated, lanes, trajectory
-│  ├─ capabilities/        # browser, computer_use, connectors, pim, notification, voice, ide
-│  ├─ knowledge/           # ingestion, chunking, BM25 + rerank, citations, synthesis, research
-│  ├─ orchestration/       # orchestrator, planner, registry, limits, self-critique, DAG, agent_engine, research
-│  ├─ agents/              # multi-agent delegation (disabled by default)
-│  ├─ evaluation/          # golden sets, RAG metrics, the eval gate CI runs
-│  ├─ adaptation/          # experiments, canary/shadow, calibration, skill promotion
-│  ├─ diagnostics/         # doctor checks and self-inspection
-│  ├─ engineering/         # code fingerprinting / repo-aware helpers
-│  ├─ training/            # dataset + triplet shaping for self-improvement
-│  ├─ autonomy/            # automations, trigger engine, proactive events
-│  └─ interfaces/          # cli.py, api/ (25 routers), shell, transports
-├─ src/atlas_cli/          # the installed `atlas` command — thin HTTP client
-├─ config/                 # settings.yaml, models.yaml, policies (hot-editable)
-├─ frontend/               # Next.js 16 web UI
-├─ tests/                  # 261 files, 2,205 tests
-└─ importlinter.ini        # the 3 layering contracts CI enforces
-```
-
-</details>
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Safety: the part that says no
-
-<div align="center">
-<img src="assets/readme/architecture/atlas-safety.svg" width="100%"
-     alt="The safety funnel: a tool request is matched against hard-block rules, classified into a tier, checked against policy and constraints, gated for approval, executed in a sandbox, and recorded in the hash-chained audit log.">
-</div>
-
-Every tool call is classified into one of five tiers before it runs. The ladder is an
-`IntEnum`, so "at least CONFIRM" is expressible as arithmetic (`max(tier, Tier.CONFIRM)`)
-and a constraint violation can only ever *raise* a tier, never lower one.
-
-| Tier | Name | Meaning | Outcome |
-|:---:|---|---|---|
-| **T0** | `AUTO` | read-only, no side effects | runs immediately |
-| **T1** | `NOTIFY` | reversible side effects | runs, you are told |
-| **T2** | `CONFIRM` | irreversible or outward-facing | explicit approval required |
-| **T3** | `DANGEROUS` | deletes data, spends money, touches credentials | approval **+ typed confirmation code** |
-| **T4** | `BLOCK` | hard-blocked | never executed, at any privilege |
-
-### What the gate guarantees
-
-- **Deny by default.** An unmatched or unclassifiable request does not fall through to
-  `AUTO`; `default_tier_on_error: 2` in [`config/settings.yaml`](config/settings.yaml)
-  means the failure mode is "ask a human".
-- **Hash-chained audit.** Each `AuditRecord` includes the hash of its predecessor, so
-  removing or editing history breaks the chain verifiably. Inspect it from the CLI.
-- **Secrets never reach disk.** Scrubbing happens on the way *into* the record and into
-  logs, so a leaked argument is not preserved by the thing meant to hold you accountable.
-- **Real isolation.** Shell and code execution run in `python:3.13-slim` with 1 CPU and
-  512 MB; the native sandbox is the fallback, not the default.
-- **A kill switch that cannot be raced.** `STOP.flag` is re-read *after* an approval
-  returns, so "stop" issued mid-decision still stops the action.
-- **Approval fatigue is a design constraint.** T0/T1 are silent by design — if
-  everything asked, you would approve everything without reading it.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Memory & two-lane recall
-
-<div align="center">
-<picture>
-  <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/motion/atlas-recall-lanes-static.svg">
-  <img src="assets/readme/motion/atlas-recall-lanes.svg" width="100%"
-       alt="Two-lane recall. Lane 1 runs on every turn: the curated tier plus one indexed SQL query over write-time trigger hints, ranked by importance times a 30-day half-life decay, limit three, with zero model or network calls. Lane 2, the vector path, unlocks only when Lane 1 returns nothing usable and a deterministic regex detects recall intent.">
-</picture>
-</div>
-
-Most agent frameworks recall with one lane: embed the query, hit a vector store, often
-ask a model to rerank. That is three latency sources on the hot path and two of them are
-network calls. ATLAS splits it:
-
-**Lane 1 — the default, every turn.** The curated tier plus a single indexed SQL query
-over `trigger_hint` values scored *at write time*, while a model was already in the loop
-for that turn. Ranking is `importance × 2^(−age / 30 days)`, `LIMIT 3`. Zero embedding
-calls, zero vector round-trips, zero model calls — pure arithmetic over the handful of
-rows a partial index already narrowed to:
-
-```sql
-CREATE INDEX idx_ep_trigger_hint ON episodes(trigger_hint)
-    WHERE trigger_hint IS NOT NULL;
-```
-
-**Lane 2 — escalation, rare by construction.** Hybrid vector retrieval, reached only
-when Lane 1 finds nothing above `min_score` **and** a deterministic regex says the
-message actually asks for deep recall. Because it is rare, the vector store stops being
-either a latency cost or a storage-ceiling problem.
-
-Two deliberate implementation choices, both documented in
-[`src/atlas/memory/lanes.py`](src/atlas/memory/lanes.py):
-
-- The decay is computed **in Python, not SQL** — `exp()` is an optional SQLite build
-  flag, so a SQL-side decay would work on one machine and silently fail on another.
-- `LIMIT 3` is a **context-budget** decision, not a relevance one. Injecting ten
-  "relevant" memories reliably produces worse answers than injecting the best three.
-
-### Provenance is a security boundary, not metadata
-
-Every episode carries two columns constrained by SQL `CHECK`, and recall filters on them
-**inside the query**. A caller cannot forget to exclude untrusted content, because the
-index that makes recall fast encodes the eligibility rule in its own `WHERE` clause.
-
-| `origin_class` | Where it came from | Recallable? |
-|---|---|---|
-| `owner` | you said it | yes, highest trust |
-| `agent` | ATLAS produced it | yes |
-| `untrusted` | fetched page, tool output, third-party text | **never injected** |
-| `system` | runtime bookkeeping | internal only |
-
-| `session_kind` | Meaning |
-|---|---|
-| `interactive` | a live turn with you present |
-| `cron` | scheduled automation |
-| `heartbeat` | background maintenance |
-| `subagent` | delegated agent run |
-
-Rows that predate the columns default to `agent`/`interactive` — deliberately *not*
-`owner`, so backfilled history can never be mistaken for something you actually said.
-
-### The memory tiers
-
-<div align="center">
-<img src="assets/memory-layers.svg" width="82%"
-     alt="Memory tiers: working memory for the current task, episodic memory for what happened, semantic memory for distilled facts, the curated always-loaded tier, and the vector store for semantic neighbours.">
-</div>
-
-| Tier | Module | Lifetime | Written by |
-|---|---|---|---|
-| Working | `memory/working.py` | one task | the live loop |
-| Episodic | `memory/episodic.py` | append-only history | every turn |
-| Semantic | `memory/semantic.py` | distilled facts | consolidation + explicit edits |
-| Curated | `memory/curated.py` | always loaded at session start | consolidation **only** |
-| Vector | `memory/vectorstore.py` | Chroma, 1024-dim | ingestion + episodes |
-
-The curated tier is the `MEMORY.md`/`USER.md` equivalent: small, always in context, and
-never written by a live turn. It carries a `content_hash` compare-and-swap token plus a
-one-step `pre_image`, so a bad consolidation sweep is revertible without a backup.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Intelligence & cost
-
-The registry supports local Ollama (`local-qwen3`), Gemini (`gemini-flash`),
-five curated free OpenRouter routes, and two paid routes. Availability depends
-on the installed model, configured key, provider catalog and project quota.
-GLM 5.2 and MiniMax M3 are **paid** entries; historical `-free` configuration
-aliases migrate to their paid identity and do not bypass free-only policy.
-
-See [provider setup](docs/providers/gemini-local.md). Model tier lists rank
-candidates only after hard cost, network, privacy and capability filters.
-The default `free_hybrid` profile allows local and eligible free cloud routes;
-`local_free` confines model inference and embeddings to the local service.
-Gemini defaults to paid billing classification until the operator explicitly
-declares a free project. No model is downloaded automatically.
-
-### Cost is enforced, not suggested
-
-| Knob | Default | Effect |
-|---|---|---|
-| `profile` | `free_hybrid` | allows free cloud + free-quota classes |
-| `cost_policy` | `free_only` | a paid model is not selectable, period |
-| `network_policy` | `free_cloud` | egress limited to free-tier endpoints |
-| `sync_openrouter_free` | `false` | do **not** auto-register every free model OpenRouter lists — only the 5 curated entries exist |
-
-That last flag matters: auto-sync would silently grow the fleet on every restart, which
-makes routing non-reproducible. It is off, and it is off on purpose.
-
-### Embedding changes preserve source data
-
-Embeddings default to local Ollama `bge-m3:latest`. Cloud embeddings require
-explicit configuration and remain subject to privacy policy. Equal vector
-width does not make different embedding models comparable: each model has a
-separate namespace. Previous collections remain intact.
-
-Use **Research → Source corpus → Refresh embedding batch** to rebuild up to
-10 documents per request from stored source text, with a 30-second deadline.
-The API accepts bounded batches of 1–50 documents. Errors leave source text and
-lexical search intact; repeat batches to continue. Never delete the corpus to
-change embedding models.
-
-Research and IDE launch separately from the command centre. Research has its
-own history, source corpus and status pages; IDE has workspaces and a dedicated
-[training workflow](docs/ide/). Composer images use local OCR text extraction;
-this does not provide visual understanding of diagrams or photographs.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Knowledge & research
-
-<div align="center">
-<img src="assets/readme/knowledge/atlas-knowledge-loop.svg" width="92%"
-     alt="The knowledge loop: ingest documents and pages, chunk them, retrieve with BM25 plus vector search, rerank, attach citations, and synthesise an answer with a confidence score.">
-</div>
-
-The knowledge layer is a real retrieval stack, not a `.txt` folder: chunking, BM25
-(`bm25.py`) fused with vector search, reranking, evidence tracking, citation attachment,
-compression, and a research cache so a repeated question does not re-fetch the web.
-
-Answers carry **confidence and provenance**. Anything pulled from a fetched page enters
-memory as `origin_class: untrusted`, which means it can inform an answer *now* but can
-never be silently recalled later as if you had said it. That is the same boundary the
-recall query enforces — one rule, applied in one place.
-
-### Persisted research sessions (Perplexity-class surface)
-
-On top of the fabric sits a dedicated **research surface** — a persisted, resumable
-session (question → grounded answer → source rail → inline citations → follow-ups),
-served by `orchestration/research/` and the `research` router at `/api/v1/research`
-(`POST /sessions`, `GET /sessions[/{id}]`, `POST /sessions/{id}/follow-up`, and an SSE
-`GET /sessions/{id}/stream`). It is **not a second execution path**: every search and
-page read still flows through the governed `knowledge` tool and the `SafetyEngine`
-funnel. The stream emits **real phase events** (`retrieving → sources_found →
-synthesizing → answer → citations → grounding → completed`), resumable from a cursor via
-`Last-Event-ID` — never a fabricated token stream. The web surface (`frontend/app/
-research/[sessionId]`) is the streaming Perplexity-style reader, launched full-window
-from the Command Center. It ships **off** behind `research.enabled` and returns `503`
-until enabled and built, the same optional-subsystem convention `browser`/`voice`/`ide`
-follow.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Voice
-
-> **Status: built, tested, and disabled by default** (`voice.enabled: false`).
-> **Privacy:** when enabled, microphone audio and synthesis text are sent to a
-> third-party API — *audio leaves your machine.* This is the one subsystem where the
-> local-first guarantee does not hold, which is exactly why it ships off.
-
-Speech is a transport, not a special case. The audio↔text engine lives low in
-`capabilities/voice/` (`contracts.py`, `service.py`, three providers) and **cannot import
-the orchestrator** — the layering contract forbids it. The speech→task loop lives in
-`interfaces/`, builds an ordinary `InboundEvent(source="voice")`, and rides the same
-safety funnel as a typed command. A spoken "delete everything" still hits T3 and still
-demands a typed confirmation code.
-
-| Role | Default | Alternatives |
-|---|---|---|
-| TTS primary | `openrouter` (`openai/gpt-4o-mini-tts`) | `deepgram`, `fish_audio` |
-| TTS fallback / non-English | `openrouter_multilingual` (`fish-audio/s2.1-pro`) | any of the above |
-| STT | `openrouter` (`openai/whisper-large-v3`) | `deepgram` (Flux — true streaming partials) |
-
-The default path needs **no extra vendor key** — speech rides `OPENROUTER_API_KEY` like
-everything else. `DEEPGRAM_API_KEY` and `FISH_AUDIO_API_KEY` are optional upgrades:
-Deepgram is the only provider here with genuine streaming partials, and Fish Audio direct
-is worth it for expressive Hindi/multilingual narration. Each TTS provider is the other's
-fallback, following the same pattern as `FallbackEmbedder`.
-
-```bash
-uv sync --extra voice
-```
-
-Then set `voice.enabled: true` and:
-
-```bash
-python -m atlas.interfaces.cli voice speak "नमस्ते, यह एक परीक्षण है" --lang hi
-```
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## IDE / ADE: the Agentic Development Environment
-
-> **Status: foundational slices live and tested; the full agentic build-loop is in progress.**
-> Everything below is governed the same way as any other tool call — the ADE is a
-> capability, not a privileged escape hatch.
-
-The ADE (`capabilities/ide/`) turns ATLAS into a coding environment that can open a
-project, read and edit it under content-hash versioning, run commands, and report
-git state — all **through the safety funnel**, never around it. It lives low in the
-layer graph (it may import `infra`/`safety`/`tools` but **not** `orchestration` or
-`interfaces`); the HTTP/WS surface and the `atlas ide` commands live up in
-`interfaces/`. Workspaces persist behind an `IDESessionStore` protocol with **two
-implementations**: the default `SqliteIDESessionStore` for local-first use, and a
-`PostgresIDESessionStore` that connects to **Supabase** for cloud-backed session
-persistence. The bootstrap logic in `bootstrap/ide.py` selects the backend
-automatically based on whether `SUPABASE_DB_CONNECTION_STRING` is set in `.env`.
-
-What works today, end to end:
-
-| Capability | Module | Governed how |
-|---|---|---|
-| Open workspace · file tree · read document | `workspace.py` | read-only (T0) |
-| Structured edits with stale-write refusal | `editing.py` | write routed through `SafetyEngine.guard`; refuses if the on-disk `sha256` moved |
-| Run a command in the workspace root | `commands.py` | `CommandRunner` → funnel; read-only commands allow, anything else needs confirmation |
-| `git status` (porcelain v1 parse) | `git.py` | read-only through the funnel |
-| `git diff` / `git diff --staged` (numstat + patch) | `git.py` | read-only through the funnel |
-| Project model (languages, managers, frameworks, test/build/run commands) | `project.py` | read-only analysis; reported commands are candidates, not auto-run |
-
-Two safety properties are worth stating because they were the hard part:
-
-- **Content-hash versioning, not timestamps.** An edit declares the `sha256` it
-  expects; if the file changed underneath, the writer returns `stale=True` and writes
-  nothing. Concurrent edits cannot silently clobber.
-- **The governed-command path is real.** Commands are tiered by an explicit
-  `operation: run` rule and matched against a **token-prefix** allowlist — the same two
-  buckets (`read_only` / `side_effect`) `ShellTool` enforces itself, so a command in
-  neither is refused even *after* a confirmation. Read-only git (`status`, `diff`, and
-  the `rev-parse` / `for-each-ref` reads the checkpoint verbs resolve through) runs at
-  T1; `git commit`, the git write verbs (`checkout` / `restore` / `update-ref` /
-  `stash`) and the verification commands the IDE runs (`pytest`, `mypy`, `ruff`,
-  `eslint`, `tsc`, `cargo test`, `go test`, and the npm/pnpm/yarn/bun test scripts)
-  demand confirmation. `git push` stays absent on purpose: the agent never publishes.
-  `tests/safety/test_ide_shell_allowlist.py` drives the real IDE engines against this
-  manifest, so no verb can silently rot into a dead one.
-
-- **The cwd is real too.** The workspace root rides the audited `ToolRequest` and is
-  threaded down to the sandbox (as a host path; Docker maps it under the mount), so a
-  confirmed `git commit` / `pytest` acts on the workspace — never on whatever directory
-  the server happened to be started in.
-
-Both surfaces are thin projections over one `IDEService`:
-
-```bash
-# in-process operator CLI
-python -m atlas.interfaces.cli ide tree    <path>
-python -m atlas.interfaces.cli ide read    <path> <file>
-python -m atlas.interfaces.cli ide edit    <path> <file> ...
-python -m atlas.interfaces.cli ide run     <path> "<command>"
-python -m atlas.interfaces.cli ide git     <path>
-python -m atlas.interfaces.cli ide diff    <path> [--staged] [--patch]
-python -m atlas.interfaces.cli ide project <path>
-```
-
-The HTTP mirror is the `ide` router under `/api/v1/ide/workspaces/...` (open, tree,
-document, change, command, git/status, git/diff, project). It returns `503` until the
-subsystem is enabled and the service is built — the same optional-subsystem
-convention `browser` and `voice` follow.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-Three capability layers ship **off**, each behind one flag, each degrading cleanly rather
-than crashing when unavailable. This is a convention, not three ad-hoc special cases:
-`bootstrap/*.py` returns `None` for a disabled subsystem and every call site handles it.
-
-| Subsystem | Flag | Default | Why off by default |
-|---|---|---|---|
-| **Browser automation** | `browser.enabled` | `false` | needs Playwright + a browser download; headless Chromium is a heavy dependency |
-| **Multi-agent delegation** | `agents.enabled` | `false` | costs a decomposition call + a synthesis call on top of per-subtask reasoning; only pays off on multi-branch work |
-| **Voice** | `voice.enabled` | `false` | sends audio to a third party |
-| **IDE / ADE** | `ide.enabled` | `false` | mounts the workspace read/write/run surface; off until a project explicitly opts in |
-
-**Perception & computer use** (`perception/`, `capabilities/computer_use/`) reads the
-macOS accessibility tree and can drive the desktop. It is genuinely experimental: it
-requires the `macos` extra, needs Accessibility permission granted by hand, and every
-action it proposes is classified like any other tool call. `sensitivity.py` redacts what
-the perception layer is allowed to report before it ever reaches a model — a password
-field is not something the agent should be able to read out loud.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Interfaces
-
-ATLAS has **two command-line surfaces**, and knowing which one you want saves confusion:
-
-### 1. `atlas` — the installed client
-
-The console script from `pyproject.toml` (`atlas = "atlas_cli.main:app"`) is a thin HTTP
-client. It talks to a **running** runtime, so start one first:
-
-```bash
-atlas runtime start
-```
-
-| Command | Does |
-|---|---|
-| `atlas run "<request>"` | execute a task, live progress by default (`--no-watch`, `--json`) |
-| `atlas task` | list or watch tasks |
-| `atlas shell` | interactive ATLAS shell |
-| `atlas events` | live event stream, or search history |
-| `atlas doctor` | verify environment, providers, models |
-| `atlas profile` | show or set the operating profile |
-| `atlas providers` | list · health · free · quota |
-| `atlas tools list` | every tool in the universal tooling registry (id, type, status, auth, tier) |
-| `atlas tools catalog` | persistent catalog overview: version, sources, namespaces, states |
-| `atlas tools search "<query>"` | lexical catalog search with match explanations |
-| `atlas tools inspect <tool-id>` | full tool inspection: schemas, fingerprints, timestamps |
-| `atlas tools namespaces` / `refresh` | namespace listing / re-sync sources |
-| `atlas route "<request>"` | route a request: domain → strategy → candidates → plan (explainable) |
-| `atlas route domains` / `strategies` | registered routing domains / strategies |
-| `atlas route explain <route-id>` / `replay <route-id>` | structured explanation / snapshot replay |
-| (execution fabric) | `Atlas.execution_engine` runs RoutePlans: `start/pause/resume/cancel/status/retry`; runs are visible at `GET /api/v1/execution/runs` |
-| `atlas mcp list` / `status` / `tools` | MCP servers (official SDK): state, negotiated protocol, discovered tools |
-| `atlas mcp connect` / `disconnect` / `refresh` | owner-controlled MCP lifecycle |
-| `atlas models` | list · doctor · pull |
-| `atlas memory` | consolidation and skill promotion |
-| `atlas cost` | view and manage cost controls |
-| `atlas automations` | manage scheduled automations |
-| `atlas voice` | speak text, or hold a spoken conversation |
-| `atlas runtime` | `start` · `stop` · `status` · `restart` |
-| `atlas smoke-test` | offline check of the computer-use + connector stack |
-
-### 2. `python -m atlas.interfaces.cli` — the in-process operator CLI
-
-This one builds the whole `Atlas` graph in your shell — no server required — and exposes
-the deep surface used for inspection, memory work and safety drills.
-
-<details>
-<summary><b>Full in-process command list</b></summary>
-
-| Command | Does |
-|---|---|
-| `run` | execute a task through the orchestration runtime |
-| `worker` / `enqueue` / `resume` | durable queue: consume, submit, crash-resume |
-| `fs` / `sh` | drive the filesystem and shell tools **through** the safety engine |
-| `run-tool` | invoke a single registered tool directly |
-| `recall` | show exactly what memory *would* surface for a query |
-| `remember` | add a semantic fact as an explicit owner-tier edit |
-| `consolidate` / `prune` | run the distillation and auto-cleaning sweeps by hand |
-| `user-model` | edit an always-loaded user-model section |
-| `trajectories` / `trajectory` | list runs, or show one run's full execution history |
-| `experiences` / `failures` | learned lessons and the failure taxonomy |
-| `extract-experiences` | trigger experience extraction from recent trajectories |
-| `know` | answer from memory + official sources + web, ranked with confidence |
-| `knowledge` | ingest · search · list · delete documents |
-| `audit` | read and verify the hash-chained audit log |
-| `kill` / `revive` | trip and clear the kill switch |
-| `watch` | stream task events over WebSocket |
-| `verify` | end-to-end smoke test of critical pipeline stages |
-| `doctor` | environment and provider diagnostics |
-| `model` | model inspection |
-| `cal` / `contacts` | calendar (list, free-busy, search, create) and contact search |
-| `memory` | live memory inspection sub-app |
-| `ide` | open a workspace and drive it: `tree` · `read` · `edit` · `run` · `git` · `diff` · `project` — all funnel-governed |
-| `voice speak` / `voice chat` | TTS one-shot, or the full mic→STT→task→TTS loop |
-
-</details>
-
-### HTTP + WebSocket API
-
-FastAPI, 25 routers. `/api/v1/health` is intentionally unauthenticated so container
-probes work; **everything else sits behind `auth_required`**.
-
-<details>
-<summary><b>Router surface</b></summary>
-
-`health` · `runtime` · `tasks` · `approvals` · `capabilities` · `feedback` ·
-`knowledge` · `memory` · `trajectory` · `attachments` · `trust` · `events` ·
-`events_ws` · `learning` · `ops` · `tools` · `routing` · `execution` · `mcp` ·
-`providers` · `automations` · `voice` · `ide` · `agent` · `research`
-
-WebSocket: `/ws/events` for live task/event streaming, plus a bidirectional voice socket
-(audio in → STT → orchestrator → TTS audio out). Streaming HTTP (SSE) backs the
-agent-run console (`/api/v1/agent/runs/{id}/stream`) and research sessions
-(`/api/v1/research/sessions/{id}/stream`), both resumable via `Last-Event-ID`.
-
-The three WebSocket-hosting routers (`memory`, `events_ws`, `voice`) cannot take the
-router-level `require_principal` Request dependency, so their HTTP endpoints gate
-per-route instead (e.g. `/voice/speak` and `/voice/transcribe` each depend on
-`require_principal`); only the raw `/ws/*` sockets remain tracked WS-auth debt.
-
-</details>
-
-> **Security note.** With `ATLAS_API_KEYS` unset, the API runs in **local mode**: it binds
-> localhost and treats every request as the trusted owner. That is fine on your laptop and
-> **not** fine on any other interface. Set `ATLAS_API_KEYS` *before* binding to `0.0.0.0`.
-> A `ro:` prefix makes a key read-only:
-> `ATLAS_API_KEYS=full-key-here,ro:read-only-key-here`
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Quick start
-
-**Requirements:** Python 3.13+, [`uv`](https://docs.astral.sh/uv/), and one free
-[OpenRouter key](https://openrouter.ai/keys). Docker is optional but recommended — without
-it, shell execution falls back to the native sandbox.
+# ATLAS
+
+**Autonomous Task & Learning Agent System**
+
+ATLAS is a personal agent runtime project built with Python and a Next.js dashboard. It brings together task orchestration, model-provider routing, persistent memory, document retrieval, and development-workspace tools.
+
+The repository explores how these components can share configuration, execution records, and permission checks across a command-line interface and an HTTP API. It also contains research-session workflows and experimental adaptation and local-training components.
+
+## Main components
+
+| Component | Technical scope |
+| --- | --- |
+| Task orchestration | Task state, planning, bounded reasoning loops, tool dispatch, cancellation, and execution records |
+| Model access | A shared model gateway, provider adapters, selection rules, fallback handling, usage tracking, and configurable budgets |
+| Memory | Working context, episodic records, semantic facts, user preferences, and stored task trajectories |
+| Knowledge and research | Document ingestion, lexical and vector retrieval, rank fusion, source records, and persisted research sessions |
+| Development workspaces | File trees, document editing, change previews, command execution, Git operations, diagnostics, and workspace sessions |
+| Execution controls | Permission classification, approval requests, a stop flag, audit records, and Docker or development-mode host execution |
+| Interfaces | Typer command-line interfaces, FastAPI routes, server-sent events, WebSockets, and a browser dashboard |
+
+These entries describe the codebase's scope. Available workflows depend on configuration, provider access, installed dependencies, and the execution environment.
+
+## Technology stack
+
+| Area | Technologies |
+| --- | --- |
+| Backend | Python 3.13+, asyncio, FastAPI, Uvicorn |
+| Configuration and contracts | Pydantic, Pydantic Settings, YAML |
+| Persistence | SQLite with aiosqlite; PostgreSQL adapters with asyncpg for selected stores |
+| Retrieval | ChromaDB, BM25, reciprocal-rank fusion, feature-based reranking |
+| Model integrations | Ollama, Gemini, OpenRouter-compatible endpoints, and optional provider adapters |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
+| Client data and validation | TanStack Query, Zod |
+| Tool integrations | Playwright and the Model Context Protocol SDK |
+| Development tools | uv, pytest, Ruff, mypy, import-linter, Vitest, Playwright tests, GitHub Actions |
+| Packaging | Hatchling, npm, Docker |
+
+The Python and frontend lockfiles record dependency versions. Optional service definitions in `docker-compose.yml` cover SearXNG, Valkey, and Phoenix; starting those services does not start the ATLAS application.
+
+## Code organization
+
+| Path | Responsibility |
+| --- | --- |
+| `src/atlas/app.py` and `src/atlas/bootstrap/` | Component construction and runtime wiring |
+| `src/atlas/orchestration/` | Tasks, reasoning, research runs, and execution coordination |
+| `src/atlas/intelligence/` | Model gateway, providers, selection, budgets, and inference |
+| `src/atlas/memory/` and `src/atlas/knowledge/` | Persistent context, ingestion, retrieval, and research evidence |
+| `src/atlas/safety/` and `src/atlas/tools/` | Permission handling, approval queue, audit records, and tool implementations |
+| `src/atlas/tooling/` | Tool registry, catalog, routing, execution graph, and MCP connections |
+| `src/atlas/capabilities/` | Browser, workspace, voice, identity, and service-integration components |
+| `src/atlas/infra/` | Database access, events, configuration, execution leases, and observability |
+| `src/atlas/adaptation/`, `src/atlas/agents/`, and `src/atlas/training/` | Experimental strategy, agent, and retrieval-training components |
+| `src/atlas/engineering/`, `src/atlas/perception/`, and `src/atlas/control/` | Engineering utilities and environment-specific perception/control adapters |
+| `src/atlas/interfaces/` and `src/atlas_cli/` | API transports and command-line entry points |
+| `frontend/` | Dashboard, research views, and development-workspace interface |
+| `config/`, `tests/`, `eval/`, and `docs/` | Configuration, automated checks, evaluation fixtures, and technical notes |
+
+The composition root builds shared services and passes them to the interfaces. The primary task path connects orchestration to tool dispatch and permission handling. Additional paths provide research sessions and workspace operations. Import-linter checks declared dependency boundaries.
+
+## Local development
+
+### Requirements
+
+- Python 3.13 or later and `uv`.
+- Node.js 22 and npm for the dashboard.
+- Ollama with the configured chat and embedding models for local inference.
+- Docker for container-based tool execution. Host execution is a separate development-mode option.
+- Additional native dependencies for optional OCR, audio, and operating-system integrations.
+
+### 1. Install the backend
 
 ```bash
 git clone https://github.com/aman-bhaskar-codes/ATLAS.git
 cd ATLAS
-uv sync
-cp .env.example .env
+uv sync --frozen
 ```
 
-Open `.env` and paste your key into the one required line:
+Run backend commands from the repository root: configuration and `.env` loading use that working directory.
+
+### 2. Configure a local instance
+
+Create a root `.env` file. The following is a local starting configuration using model entries present in the repository:
 
 ```dotenv
-OPENROUTER_API_KEY=sk-or-v1-...
+ATLAS_ENV=dev
+ATLAS_DATA_DIR=./.atlas
+ATLAS_PROFILE=local_free
+ATLAS_OLLAMA_HOST=http://127.0.0.1:11434
+ATLAS_LOCAL_MODEL=qwen3:4b
+ATLAS_DEFAULT_MODEL=local-qwen3
+ATLAS_EMBED_PROVIDER=ollama
+ATLAS_EMBED_MODEL=bge-m3:latest
+ATLAS_LOCAL_EMBED_MODEL=bge-m3:latest
+ATLAS_API_KEYS=
+ATLAS_MASTER_KEY=
 ```
 
-> **Run every command from this directory.** `Settings` resolves `env_file=".env"`
-> relative to the **current working directory**, not the package. Launch from anywhere
-> else and no `.env` is loaded at all — `OPENROUTER_API_KEY` comes back empty and every
-> model call fails auth with a message that does not obviously say "wrong directory".
-
-Set the secret-store master key. On macOS put it in the Keychain so it never touches disk:
+Generate a private master key with the command below and place its output in `ATLAS_MASTER_KEY`. Keep it stable for an existing data directory.
 
 ```bash
-security add-generic-password -a "$USER" -s atlas-master -w "$(python3 -c 'import secrets;print(secrets.token_hex(32))')"
+uv run python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-On Linux or CI, set `ATLAS_MASTER_KEY` in `.env` instead. If neither exists, dev mode
-derives a throwaway key from the hostname and warns on stderr — anything encrypted under
-that key is unrecoverable once you set a real one.
+With Ollama installed and running, download the models referenced above:
 
-Verify, then run:
+```bash
+ollama pull qwen3:4b
+ollama pull bge-m3:latest
+```
+
+Review `.env.example` for additional settings, replacing illustrative values rather than treating them as credentials. Model IDs, context limits, hardware requirements, and provider availability should be checked for the chosen configuration.
+
+### 3. Start the API
+
+```bash
+uv run uvicorn atlas.interfaces.api.app:create_app --factory --host 127.0.0.1 --port 8730
+```
+
+The API documentation is served at `http://127.0.0.1:8730/api/docs`. In another terminal, the in-process diagnostics command is:
 
 ```bash
 uv run python -m atlas.interfaces.cli doctor
-uv run python -m atlas.interfaces.cli run "summarise the three most recent files in this repo"
 ```
 
-Or bring up the full runtime and use the client CLI:
+The installed `atlas` command provides an HTTP client for task submission and inspection. Use `uv run atlas --help` to inspect its commands.
 
-```bash
-atlas runtime start
-atlas run "what changed in this project this week?"
-atlas events
-```
-
-<details>
-<summary><b>Web UI</b> (optional)</summary>
+### 4. Start the dashboard
 
 ```bash
 cd frontend
-npm install
-npm run dev        # http://localhost:3000 — expects the ATLAS API to be running
+npm ci
+npm run dev
 ```
 
-Next.js 16.2.11 / React 19.2.4, in its own workspace with its own CI job (lint, typecheck,
-build, Playwright E2E).
+Open `http://localhost:3030`. The default API base is `http://localhost:8730/api/v1`; use `NEXT_PUBLIC_ATLAS_API_URL` in `frontend/.env.local` when changing it.
 
-</details>
+If backend authentication is enabled, enter the instance API key in the dashboard's Settings page. Keep provider keys and the master key on the backend; do not put them in `NEXT_PUBLIC_*` variables.
 
-<img src="assets/divider.svg" width="100%" alt="">
+## Configuration and integrations
 
-## Configuration
+| File | Purpose |
+| --- | --- |
+| `config/settings.yaml` | Runtime options, inference preferences, feature switches, and execution limits |
+| `config/models.yaml` | Model registry and provider metadata |
+| `config/permissions.yaml` | Tool-operation rules, command categories, and filesystem paths |
+| `config/knowledge_sources.yaml` | Research-source configuration |
+| `config/mcp.yaml` | MCP server definitions and connection settings |
+| Root `.env` | Instance settings and backend credentials |
 
-**There is exactly one `.env`, and it lives beside `pyproject.toml`.** A `.env` anywhere
-else in the tree is dead config that nothing reads.
-[`.env.example`](.env.example) is the committed, exhaustive template — every variable any
-code path reads is in it, with a comment saying what it does and whether it is optional.
-When you add a new key, add it to **both** files.
+SQLite is the default application database. Selected persistence stores can use PostgreSQL through domain-specific DSNs. ChromaDB stores vector indexes separately.
 
-Precedence: code defaults **<** `config/settings.yaml` **<** `.env` / real environment.
+Cloud inference, web research, speech providers, and remote tools can send data to external services. Their availability, quotas, and charges depend on the service and account configuration. The `local_free` inference profile does not by itself disable every network-capable research or tool integration.
 
-| Variable | Required | Purpose |
-|---|:---:|---|
-| `OPENROUTER_API_KEY` | **yes** | chat, embeddings **and** speech — the only key you need |
-| `ATLAS_MASTER_KEY` | Linux/CI | encrypts stored credentials; macOS uses the Keychain instead |
-| `ATLAS_ENV` | no | `dev` / `prod` |
-| `ATLAS_DATA_DIR` | no | state root, default `./.atlas` |
-| `ATLAS_DEFAULT_MODEL` | no | default `glm-5.2-free` |
-| `ATLAS_HEAVY_MODEL` | no | default `nemotron-3-ultra-free` |
-| `ATLAS_PROFILE` | no | default `free_hybrid` |
-| `ATLAS_EMBED_*` | no | point embeddings at a different vendor; empty = reuse OpenRouter |
-| `ATLAS_API_KEYS` | only if exposed | bearer keys; unset ⇒ trusted-localhost mode |
-| `ATLAS_RATE_LIMIT_CAPACITY` / `_PER_MINUTE` | no | token-bucket limits |
-| `ATLAS_NTFY_TOPIC` | no | ntfy.sh push for approval prompts |
-| `DEEPGRAM_API_KEY` / `FISH_AUDIO_API_KEY` | no | optional voice vendors |
-| `ATLAS_SAFE_BROWSING_API_KEY` / `ATLAS_VIRUSTOTAL_API_KEY` | no | URL scanners; empty ⇒ that scanner is skipped, the rest of the funnel still applies |
-| `ATLAS_ANTHROPIC_API_KEY` / `ATLAS_GEMINI_API_KEY` / `ATLAS_GROQ_API_KEY` | no | extra chat vendors **outside** the free fleet; still blocked by `cost_policy` |
-| `SUPABASE_URL` | no | your Supabase project URL (e.g. `https://xxx.supabase.co`) |
-| `SUPABASE_SERVICE_KEY` | no | your Supabase service role key |
-| `SUPABASE_DB_CONNECTION_STRING` | no | Postgres connection string for Supabase; when set, IDE sessions persist to Postgres instead of local SQLite |
+Browser automation requires a Playwright browser installation. Voice requires its feature flag, provider configuration, and optional audio dependencies. Desktop and device adapters depend on platform permissions and available software. MCP servers are owner-configured and disabled in the example configuration.
 
-<details>
-<summary><b>Config files</b></summary>
+For PDFs and scanned documents, see [Local documents and OCR](docs/knowledge/local-ocr.md). The optional Python dependencies are installed with `uv sync --frozen --extra ocr`; scans additionally require Tesseract and Poppler.
 
-| File | Holds | Hot-editable |
-|---|---|---|
-| `config/settings.yaml` | profile, cost/network policy, model tiers, sandbox, critique, verification, agents, voice, ide | yes |
-| `config/models.yaml` | the 5-model catalog: slugs, capabilities, cost class | yes |
-| `.env` | secrets and machine-specific overrides (gitignored) | yes |
-| `importlinter.ini` | the 3 layering contracts | build gate |
-| `pyproject.toml` | deps, extras, ruff/mypy/pytest/coverage config | — |
+## Development and evaluation
 
-Retuning which model handles which kind of work never requires touching Python.
-
-</details>
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Quality gates
-
-Run everything the CI backend job runs:
+Backend checks:
 
 ```bash
-uv run ruff check . && uv run ruff format --check .
+uv run ruff check .
 uv run mypy
 uv run lint-imports --config importlinter.ini
-uv run pytest -q
+uv run pytest
 ```
 
-| Gate | Threshold | Current |
-|---|---|---|
-| `ruff check` + `format --check` | zero findings | clean |
-| `mypy` | strict, zero errors | clean |
-| `lint-imports` | 3 contracts kept, **0 broken** | kept |
-| `pytest` | all pass | 2,205 collected |
-| Coverage — global | `fail_under = 63` | ~70% |
-| Coverage — `safety/` | 70 | enforced in CI |
-| Coverage — `orchestration/` | 83 | enforced in CI |
-| `scripts/eval_gate.py` | task-quality floor | enforced in CI |
-
-Two integration tests are **environment-gated**: the Playwright lifecycle test and the
-CDP provider-swap test both launch a real headless Chromium (the swap test additionally
-binds a CDP debugging port). On a machine with a browser installed they run in full; in a
-sandbox with no launchable browser they now **skip cleanly** (`browser_available` probes
-launchability once per session) rather than fail. A clean local run is therefore fully
-green — a missing browser is an absent environment, not broken application code.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Current status (honest version)
-
-Alpha. It runs, it is heavily tested, and it is a single-developer project — not a
-product with an SLA. Here is what that actually means, per subsystem:
-
-| Subsystem | State | Notes |
-|---|:---:|---|
-| Safety engine, tiers, audit chain | ✅ live | the most-tested layer; 70% coverage floor |
-| Orchestration + OTAR loop | ✅ live | 83% coverage floor; bounded steps/time/cost |
-| Memory: working, episodic, semantic, curated | ✅ live | 30 migrations, provenance-constrained; **Clear All Memories** button in the dashboard |
-| Two-lane recall | ✅ live | Lane 1 is the default path |
-| Model fleet + routing | ✅ live | 5 free models, `$0.00`, one key |
-| Knowledge & research | ✅ live | BM25 + vector fusion, citations, confidence; **Knowledge dashboard UI** with ingest, search, and document management |
-| Research sessions (Perplexity surface) | ✅ live | persisted/resumable sessions, SSE phase-event stream, inline citations + source rail; governed via the `knowledge` tool; off behind `research.enabled` |
-| Agent-run engine | ✅ live | governed native tool-calling loop, persisted runs, SSE live console; off behind `agent_engine.enabled` |
-| HTTP + WebSocket API | ✅ live | 25 routers, auth-gated except health |
-| CLI (both surfaces) | ✅ live | client + in-process operator CLI |
-| ADE / IDE subsystem | 🧪 foundational | open/tree/read, hash-versioned edits, governed run, `git status`/`diff`, project model — all funnel-gated; **Supabase Postgres session persistence** implemented |
-| Web UI | ✅ live | Next 16 / React 19; **Memory**, **Knowledge**, **Workspaces**, and **Settings** dashboards fully interactive |
-| Learning & adaptation | 🧪 works, evolving | trajectories → experiences → skill promotion |
-| Multi-agent delegation | ⚠️ off | `agents.enabled: false` |
-| Browser automation | ⚠️ off | `browser.enabled: false`; needs Playwright browsers |
-| Voice pipeline | ⚠️ off | built + unit-tested against provider fakes; **not yet validated against live vendor APIs** |
-| Perception / computer use | 🧪 experimental | macOS only, needs the `macos` extra + Accessibility grant |
-| Supabase Postgres backend | ✅ live | `PostgresIDESessionStore` for IDE sessions; `PostgresConnection` with `asyncpg` pool; auto-selected when `SUPABASE_DB_CONNECTION_STRING` is set |
-
-Two things worth calling out explicitly rather than burying:
-
-- **The five OpenRouter slugs are unverified against the live catalog.** They are
-  best-guess `:free` identifiers. Providers rename and retire free tiers constantly.
-  If a model 404s, fix the slug in `config/models.yaml` — no code change needed.
-- **Voice has never talked to a real vendor endpoint.** Providers are covered by unit
-  tests with mocked HTTP and WebSocket transports, which proves the parsing and fallback
-  logic, not the wire format of today's API.
-
-### Recent hardening (project-wide audit pass)
-
-A full architecture audit independently verified every finding before fixing and re-ran
-the backend gates (`mypy` clean · `lint-imports` 3/0 · `ruff` clean) after each change:
-
-- **Voice HTTP endpoints are now identity-gated.** `/voice/speak` and `/voice/transcribe`
-  depend on `require_principal` per-route (the router hosts a WebSocket route, so it
-  can't take the dependency at router level); audio no longer leaves the box for an
-  unidentified caller once `ATLAS_API_KEYS` is set.
-- **PDF ingestion fails closed.** With no PDF text extractor wired, ingestion raises a
-  clean `UserError` instead of indexing utf-8 mojibake as if it were real document text
-  (§69 — no fabricated content).
-- **Approvals endpoint returns an honest 404**, not a fabricated decision or a 500, while
-  approval storage is deferred.
-- **The cron scheduler fires each due schedule once per cron-minute** — a sub-minute or
-  extra `tick()` can no longer double-dispatch a DB schedule or an in-process job.
-- **Frontend contract discipline (§70/§71):** event search and "clear memories" moved off
-  raw `fetch` onto typed, Zod-validated React Query hooks hitting the ATLAS API base.
-- **Dead code / stale docs removed** (an unused regex + import; a resolved coupling-debt
-  note), and browser-platform wiring fixed to type-check cleanly.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Roadmap
-
-Ordered by what would most improve the system, not by what is easiest:
-
-1. **Finish the ADE agentic build-loop** — the read/edit/run/git foundation is live and
-   governed; next is the full understand → plan → edit → test → diagnose → repair →
-   browser-test → review loop, resumable from persisted task state, plus the git
-   stage/commit verbs and an interactive PTY terminal.
-2. **Live validation pass** — confirm the five model slugs, exercise voice against real
-   Deepgram/Fish endpoints, and record the results in this README.
-3. **Backfill Lane 1** — the episodes written before `trigger_hint` existed are invisible
-   to fast recall. The hint function is pure, so one `UPDATE` sweep fixes it.
-4. **Turn learning on by default** — enough evaluation evidence that skill promotion
-   improves outcomes rather than just changing them.
-5. **Expand Postgres migration scope** — the IDE session store now runs on Supabase
-   Postgres; evaluate whether additional subsystems (memory, knowledge) benefit from
-   cloud persistence while keeping the local-first default for privacy and speed.
-6. **Harden multi-agent delegation** to the point it can ship enabled.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Extending ATLAS
-
-The layering is the extension guide — put new code where its dependencies allow, and the
-build gate tells you immediately if you guessed wrong.
-
-| To add… | Put it in | And then |
-|---|---|---|
-| a **tool** | `tools/` implementing the `base.py` contract | register it in `orchestration/registry.py`; add safety rules so it is classified, not defaulted. It appears in the universal tooling fabric automatically (`bootstrap/tooling.py`) |
-| a **model provider** | `intelligence/providers/` | the `provider-sdk-containment` contract keeps the vendor SDK from leaking upward |
-| a **model** | `config/models.yaml` | declare `cost_class`; add the id to a tier list in `settings.yaml` |
-| a **capability** | `capabilities/<name>/` + a `bootstrap/<name>.py` builder | return `None` when disabled, and add an `enabled` flag defaulting to `false` |
-| an **interface** | `interfaces/` | build an `InboundEvent`; never call a tool directly |
-| a **safety rule** | `config/` policy + `safety/matchers.py` | add a test that proves the *deny* path, not just the allow path |
-
-Three rules that are not negotiable, because the whole design rests on them:
-
-1. **Never bypass the funnel.** If your code calls a tool without `SafetyEngine.guard`,
-   it is wrong even if it works.
-2. **Never let a subsystem build its own dependencies.** Wiring belongs in `bootstrap/`.
-3. **Fail closed.** An error in classification, policy or provenance must raise the
-   restriction, never relax it.
-
-<img src="assets/divider.svg" width="100%" alt="">
-
-## Contributing
-
-Issues and pull requests are welcome. Before opening one:
+Frontend checks, run from `frontend/`:
 
 ```bash
-uv run ruff check . && uv run ruff format --check .
-uv run mypy && uv run lint-imports --config importlinter.ini && uv run pytest -q
+npm run lint
+npm run test:unit
+npm run build
+npm run test:e2e
 ```
 
-A change to `safety/` or `orchestration/` needs tests that cover the refusal path — those
-two directories carry higher coverage floors precisely because their failure modes are the
-expensive ones. New behaviour behind a config flag should default to **off**.
+Browser tests require their documented browser and backend prerequisites. The CI workflow is defined in [ci.yml](.github/workflows/ci.yml).
 
-<img src="assets/divider.svg" width="100%" alt="">
+The recorded-answer gate scores stored fixtures; it does not run a fresh live-model benchmark:
 
-<div align="center">
+```bash
+uv run python scripts/eval_gate.py --answers eval/recorded/answers.json
+```
 
-**MIT** © 2026 Aman Bhaskar · [LICENSE](LICENSE)
+Adaptation and training code includes trajectory processing, strategy evaluation, retrieval-weight tuning, and an optional local IDE training workflow. These are experimental components; dataset preparation, fixture scores, and stored reflections do not establish general self-improvement. See [IDE training](docs/ide/training.md) for compute prerequisites and evaluation boundaries.
 
-<sub>Built to be understood, not just used. Every diagram above corresponds to code you
-can open.</sub>
+## Runtime considerations
 
-</div>
+ATLAS is a development project for a trusted local environment. Review permitted paths, enabled integrations, and command rules before allowing it to act on a workspace.
 
+The development-mode native executor runs on the host and is not an isolation boundary. Docker tool execution and the application Docker image serve different purposes. Keep an unauthenticated instance bound to loopback; configure authentication before exposing an instance beyond the local machine.
 
+## Further documentation
 
+- [Architecture overview](ARCHITECTURE.md)
+- [Runtime startup](docs/runtime/STARTUP_SEQUENCE.md)
+- [Runtime readiness](docs/runtime/READINESS_MODEL.md)
+- [Tool catalog](docs/tooling/catalog.md)
+- [Routing architecture](docs/routing/architecture.md)
+- [Execution architecture](docs/execution/architecture.md)
+- [MCP configuration](docs/tooling/mcp/configuration.md)
 
+Some technical notes describe earlier development stages. Check the implementation and current configuration when following subsystem-specific instructions.
 
+## License
 
-
-
-
-
-
-
-
+[MIT](LICENSE). Copyright 2026 Aman Bhaskar.
