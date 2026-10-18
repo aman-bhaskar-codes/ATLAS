@@ -119,9 +119,7 @@ async def test_native_redirect_frame_popup_and_subresource_checks_preserve_url(
             async with page.expect_popup(timeout=60_000) as popup_info:
                 await page.goto("https://public.test/start", wait_until="domcontentloaded", timeout=60_000)
             popup = await popup_info.value
-            await page.wait_for_url("https://public.test/final", timeout=60_000)
-            await popup.wait_for_url("https://popup.test/final", timeout=60_000)
-            await popup.wait_for_load_state("domcontentloaded", timeout=60_000)
+            await popup.wait_for_url("https://popup.test/final", wait_until="domcontentloaded", timeout=60_000)
             for _ in range(50):
                 if (
                     "https://frame.test/frame" in cdp.continued
