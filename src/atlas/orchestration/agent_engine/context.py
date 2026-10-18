@@ -63,22 +63,44 @@ def reconstruct_conversation(seed: Sequence[Message], result: AgentEngineResult)
     """
     convo: list[Message] = list(seed)
     for step in result.steps:
-        tool_calls = tuple(
+        tool_calls = step.assistant_tool_calls or tuple(
             ProviderToolCall(
                 id=rec.call_id,
+                thought_signature=rec.thought_signature,
                 name=rec.tool,
                 arguments={"operation": rec.operation, "args": rec.args},
             )
             for rec in step.tool_calls
         )
-        convo.append(Message(role=Role.ASSISTANT, content=step.assistant_text, tool_calls=tool_calls))
-        for rec in step.tool_calls:
+        convo.append(
+            Message(
+                role=Role.ASSISTANT,
+                content=step.assistant_text,
+                reasoning_details=step.reasoning_details,
+                tool_calls=tool_calls,
+            )
+        )
+        observations = {rec.call_id: rec for rec in step.tool_calls}
+        for call in tool_calls:
+            rec = observations.get(call.id or call.name)
+            if rec is None:
+                content = serialize_tool_payload(
+                    ok=False, output=None, error="Execution interrupted: this tool call was not dispatched."
+                )
+            elif rec.state != "completed":
+                content = serialize_tool_payload(
+                    ok=False,
+                    output=None,
+                    error="Execution interrupted: outcome unknown; inspect and verify before retrying this action.",
+                )
+            else:
+                content = serialize_tool_payload(ok=rec.ok, output=rec.output, error=rec.error)
             convo.append(
                 Message(
                     role=Role.TOOL,
-                    content=serialize_tool_payload(ok=rec.ok, output=rec.output, error=rec.error),
-                    tool_call_id=rec.call_id,
-                    name=rec.tool,
+                    content=content,
+                    tool_call_id=call.id or call.name,
+                    name=call.name,
                 )
             )
     return convo
@@ -93,5 +115,7 @@ def continue_messages(
     pass back into ``AgentEngine.run(...)`` to CONTINUE the same run in a new turn.
     """
     convo = reconstruct_conversation(seed, result)
+    if result.error and result.error.startswith("Execution interrupted"):
+        convo.append(Message(role=Role.SYSTEM, content=result.error))
     convo.append(Message(role=Role.USER, content=next_user_request))
     return convo

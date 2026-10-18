@@ -32,6 +32,7 @@ frontend/playwright-report/
 # ATLAS runtime state
 # ──────────────────────────────────────────────────────────────
 .atlas/
+.atlas-training/
 STOP.flag
 
 # E2E ephemeral backend data dir (Playwright webServer wipes/recreates it)

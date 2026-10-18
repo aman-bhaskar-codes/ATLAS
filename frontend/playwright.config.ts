@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import path from 'node:path';
 
 /**
  * ATLAS end-to-end tests.
@@ -17,6 +18,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const REPO_ROOT = "..";
 const API_URL = "http://localhost:8730/api/v1";
+process.env.ATLAS_E2E_DATA_DIR ??= path.resolve('..', '.e2e-data', `${Date.now()}-${process.pid}`);
 
 export default defineConfig({
   testDir: "./e2e",
@@ -35,20 +37,21 @@ export default defineConfig({
     baseURL: "http://localhost:3000",
     trace: "on-first-retry",
     screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    video: "off",
+    channel: process.env.PLAYWRIGHT_CHANNEL,
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
       // Clean backend: wipe the data dir so runtime state is deterministic.
       command:
-        "rm -rf .e2e-data && uv run uvicorn atlas.interfaces.api.app:create_app " +
-        "--factory --host 127.0.0.1 --port 8730",
+        ".venv/bin/python scripts/e2e_server.py",
       cwd: REPO_ROOT,
       url: `${API_URL}/runtime/health`,
       env: {
         ATLAS_ENV: "dev",
         ATLAS_DATA_DIR: ".e2e-data",
+        ATLAS_E2E_DATA_DIR: process.env.ATLAS_E2E_DATA_DIR,
         // Lift the per-identity rate-limit ceiling for functional E2E: every
         // Playwright test gets a fresh browser context (cold CORS-preflight
         // cache), so the suite re-issues preflights faster than the production
@@ -57,7 +60,7 @@ export default defineConfig({
         ATLAS_RATE_LIMIT_PER_MINUTE: "1000000",
       },
       timeout: 120_000,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       stdout: "pipe",
       stderr: "pipe",
     },
@@ -68,7 +71,7 @@ export default defineConfig({
       url: "http://localhost:3000",
       env: { NEXT_PUBLIC_ATLAS_API_URL: API_URL },
       timeout: 180_000,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       stdout: "pipe",
       stderr: "pipe",
     },

@@ -114,3 +114,14 @@ def test_looks_like_pdf_trusts_magic_bytes_over_a_lying_header() -> None:
     assert looks_like_pdf("text/html", b"%PDF-1.5 ...") is True
     assert looks_like_pdf("application/pdf", b"anything") is True
     assert looks_like_pdf("text/html", b"<html>") is False
+
+
+def test_pdf_decompression_is_bounded() -> None:
+    # Small compressed inputs must not allocate arbitrary decoded stream sizes.
+    content = b"BT (" + b"a" * 2_000_000 + b") Tj ET"
+    assert extract_pdf_text(_minimal_pdf(content, compress=True)) == ("", "")
+
+
+def test_encrypted_pdf_is_not_extracted() -> None:
+    pdf = _minimal_pdf(b"BT (ciphertext) Tj ET", compress=False) + b"\n/Encrypt 5 0 R"
+    assert extract_pdf_text(pdf) == ("", "")

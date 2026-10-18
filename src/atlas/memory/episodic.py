@@ -235,6 +235,7 @@ class EpisodicMemory:
         )
         await self._db.conn.commit()
         episode_id = int(cur.lastrowid) if cur.lastrowid is not None else -1
+        await cur.close()
 
         # Emit memory event for WebSocket broadcast — use MemoryBusEvent from infra
         # so atlas.memory does not import atlas.orchestration (layer boundary)

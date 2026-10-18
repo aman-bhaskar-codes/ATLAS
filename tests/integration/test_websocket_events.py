@@ -48,8 +48,11 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import FastAPI
 
 from atlas.infra.bus import MessageBus
 from atlas.infra.db import Database
@@ -57,16 +60,25 @@ from atlas.interfaces.api.websocket import ConnectionManager, EventBroadcaster
 from atlas.orchestration.events import OrchestratorEvent
 
 
+def _mock_websocket() -> AsyncMock:
+    """Mirror handshake metadata while keeping the network sends local."""
+    websocket = AsyncMock()
+    app = FastAPI()
+    app.state.api_keys = {}
+    websocket.app = app
+    websocket.headers = {}
+    websocket.scope = {"subprotocols": []}
+    websocket.state = SimpleNamespace()
+    return websocket
+
+
 @pytest.mark.asyncio
 async def test_connection_manager_basic():
     """Test ConnectionManager can track connections."""
-    from unittest.mock import AsyncMock
-
     manager = ConnectionManager()
 
     # Mock WebSocket
-    ws_mock = AsyncMock()
-    ws_mock.accept = AsyncMock()
+    ws_mock = _mock_websocket()
 
     # Connect
     client_id = await manager.connect(ws_mock)
@@ -89,17 +101,10 @@ async def test_connection_manager_basic():
 @pytest.mark.asyncio
 async def test_connection_manager_filtering():
     """Test ConnectionManager filters events by task_id."""
-    from unittest.mock import AsyncMock
-
     manager = ConnectionManager()
 
-    ws1 = AsyncMock()
-    ws1.accept = AsyncMock()
-    ws1.send_json = AsyncMock()
-
-    ws2 = AsyncMock()
-    ws2.accept = AsyncMock()
-    ws2.send_json = AsyncMock()
+    ws1 = _mock_websocket()
+    ws2 = _mock_websocket()
 
     # Connect two clients
     client1 = await manager.connect(ws1)

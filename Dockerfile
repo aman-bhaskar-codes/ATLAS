@@ -80,7 +80,7 @@ VOLUME ["/data"]
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV ATLAS_DATA_DIR=/data
-ENV ATLAS_PROFILE=local_free
+ENV ATLAS_PROFILE=free_hybrid
 
 USER atlas
 

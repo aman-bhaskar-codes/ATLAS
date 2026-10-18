@@ -31,7 +31,7 @@ from pydantic import BaseModel
 
 from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
-from atlas.interfaces.api.auth import Principal, require_admin
+from atlas.interfaces.api.auth import Principal, require_admin, require_principal, require_websocket_principal
 from atlas.interfaces.api.websocket import ConnectionManager
 from atlas.memory.cache import StatsCache
 
@@ -142,7 +142,7 @@ class MemoryStatsOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@router.websocket("/ws/memory/live")
+@router.websocket("/ws/memory/live", dependencies=[Depends(require_websocket_principal)])
 async def memory_live_stream(websocket: WebSocket) -> None:
     """
     Live MemoryEvent stream — every memory write, retrieval, or update.
@@ -220,7 +220,7 @@ async def _build_snapshot(atlas: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/api/v1/memory/episodes", response_model=list[EpisodeOut])
+@router.get("/api/v1/memory/episodes", response_model=list[EpisodeOut], dependencies=[Depends(require_principal)])
 async def list_episodes(
     request: Request,
     task_id: str | None = Query(default=None),
@@ -270,7 +270,7 @@ async def list_episodes(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/api/v1/memory/facts", response_model=list[FactOut])
+@router.get("/api/v1/memory/facts", response_model=list[FactOut], dependencies=[Depends(require_principal)])
 async def list_facts(
     request: Request,
     kind: str | None = Query(default=None),
@@ -315,7 +315,7 @@ async def list_facts(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/api/v1/memory/knowledge", response_model=list[KnowledgeDocOut])
+@router.get("/api/v1/memory/knowledge", response_model=list[KnowledgeDocOut], dependencies=[Depends(require_principal)])
 async def list_knowledge_docs(
     request: Request,
     limit: int = Query(default=50, ge=1, le=200),
@@ -342,7 +342,9 @@ async def list_knowledge_docs(
     ]
 
 
-@router.get("/api/v1/memory/knowledge/search", response_model=list[KnowledgeChunkOut])
+@router.get(
+    "/api/v1/memory/knowledge/search", response_model=list[KnowledgeChunkOut], dependencies=[Depends(require_principal)]
+)
 async def search_knowledge(
     request: Request,
     q: str = Query(..., min_length=1, max_length=500),
@@ -375,7 +377,7 @@ async def search_knowledge(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/api/v1/memory/preferences")
+@router.get("/api/v1/memory/preferences", dependencies=[Depends(require_principal)])
 async def list_preferences(request: Request) -> dict[str, str]:
     """
     All user model preferences as a flat key/value map.
@@ -391,7 +393,7 @@ async def list_preferences(request: Request) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/api/v1/memory/stats", response_model=MemoryStatsOut)
+@router.get("/api/v1/memory/stats", response_model=MemoryStatsOut, dependencies=[Depends(require_principal)])
 async def memory_stats(request: Request) -> MemoryStatsOut:
     """
     Aggregate counts across all memory layers plus live WebSocket count.

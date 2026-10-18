@@ -710,10 +710,11 @@ class ReasoningLoop:
         history: list[tuple[Thought, Observation | None]],
         counter: LimitCounter,
     ) -> tuple[Thought, Action, DecisionTrace | None]:
+        compacted_history = self._compactor.compact(history) if self._compactor else history
         prompt = self._prompts.build_step_prompt(
             context=context,
             goal=plan.goal,
-            history=history,
+            history=compacted_history,
             step=counter.steps,
         )
         started = time.perf_counter()

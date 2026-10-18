@@ -20,18 +20,50 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from atlas.app import Atlas
-from atlas.interfaces.api.dependencies import get_atlas
+from atlas.interfaces.api.dependencies import get_atlas, get_control_plane
+from atlas.interfaces.api.facade import AtlasControlPlane
+from atlas.interfaces.api.schemas import (
+    HandoffContextResponse,
+    LaunchPlatformRequest,
+    LaunchPlatformResponse,
+)
 from atlas.orchestration.agent_engine.records import (
     TERMINAL_RUN_STATUSES,
+    AgentCheckpoint,
     AgentEngineResult,
     AgentRunRecord,
 )
 from atlas.orchestration.agent_engine.service import AgentRunError, AgentRunNotReady
 
 router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
+
+
+@router.post("/launch-platform", response_model=LaunchPlatformResponse)
+async def launch_platform(
+    req: LaunchPlatformRequest,
+    cp: AtlasControlPlane = Depends(get_control_plane),
+) -> LaunchPlatformResponse:
+    """Launch a research or IDE platform session atomically via a Saga coordinator.
+
+    Provisions DB state, sets up physical workspace, generates a single-use handoff token,
+    and returns deterministic redirection paths.
+    """
+    return await cp.launch_platform(req)
+
+
+@router.get("/handoff/{token}", response_model=HandoffContextResponse)
+async def get_handoff(
+    token: str,
+    cp: AtlasControlPlane = Depends(get_control_plane),
+) -> HandoffContextResponse:
+    """Retrieve session context associated with a platform handoff token."""
+    handoff = await cp.get_handoff(token)
+    if handoff is None:
+        raise HTTPException(status_code=404, detail="Handoff token not found or expired")
+    return handoff
 
 # Live-stream cadence: how often to sweep the durable trace for new events, and how
 # long to wait idle before a keep-alive heartbeat. The bus commits synchronously, so
@@ -84,6 +116,7 @@ class RunResponse(BaseModel):
     created_ts: str
     updated_ts: str
     result: AgentEngineResult | None = None
+    checkpoint: AgentCheckpoint = Field(default_factory=AgentCheckpoint)
 
 
 class RunSummary(BaseModel):
@@ -100,6 +133,7 @@ class RunSummary(BaseModel):
     model_calls: int
     tool_calls: int
     final_text: str
+    tokens_used: int = 0
 
 
 class RunListResponse(BaseModel):
@@ -119,6 +153,7 @@ def _to_response(rec: AgentRunRecord) -> RunResponse:
         created_ts=rec.created_ts,
         updated_ts=rec.updated_ts,
         result=rec.result,
+        checkpoint=rec.checkpoint,
     )
 
 
@@ -132,8 +167,9 @@ def _to_summary(rec: AgentRunRecord) -> RunSummary:
         parent_run_id=rec.parent_run_id,
         created_ts=rec.created_ts,
         updated_ts=rec.updated_ts,
-        model_calls=rec.result.model_calls if rec.result else 0,
-        tool_calls=rec.result.tool_calls if rec.result else 0,
+        model_calls=rec.result.model_calls if rec.result else rec.checkpoint.model_calls,
+        tool_calls=rec.result.tool_calls if rec.result else rec.checkpoint.tool_calls,
+        tokens_used=rec.result.tokens_used if rec.result else rec.checkpoint.tokens_used,
         final_text=rec.result.final_text if rec.result else "",
     )
 

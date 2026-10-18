@@ -9,8 +9,10 @@ health/rate-limit/circuit state is tracked per-vendor.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -23,10 +25,13 @@ from atlas.intelligence.providers.base import ProviderCompletion
 class OpenAICompatibleProvider:
     is_local = False
 
-    def __init__(self, *, name: str, base_url: str, api_key: str, timeout_s: float) -> None:
+    def __init__(self, *, name: str, base_url: str, api_key: str, timeout_s: float, zero_cost: bool = False) -> None:
         self.name = name
         self._key = api_key
-        self._is_openrouter = api_key.startswith("sk-or-v1-")
+        self._is_openrouter = (
+            name == "openrouter" or urlparse(base_url).hostname == "openrouter.ai" or api_key.startswith("sk-or-v1-")
+        )
+        self._zero_cost = zero_cost
         if self._is_openrouter:
             self._base = "https://openrouter.ai/api/v1"
         else:
@@ -58,6 +63,14 @@ class OpenAICompatibleProvider:
                 out.append({"role": "tool", "tool_call_id": m.tool_call_id or "", "content": m.content})
                 continue
             entry: dict[str, Any] = {"role": m.role.value, "content": m.content}
+            if m.images:
+                entry["content"] = [
+                    {"type": "text", "text": m.content},
+                    *[
+                        {"type": "image_url", "image_url": {"url": f"data:{image.mime_type};base64,{image.data}"}}
+                        for image in m.images
+                    ],
+                ]
             if m.reasoning_details:
                 entry["reasoning_details"] = m.reasoning_details
             if m.tool_calls:
@@ -91,6 +104,9 @@ class OpenAICompatibleProvider:
         }
         if self._is_openrouter:
             payload["reasoning"] = {"enabled": True}
+            if self._zero_cost:
+                # Enforced by OpenRouter even if local catalog prices go stale.
+                payload["provider"] = {"max_price": {"prompt": 0, "completion": 0}}
         if tools:
             payload["tools"] = [
                 {
@@ -138,11 +154,20 @@ class OpenAICompatibleProvider:
         if not text:
             import logging
 
-            logging.getLogger("atlas.intel.provider").warning(f"{self.name} returned empty text. Raw response: {data}")
+            logging.getLogger("atlas.intel.provider").warning("%s returned empty text", self.name)
             text = ""
         u = data.get("usage", {})
         it, ot = int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0))
         usd = it / 1e6 * usd_in + ot / 1e6 * usd_out
+        actual_cost = u.get("cost") if self._is_openrouter else None
+        if actual_cost is not None:
+            try:
+                billed = float(actual_cost)
+            except (TypeError, ValueError) as exc:
+                raise ProviderError("invalid billed cost in provider usage") from exc
+            if isinstance(actual_cost, bool) or not math.isfinite(billed) or billed < 0:
+                raise ProviderError("invalid billed cost in provider usage")
+            usd = billed
         tool_calls = self._parse_tool_calls(data)
         reasoning_details = data["choices"][0]["message"].get("reasoning_details")
         if isinstance(reasoning_details, list):

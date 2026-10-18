@@ -167,6 +167,9 @@ class Atlas:
     curated: Any = None  # CuratedMemory — the always-loaded MEMORY/USER tier
     lane_one: Any = None  # LaneOneRecall — default read path (SQL, no embeddings)
     intents: Any = None  # IntentStore — prospective memory ("remember to X when Y")
+    approvals: Any = None  # Durable HTTP approval queue, installed by API lifespan
+    sandbox: Any = None  # Shared OS execution boundary used by tools and IDE workflows
+    training_service: Any = None  # Optional workspace-scoped IDE training workflow
 
     async def start(self) -> Any:
         if self.runtime_supervisor is not None and self.runtime_supervisor.state in {
@@ -179,7 +182,7 @@ class Atlas:
         # The supervisor verifies infrastructure during its startup phases. The
         # lifecycle owns the database connection, so it must run first.
         await self.lifecycle.start()
-        
+
         if self.quota_governor:
             await self.quota_governor.load()
 
@@ -190,6 +193,11 @@ class Atlas:
         from atlas.infra.schema_provisioner import SchemaProvisioner
 
         await SchemaProvisioner(self.router).provision()
+        if self.approvals is not None:
+            await self.approvals.start()
+        for service in (self.agent_engine, self.research, self.training_service):
+            if service is not None:
+                await service.recover_interrupted()
 
         # Ensure both curated surfaces exist before anything reads or swaps them.
         # Consolidation compare-and-swaps on a content hash, so it needs a row to
@@ -236,19 +244,45 @@ class Atlas:
         # Use runtime supervisor for managed startup
         health_report = await self.runtime_supervisor.start(self)
 
-        # Batch 7: fail-clean recovery for tasks orphaned by a previous crash.
-        from atlas.orchestration.recovery import recover_interrupted_tasks
+        if getattr(self.settings, "strict_bootstrap", False) and health_report.overall_status in (
+            SystemState.FAILED,
+            SystemState.DEGRADED,
+        ):
+            degraded_details = [
+                f"{name}: {comp.detail or comp.status.value}"
+                for name, comp in health_report.components.items()
+                if comp.status != ComponentStatus.HEALTHY
+            ]
+            raise RuntimeError(
+                f"Strict bootstrap failed with status {health_report.overall_status.value}: "
+                + (", ".join(degraded_details) if degraded_details else "unhealthy components")
+            )
 
         if self.checkpoints is not None:
-            await recover_interrupted_tasks(
-                self.db,
-                self.checkpoints,
-                self.clock,
-                live_task_ids=frozenset(),
-            )
+            await self.orchestrator.recover_interrupted()
         return health_report
 
     async def close(self) -> None:
+        if self.approvals is not None:
+            try:
+                await self.approvals.close()
+            except Exception as exc:
+                _log.error("approvals.close_failed", event_type="lifecycle", exc_type=type(exc).__name__)
+        # Settle service-owned work while its persistence and providers are
+        # still alive. A subsystem cleanup failure must not strand the others.
+        for name, service in (
+            ("orchestrator", self.orchestrator),
+            ("agent_engine", self.agent_engine),
+            ("research", self.research),
+            ("training", self.training_service),
+        ):
+            if service is not None:
+                try:
+                    await service.close()
+                except Exception as exc:
+                    _log.error(
+                        "service.close_failed", event_type="lifecycle", component=name, exc_type=type(exc).__name__
+                    )
         # Use runtime supervisor for managed shutdown if available
         if self.runtime_supervisor is not None:
             await self.runtime_supervisor.shutdown()
@@ -517,6 +551,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
             side_effect=manifest.allowed_commands.get("side_effect", []),
             sandbox=sandbox,
             mounts={ws: "/work"},
+            credential_dirs=list(manifest.safety.get("credential_dirs", [])),
         ),
     }
 
@@ -524,6 +559,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
     browser_platform: BrowserPlatform | None = None
     if config.browser.enabled:
         from atlas.bootstrap.browser import build_browser
+
         browser_platform = build_browser(
             config=config.browser,
             ids=ids,
@@ -792,6 +828,7 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
 
     async def _quota_reset_job() -> None:
         await intel.quota_governor.reset_daily()
+
     cron_scheduler.register_job(name="quota_daily_reset", cron="0 0 * * *", fn=_quota_reset_job)
 
     _log.info("core.ready", event_type="lifecycle", providers=str(type(gateway)))
@@ -802,6 +839,21 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         config=config,
         clock=clock,
         metrics=metrics,
+    )
+
+    from atlas.capabilities.ide.training.service import TrainingService
+
+    training_service = (
+        TrainingService(
+            ide=ide.service,
+            agent_runs=agent_engine.service,
+            gateway=gateway,
+            model_registry=intel.registry,
+            native_runtime=isinstance(sandbox, NativeSandbox),
+            state_dir=settings.data_dir / "training",
+        )
+        if ide.service is not None
+        else None
     )
 
     return Atlas(
@@ -881,4 +933,6 @@ async def build(config_dir: Path = _CONFIG_DIR) -> Atlas:
         mcp_manager=mcp_runtime.manager,  # MCP runtime (Part 5)
         checkpoints=checkpoints,  # Batch 7
         model_registry=intel.registry,  # Model registry for frontend
+        sandbox=sandbox,
+        training_service=training_service,
     )

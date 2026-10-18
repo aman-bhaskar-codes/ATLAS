@@ -82,9 +82,12 @@ class URLReputationChecker:
 
         # If every configured provider failed (returned None), fail-open to UNKNOWN
         # rather than silently treating the URL as safe.
-        providers_failed = (self._safe_browsing_api_key and safe_browsing_result is None) and (
-            not self._virustotal_api_key or virustotal_result is None
-        )
+        configured_results = []
+        if self._safe_browsing_api_key:
+            configured_results.append(safe_browsing_result)
+        if self._virustotal_api_key:
+            configured_results.append(virustotal_result)
+        providers_failed = all(result is None for result in configured_results)
         if providers_failed:
             return ReputationResult(
                 url=url,
@@ -159,10 +162,10 @@ class URLReputationChecker:
 
             if response.status_code == 204:
                 logger.warning(f"VirusTotal rate limit exceeded for {url}")
-                return False
+                return None
             elif response.status_code != 200:
                 logger.warning(f"VirusTotal API returned status {response.status_code} for {url}")
-                return False
+                return None
 
             result = response.json()
 

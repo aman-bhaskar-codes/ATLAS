@@ -23,6 +23,7 @@ class CitationEngine:
                     title=ev.title or ev.uri or ev.document_id,
                     uri=ev.uri,
                     quote=ev.quote,
+                    location=ev.location,
                     authority=ev.authority,
                 )
             )
@@ -41,7 +42,8 @@ class CitationEngine:
                 uri = ""
             quote = c.quote[:160].replace("\n", " ")
             long_quote = len(c.quote) > 160
-            rendered = f"[{c.index}] **{c.title}**{uri} — “{quote}{'…' if long_quote else ''}”"
+            location = f" ({c.location})" if c.location else ""
+            rendered = f"[{c.index}] **{c.title}**{uri}{location} — “{quote}{'…' if long_quote else ''}”"
             lines.append(rendered)
         return "\n".join(lines)
 

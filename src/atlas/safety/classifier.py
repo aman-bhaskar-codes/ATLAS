@@ -11,6 +11,7 @@ from __future__ import annotations
 import fnmatch
 from pathlib import Path
 
+from atlas.infra.command_policy import command_paths, is_read_only_command, matches_command_prefix, parse_command
 from atlas.infra.logging import get_logger
 from atlas.infra.types import Decision, SafetyDecision, Tier, ToolRequest
 from atlas.safety import matchers
@@ -83,6 +84,13 @@ class TierClassifier:
 
     def _hard_block(self, req: ToolRequest) -> SafetyDecision | None:
         paths = [str(v) for k, v in req.args.items() if "path" in k.lower()]
+        if req.tool == "shell":
+            try:
+                raw_cwd = req.args.get("cwd")
+                cwd = raw_cwd if isinstance(raw_cwd, str) and raw_cwd else None
+                paths.extend(command_paths(parse_command(str(req.args.get("command", ""))), cwd=cwd))
+            except ValueError as exc:
+                return SafetyDecision(decision="deny", tier=Tier.BLOCK, reason=str(exc), matched_rule="shell.parse")
         blob = " ".join(str(v) for v in req.args.values())
         cred_dirs = list(self._m.safety.get("credential_dirs", []))
         fin_domains = list(self._m.safety.get("financial_domains", []))
@@ -218,9 +226,14 @@ class TierClassifier:
         return False, f"{resolved} outside allowed {mode} paths"
 
     def _cmd_allowed(self, cmd: str, klass: str) -> tuple[bool, str]:
-        for allowed in self._m.allowed_commands.get(klass, []):
-            if cmd.strip().startswith(allowed):
-                return True, "ok"
+        try:
+            argv = parse_command(cmd)
+        except ValueError as exc:
+            return False, str(exc)
+        entries = self._m.allowed_commands.get(klass, [])
+        matches = is_read_only_command(argv, entries) if klass == "read_only" else matches_command_prefix(argv, entries)
+        if matches:
+            return True, "ok"
         return False, f"command {cmd!r} not in {klass} allowlist"
 
     @staticmethod

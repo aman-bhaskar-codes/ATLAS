@@ -15,12 +15,34 @@ from atlas.infra.ids import CorrelationId
 from atlas.infra.types import ProviderToolCall, ToolCallSpec
 from atlas.intelligence.contracts import InferenceRequest, InferenceResponse, Message, Role, Usage
 from atlas.orchestration.agent_engine import AgentEngine, StopReason
+from atlas.orchestration.agent_engine.context import reconstruct_conversation
 from atlas.orchestration.limits import ExecutionLimits
 from atlas.orchestration.types import Action, Observation
 
 CID = CorrelationId("corr-1")
 SEARCH = ToolCallSpec(name="search", description="search", parameters={"type": "object"})
 CALC = ToolCallSpec(name="calc", description="calc", parameters={"type": "object"})
+
+
+async def test_thought_signature_survives_execution_persistence_and_rehydration() -> None:
+    from atlas.orchestration.agent_engine.records import AgentEngineResult
+
+    call = ProviderToolCall(
+        id="gemini-call-1",
+        name="search",
+        arguments={"operation": "web", "args": {"q": "X"}},
+        thought_signature="opaque-signature-from-provider",
+    )
+    gateway = FakeGateway([_resp("", call), _resp("done")])
+    engine = AgentEngine(
+        gateway=gateway, dispatcher=FakeDispatcher({"search": Observation(step=0, ok=True, content="X")})
+    )
+    seed = [Message(role=Role.USER, content="search X")]
+    result = await engine.run(correlation_id=CID, messages=seed, tools=[SEARCH])
+    restored = AgentEngineResult.model_validate_json(result.model_dump_json())
+    messages = reconstruct_conversation(seed, restored)
+    assert messages[1].tool_calls[0].thought_signature == "opaque-signature-from-provider"
+    assert messages[2].tool_call_id == "gemini-call-1"
 
 
 class FakeGateway:
@@ -180,3 +202,57 @@ async def test_step_limit_stops_gracefully() -> None:
     assert result.ok is False
     assert result.stop_reason is StopReason.LIMIT
     assert result.error is not None and "max_steps" in result.error
+
+
+async def test_partial_tool_turn_retains_completed_call_when_limited() -> None:
+    calls = (
+        ProviderToolCall(id="c1", name="search", arguments={"operation": "web"}),
+        ProviderToolCall(id="c2", name="calc", arguments={"operation": "add"}),
+    )
+    gateway = FakeGateway([_resp("search then calculate", *calls)])
+    dispatcher = FakeDispatcher({"search": Observation(step=0, ok=True, content="saved result")})
+    seed = [Message(role=Role.USER, content="go")]
+    engine = AgentEngine(gateway=gateway, dispatcher=dispatcher, limits=ExecutionLimits(max_tool_calls=1))
+
+    result = await engine.run(correlation_id=CID, messages=seed, tools=[SEARCH, CALC])
+
+    assert result.stop_reason is StopReason.LIMIT
+    assert result.tool_calls == 1
+    assert len(result.steps) == 1
+    assert result.steps[0].assistant_text == "search then calculate"
+    assert [(rec.call_id, rec.ok, rec.output) for rec in result.steps[0].tool_calls] == [("c1", True, "saved result")]
+    replay = reconstruct_conversation(seed, result)
+    assert [call.id for msg in replay for call in msg.tool_calls] == ["c1", "c2"]
+    tool_turns = [msg for msg in replay if msg.role is Role.TOOL]
+    assert tool_turns[0].content == '{"ok": true, "output": "saved result"}'
+    assert tool_turns[1].tool_call_id == "c2" and "not dispatched" in tool_turns[1].content
+
+
+async def test_partial_tool_turn_retains_completed_call_when_next_dispatch_raises() -> None:
+    calls = (
+        ProviderToolCall(id="c1", name="search", arguments={"operation": "web"}),
+        ProviderToolCall(id="c2", name="calc", arguments={"operation": "add"}),
+    )
+
+    class FailingDispatcher(FakeDispatcher):
+        async def dispatch(self, action: Action, correlation_id: CorrelationId) -> Observation:
+            if action.tool == "calc":
+                raise RuntimeError("calculator unavailable")
+            return await super().dispatch(action, correlation_id)
+
+    engine = AgentEngine(
+        gateway=FakeGateway([_resp("tools", *calls)]),
+        dispatcher=FailingDispatcher({"search": Observation(step=0, ok=True, content="saved result")}),
+    )
+    result = await engine.run(
+        correlation_id=CID,
+        messages=[Message(role=Role.USER, content="go")],
+        tools=[SEARCH, CALC],
+    )
+
+    assert result.stop_reason is StopReason.ERROR
+    assert result.error == "calculator unavailable"
+    assert len(result.steps) == 1
+    assert [rec.call_id for rec in result.steps[0].tool_calls] == ["c1", "c2"]
+    assert result.steps[0].tool_calls[0].output == "saved result"
+    assert result.steps[0].tool_calls[1].state == "unknown"

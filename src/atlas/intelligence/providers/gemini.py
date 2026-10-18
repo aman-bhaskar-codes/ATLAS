@@ -17,9 +17,10 @@ from atlas.intelligence.providers.base import ProviderCompletion
 class GeminiProvider:
     is_local = False
 
-    def __init__(self, *, name: str, api_key: str, timeout_s: float) -> None:
+    def __init__(self, *, name: str, api_key: str, timeout_s: float, model: str | None = None) -> None:
         self.name = name
         self._key = api_key
+        self._model = model
         self._client = httpx.AsyncClient(timeout=timeout_s)
         self._base = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -37,29 +38,43 @@ class GeminiProvider:
             if m.role == Role.SYSTEM:
                 continue
             if m.role == Role.TOOL:
-                contents.append(
-                    {
-                        "role": "user",
-                        "parts": [
-                            {
-                                "functionResponse": {
-                                    "name": m.name or m.tool_call_id or "tool",
-                                    "response": {"result": m.content},
-                                }
-                            }
-                        ],
-                    }
-                )
+                try:
+                    response = json.loads(m.content)
+                except (ValueError, TypeError):
+                    response = {"result": m.content}
+                if not isinstance(response, dict):
+                    response = {"result": response}
+                function_response: dict[str, Any] = {
+                    "name": m.name or m.tool_call_id or "tool",
+                    "response": response,
+                }
+                if m.tool_call_id:
+                    function_response["id"] = m.tool_call_id
+                part = {"functionResponse": function_response}
+                # Parallel tool results belong to one user turn.
+                if contents and all("functionResponse" in p for p in contents[-1]["parts"]):
+                    contents[-1]["parts"].append(part)
+                else:
+                    contents.append({"role": "user", "parts": [part]})
                 continue
             if m.tool_calls:
                 parts: list[dict[str, Any]] = []
                 if m.content:
                     parts.append({"text": m.content})
-                parts.extend({"functionCall": {"name": tc.name, "args": dict(tc.arguments)}} for tc in m.tool_calls)
+                for tc in m.tool_calls:
+                    fn: dict[str, Any] = {"name": tc.name, "args": dict(tc.arguments)}
+                    if tc.id:
+                        fn["id"] = tc.id
+                    call_part: dict[str, Any] = {"functionCall": fn}
+                    if tc.thought_signature:
+                        call_part["thoughtSignature"] = tc.thought_signature
+                    parts.append(call_part)
                 contents.append({"role": "model", "parts": parts})
                 continue
             role = "user" if m.role == Role.USER else "model"
-            contents.append({"role": role, "parts": [{"text": m.content}]})
+            media_parts: list[dict[str, Any]] = [{"text": m.content}] if m.content else []
+            media_parts.extend({"inlineData": {"mimeType": image.mime_type, "data": image.data}} for image in m.images)
+            contents.append({"role": role, "parts": media_parts or [{"text": ""}]})
         return contents
 
     def _payload(
@@ -106,9 +121,11 @@ class GeminiProvider:
         tools: Sequence[ToolCallSpec] = (),
     ) -> ProviderCompletion:
         try:
+            if not self._key:
+                raise ProviderError(f"{self.name} API key is not configured")
             r = await self._client.post(
                 f"{self._base}/{model}:generateContent",
-                params={"key": self._key},
+                headers={"x-goog-api-key": self._key},
                 json=self._payload(messages, max_tokens, temperature, tools),
             )
             if r.status_code == 429:
@@ -119,24 +136,34 @@ class GeminiProvider:
         except httpx.HTTPError as exc:
             raise ProviderError(f"{self.name} transport: {exc}") from exc
 
-        data = r.json()
+        try:
+            data = r.json()
+        except ValueError as exc:
+            raise ProviderError(f"{self.name} returned invalid JSON") from exc
         parts = []
         try:
             parts = data["candidates"][0]["content"]["parts"]
-        except (KeyError, IndexError):
+        except (KeyError, IndexError, TypeError):
             parts = []
-        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and "text" in p)
-        tool_calls = tuple(
-            ProviderToolCall(
-                id=str(p["functionCall"].get("name", "")),
-                name=str(p["functionCall"].get("name", "")),
-                arguments=dict(p["functionCall"].get("args") or {}),
+        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and "text" in p and not p.get("thought"))
+        try:
+            tool_calls = tuple(
+                ProviderToolCall(
+                    id=str(p["functionCall"].get("id", "")),
+                    name=str(p["functionCall"].get("name", "")),
+                    arguments=dict(p["functionCall"].get("args") or {}),
+                    thought_signature=p.get("thoughtSignature"),
+                )
+                for p in parts
+                if isinstance(p, dict) and isinstance(p.get("functionCall"), dict)
             )
-            for p in parts
-            if isinstance(p, dict) and isinstance(p.get("functionCall"), dict)
-        )
+        except (ValueError, TypeError) as exc:
+            raise ProviderError(f"{self.name} returned an invalid tool call") from exc
+        if not text.strip() and not tool_calls:
+            raise ProviderError(f"{self.name} returned no visible response or tool calls")
         u = data.get("usageMetadata", {})
-        it, ot = int(u.get("promptTokenCount", 0)), int(u.get("candidatesTokenCount", 0))
+        it = int(u.get("promptTokenCount", 0))
+        ot = int(u.get("candidatesTokenCount", 0)) + int(u.get("thoughtsTokenCount", 0))
         usd = it / 1e6 * usd_in + ot / 1e6 * usd_out
         return ProviderCompletion(str(text), Usage(input_tokens=it, output_tokens=ot, usd=usd), tool_calls)
 
@@ -149,10 +176,13 @@ class GeminiProvider:
         temperature: float,
     ) -> AsyncIterator[StreamChunk]:
         try:
+            if not self._key:
+                raise ProviderError(f"{self.name} API key is not configured")
             async with self._client.stream(
                 "POST",
                 f"{self._base}/{model}:streamGenerateContent",
-                params={"key": self._key, "alt": "sse"},
+                headers={"x-goog-api-key": self._key},
+                params={"alt": "sse"},
                 json=self._payload(messages, max_tokens, temperature),
             ) as r:
                 if r.status_code == 429:
@@ -168,7 +198,11 @@ class GeminiProvider:
                         continue
 
                     try:
-                        delta = data["candidates"][0]["content"]["parts"][0]["text"]
+                        delta = "".join(
+                            part.get("text", "")
+                            for part in data["candidates"][0]["content"]["parts"]
+                            if not part.get("thought")
+                        )
                         if delta:
                             yield StreamChunk(delta=delta, done=False)
                     except (KeyError, IndexError):
@@ -181,7 +215,18 @@ class GeminiProvider:
             raise ProviderError(f"{self.name} stream transport: {exc}") from exc
 
     async def health(self) -> bool:
-        return bool(self._key)
+        if not self._key:
+            return False
+        endpoint = f"{self._base}/{self._model}" if self._model else self._base
+        try:
+            response = await self._client.get(endpoint, headers={"x-goog-api-key": self._key}, timeout=2.0)
+            if response.status_code != 200:
+                return False
+            data = response.json()
+            models = [data] if self._model else data.get("models", [])
+            return any("generateContent" in entry.get("supportedGenerationMethods", []) for entry in models)
+        except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+            return False
 
     async def close(self) -> None:
         await self._client.aclose()

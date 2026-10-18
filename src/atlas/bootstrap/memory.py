@@ -11,7 +11,7 @@ from atlas.infra.ids import IdGenerator
 from atlas.intelligence.gateway import ModelGateway
 from atlas.memory.consolidation import Consolidator
 from atlas.memory.curated import CuratedMemory
-from atlas.memory.embedder import Embedder, EmbeddingWorker
+from atlas.memory.embedder import Embedder, EmbeddingWorker, embedding_space_of
 from atlas.memory.episodic import EpisodicMemory
 from atlas.memory.experience_extractor import ExperienceExtractor  # Phase 2
 from atlas.memory.intents import IntentStore
@@ -63,7 +63,7 @@ def build_memory(
     gateway: ModelGateway,
 ) -> MemoryComponents:
     """Build memory subsystems. Bus wiring is done later in Atlas.start()."""
-    vectors = ChromaVectorStore(str(settings.data_dir / "chroma"))
+    vectors = ChromaVectorStore(str(settings.data_dir / "chroma"), embedding_space=embedding_space_of(embedder))
 
     # Phase 0: Wire EmbeddingWorker so episode semantic search works
     embedding_worker = EmbeddingWorker(

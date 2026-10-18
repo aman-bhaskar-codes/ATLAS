@@ -19,7 +19,7 @@ function describeApiError(error: AtlasApiError): string {
   const { status, code, detail, requestId } = error;
 
   if (status === 401) {
-    return "The backend requires an API key. This UI does not send one — start ATLAS without ATLAS_API_KEYS for local use.";
+    return "The API key is missing or invalid. Open Settings to save the key configured for your backend.";
   }
   if (status === 403 && code === "readonly_key") {
     return "This API key is read-only, so the action was refused.";

@@ -312,6 +312,37 @@ async def test_continue_running_run_is_rejected(db: Database) -> None:
         await svc.continue_run("run-live", "keep going")
 
 
+async def test_restart_recovery_settles_all_interrupted_runs(db: Database) -> None:
+    store = SqliteAgentRunStore(db)
+    for index in range(55):
+        await store.save_run(
+            AgentRunRecord(run_id=f"interrupted-{index}", request="inspect workspace", status="running")
+        )
+    svc = _service(db, FakeGateway([]), FakeRouter([SEARCH]))
+    assert await svc.recover_interrupted() == 55
+    records = await store.list_runs(limit=100)
+    assert all(record.status == "error" and record.result is not None for record in records)
+    assert all("inspect" in record.result.error.lower() for record in records)
+    assert await svc.recover_interrupted() == 0
+
+
+async def test_service_close_cancels_and_settles_background_run(db: Database) -> None:
+    started = asyncio.Event()
+
+    class WaitingGateway:
+        async def infer(self, request):
+            started.set()
+            await asyncio.Event().wait()
+
+    svc = _service(db, WaitingGateway(), FakeRouter([SEARCH]))
+    stub = await svc.start_run_background("inspect workspace")
+    await started.wait()
+    await svc.close()
+    record = await svc.get_run(stub.run_id)
+    assert record is not None and record.status == "error" and record.result is not None
+    assert "inspect" in record.result.error.lower()
+
+
 # <<TESTS-MARKER-5>> M2.2 Stage 2 — the live trace is durably readable via run_events.
 async def test_run_events_surfaces_the_persisted_trace(db: Database) -> None:
     """End-to-end: a real run publishes its lifecycle/tool events through the bus,

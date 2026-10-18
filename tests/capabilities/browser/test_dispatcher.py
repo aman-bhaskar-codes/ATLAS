@@ -109,9 +109,6 @@ async def test_playwright_dispatcher_provider_error():
     with pytest.raises(ProviderExecutionError, match="Playwright error: detached handle"):
         await dispatcher.dispatch(action, CorrelationId("cid"))
 
-import pathlib
-import tempfile
-
 from atlas.capabilities.browser.providers.playwright_provider import PlaywrightProvider
 
 
@@ -127,7 +124,7 @@ async def test_playwright_dispatcher_happy_path(require_browser: None):
     
     dispatcher = PlaywrightBrowserDispatcher(provider=provider, safety=safety)
     
-    # Create temp HTML
+    # Supply the dispatcher fixture directly without navigating to a local file
     html = """
     <html><body>
         <input type="text" id="myinput" value="" />
@@ -137,14 +134,10 @@ async def test_playwright_dispatcher_happy_path(require_browser: None):
         </form>
     </body></html>
     """
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-        f.write(html)
-        tmp_path = f.name
-        
     try:
         session_id = await provider.launch(profile=None, incognito=True, sandbox_spec=None)
         tab_id = await provider.new_tab(session_id)
-        await provider.goto(session_id, tab_id, f"file://{tmp_path}")
+        await provider._get_page(session_id, tab_id).set_content(html)
         
         handle = PageHandle(session_id=session_id, tab_id=tab_id)
         cid = CorrelationId("cid_happy")
@@ -173,4 +166,3 @@ async def test_playwright_dispatcher_happy_path(require_browser: None):
         
     finally:
         await provider.stop()
-        pathlib.Path(tmp_path).unlink(missing_ok=True)

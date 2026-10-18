@@ -9,6 +9,7 @@ reason about, not a crash.
 from __future__ import annotations
 
 from atlas.infra.ids import CorrelationId
+from atlas.infra.execution_lease import require_execution_owner
 from atlas.infra.types import ToolRequest
 from atlas.orchestration.errors import ToolExecutionError
 from atlas.orchestration.registry import ToolRegistry
@@ -29,6 +30,7 @@ class ToolDispatcher:
         self._health = health
 
     async def dispatch(self, action: Action, correlation_id: CorrelationId) -> Observation:
+        await require_execution_owner()
         if action.tool is None or action.operation is None:
             return Observation(step=action.step, ok=False, error="action missing tool/operation")
         tool = self._registry.get(action.tool)

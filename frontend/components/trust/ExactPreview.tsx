@@ -12,7 +12,7 @@ interface ExactPreviewProps {
 export function ExactPreview({ capability, operation, destination, policy, expiresIn, bodyPreview }: ExactPreviewProps) {
   return (
     <div className="bg-[var(--ink-850)] border border-[var(--line)] p-4 rounded-lg">
-      <h3 className="text-base m-0 mb-3 font-medium">Exact Preview: {operation}</h3>
+      <h3 className="text-base m-0 mb-3 font-medium">Action preview: {operation}</h3>
       <div className="flex justify-between gap-3 border-t border-[var(--line)] py-2 text-[0.8rem]">
         <span className="text-[var(--paper-500)]">Capability</span>
         <b className="font-medium text-right">{capability}</b>

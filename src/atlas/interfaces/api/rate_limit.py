@@ -8,6 +8,7 @@ implementation would expose, so swapping later is a constructor change.
 
 from __future__ import annotations
 
+from collections import deque
 import time
 
 from fastapi import Request
@@ -20,6 +21,65 @@ from atlas.interfaces.api.errors import error_envelope
 # background task: pruning is pure bookkeeping, and a timer would add a second
 # thing that can fail at shutdown for no benefit.
 _PRUNE_EVERY = 1000
+
+
+class SlidingWindowCounter:
+    """Sliding-window counter for discrete time windows (e.g. 60s)."""
+
+    def __init__(self, window_s: float = 60.0) -> None:
+        self.window_s = window_s
+        self._entries: deque[tuple[float, int, int]] = deque()  # (ts, reqs, tokens)
+
+    def _evict_expired(self, now: float) -> None:
+        cutoff = now - self.window_s
+        while self._entries and self._entries[0][0] <= cutoff:
+            self._entries.popleft()
+
+    def current_usage(self, now: float | None = None) -> tuple[int, int]:
+        now = time.monotonic() if now is None else now
+        self._evict_expired(now)
+        reqs = sum(e[1] for e in self._entries)
+        toks = sum(e[2] for e in self._entries)
+        return reqs, toks
+
+    def try_consume(self, max_reqs: int, max_tokens: int, reqs: int = 1, tokens: int = 0) -> tuple[bool, float]:
+        now = time.monotonic()
+        self._evict_expired(now)
+        cur_reqs, cur_toks = self.current_usage(now)
+        if cur_reqs + reqs > max_reqs or cur_toks + tokens > max_tokens:
+            wait_s = (self._entries[0][0] + self.window_s - now) if self._entries else 1.0
+            return False, max(0.1, wait_s)
+        self._entries.append((now, reqs, tokens))
+        return True, 0.0
+
+
+class ModelRateLimiter:
+    """Per (provider, model) sliding-window token & request limiter.
+
+    Enforces cloud vendor free tiers (e.g. Gemini 15 RPM / 1M TPM) and triggers
+    failover to local Ollama when quota is saturated.
+    """
+
+    def __init__(self) -> None:
+        self._limiters: dict[str, SlidingWindowCounter] = {}
+        # Default limits per provider
+        self._limits: dict[str, tuple[int, int]] = {
+            "gemini": (15, 1_000_000),  # 15 RPM, 1M TPM
+            "groq": (30, 500_000),      # 30 RPM, 500k TPM
+            "openrouter": (20, 200_000), # 20 RPM, 200k TPM
+        }
+
+    def set_limit(self, provider: str, max_rpm: int, max_tpm: int) -> None:
+        self._limits[provider] = (max_rpm, max_tpm)
+
+    def check_and_consume(self, provider: str, estimated_tokens: int = 0) -> tuple[bool, float]:
+        limits = self._limits.get(provider)
+        if not limits:
+            return True, 0.0
+        max_rpm, max_tpm = limits
+        if provider not in self._limiters:
+            self._limiters[provider] = SlidingWindowCounter(window_s=60.0)
+        return self._limiters[provider].try_consume(max_rpm, max_tpm, reqs=1, tokens=estimated_tokens)
 
 
 class TokenBucketLimiter:

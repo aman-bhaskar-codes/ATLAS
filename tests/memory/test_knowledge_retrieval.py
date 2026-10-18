@@ -67,13 +67,16 @@ async def test_pdf_ingestion_fails_closed(tmp_path: Path) -> None:
     pdf = tmp_path / "paper.pdf"
     pdf.write_bytes(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<< /Type /Catalog >>\n")
 
-    with pytest.raises(UserError):
-        await store.ingest_document(pdf, "pdf", metadata={"title": "Paper"})
+    try:
+        with pytest.raises(UserError):
+            await store.ingest_document(pdf, "pdf", metadata={"title": "Paper"})
 
-    # Nothing was persisted for the refused document.
-    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_chunks")
-    row = await cur.fetchone()
-    assert row["n"] == 0
+        # Nothing was persisted for the refused document.
+        cur = await db.conn.execute("SELECT COUNT(*) AS n FROM knowledge_chunks")
+        row = await cur.fetchone()
+        assert row["n"] == 0
+    finally:
+        await db.stop()
 
 
 @pytest.mark.asyncio

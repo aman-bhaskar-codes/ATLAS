@@ -22,7 +22,12 @@ from pydantic import BaseModel
 from atlas.app import Atlas
 from atlas.infra.logging import get_logger
 from atlas.infra.types import InboundEvent
-from atlas.interfaces.api.auth import Principal, require_principal
+from atlas.interfaces.api.auth import (
+    Principal,
+    require_principal,
+    require_websocket_admin,
+    websocket_subprotocol,
+)
 from atlas.interfaces.api.dependencies import get_atlas
 
 _log = get_logger("atlas.interfaces.api.voice")
@@ -85,7 +90,7 @@ async def transcribe(
     return TranscribeResponse(text=result.text, confidence=result.confidence)
 
 
-@router.websocket("/ws/voice")
+@router.websocket("/ws/voice", dependencies=[Depends(require_websocket_admin)])
 async def voice_ws(websocket: WebSocket) -> None:
     """Bidirectional voice loop: audio in -> STT -> orchestrator -> TTS audio out.
 
@@ -100,7 +105,7 @@ async def voice_ws(websocket: WebSocket) -> None:
         await websocket.close(code=1011, reason="voice disabled")
         return
 
-    await websocket.accept()
+    await websocket.accept(subprotocol=websocket_subprotocol(websocket))
     try:
         while True:
             frames: list[bytes] = []

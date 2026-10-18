@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -12,5 +13,11 @@ export const metadata: Metadata = {
  * relies on overlaying that chrome. This layout owns the workbench's metadata.
  */
 export default function DevLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return <div className="ide-workbench-platform" data-platform="ide">
+    <header className="ide-workbench-header" aria-label="IDE platform">
+      <Link href="/workspaces">ATLAS IDE · Workspaces</Link>
+      <Link href="/">Return to command centre</Link>
+    </header>
+    {children}
+  </div>;
 }

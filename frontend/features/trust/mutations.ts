@@ -6,13 +6,14 @@ export function useDecideApproval() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ approvalId, decision, idempotencyKey, requestId }: { approvalId: string; decision: 'approve' | 'deny'; idempotencyKey: string; requestId: string }) => {
-      const data = await trustApi.decideApproval(approvalId, decision, idempotencyKey, requestId);
+    mutationFn: async ({ approvalId, decision, idempotencyKey, requestId, confirmationCode }: { confirmationCode?: string; approvalId: string; decision: 'approve' | 'deny'; idempotencyKey: string; requestId: string }) => {
+      const data = await trustApi.decideApproval(approvalId, decision, idempotencyKey, requestId, confirmationCode);
       return ApprovalViewSchema.parse(data);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['trust', 'approvals', 'pending'] });
       queryClient.invalidateQueries({ queryKey: ['approvals'] });
+      queryClient.invalidateQueries({ queryKey: ['runtimeStatus'] });
       queryClient.setQueryData(['trust', 'approvals', data.id], data);
     },
   });

@@ -1,72 +1,17 @@
 "use client";
 
-/**
- * Research home (§17–§19, R5) — the in-chrome composer + history that LAUNCHES a
- * Perplexity-class research session.
- *
- * This page stays inside the Command Center frame. Asking a question starts a
- * background research session (the SAME governed `knowledge` pipeline, no second
- * execution path) and opens the full-window surface at `/research/{sessionId}` —
- * mirroring the IDE workbench launcher, with a same-window fallback when the popup
- * is blocked. Prior sessions are listed so any can be reopened.
- */
-
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FlaskConical,
   Search,
   Loader2,
-  ExternalLink,
-  History,
-  CheckCircle2,
-  Flag,
-  XCircle,
 } from "lucide-react";
 
 import { ErrorRow } from "@/components/primitives/ErrorState";
 import { useStartResearch } from "@/features/research/mutations";
-import { useResearchSessions } from "@/features/research/sessions";
 import { openResearchWindow, researchSessionPath } from "@/lib/research/openWindow";
-import type { ResearchSessionSummary } from "@/features/research/contracts";
-
-function statusIcon(status: string) {
-  if (status === "completed") return <CheckCircle2 size={13} style={{ color: "#22c55e" }} />;
-  if (status === "refused") return <Flag size={13} style={{ color: "#facc15" }} />;
-  if (status === "failed") return <XCircle size={13} style={{ color: "#f87171" }} />;
-  return <Loader2 size={13} className="animate-spin" style={{ color: "var(--gold-400)" }} />;
-}
-
-function HistoryRow({ row, onOpen }: { row: ResearchSessionSummary; onOpen: (id: string) => void }) {
-  return (
-    <button
-      onClick={() => onOpen(row.session_id)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.6rem",
-        width: "100%",
-        textAlign: "left",
-        background: "var(--ink-850)",
-        border: "1px solid var(--line)",
-        borderRadius: "6px",
-        padding: "0.6rem 0.75rem",
-        cursor: "pointer",
-        color: "var(--paper-200)",
-      }}
-      title="Open this research session"
-    >
-      {statusIcon(row.status)}
-      <span style={{ flex: 1, fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {row.question || "Untitled question"}
-      </span>
-      <span style={{ fontSize: "0.7rem", color: "var(--paper-600)" }}>
-        {row.source_count} src{row.parent_session_id ? " · follow-up" : ""}
-      </span>
-      <ExternalLink size={12} style={{ color: "var(--paper-500)" }} />
-    </button>
-  );
-}
+import { ResearchHistory } from "@/components/research/ResearchHistory";
 
 export default function ResearchPage() {
   const router = useRouter();
@@ -74,7 +19,6 @@ export default function ResearchPage() {
   const [blockedId, setBlockedId] = useState<string | null>(null);
 
   const start = useStartResearch();
-  const { data: history } = useResearchSessions();
 
   // Launch a session's window; fall back to same-window navigation if blocked.
   const openSession = (id: string) => {
@@ -102,7 +46,8 @@ export default function ResearchPage() {
   return (
     <>
       <div className="crumb mb-6">
-        ATLAS / <strong>Research</strong>
+        <h1>Research overview</h1>
+        <p className="platform-description">Ask a question, follow the evidence, and revisit your research sessions.</p>
       </div>
 
       {/* Composer */}
@@ -112,11 +57,12 @@ export default function ResearchPage() {
           <h2>Research a question</h2>
         </div>
         <div style={{ padding: "1rem" }}>
-          <textarea
+          <textarea className="resize-none"
+            aria-label="Research question"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+              if (!e.nativeEvent.isComposing && e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
             }}
             placeholder="e.g. What does recent work say about evaluation of autonomous agents? Cite sources."
             rows={3}
@@ -129,7 +75,7 @@ export default function ResearchPage() {
               color: "var(--paper-100)",
               outline: "none",
               fontSize: "0.9rem",
-              resize: "vertical",
+              resize: "none",
               fontFamily: "inherit",
             }}
           />
@@ -170,20 +116,7 @@ export default function ResearchPage() {
         </div>
       </section>
 
-      {/* History */}
-      {history && history.sessions.length > 0 && (
-        <section className="panel">
-          <div className="section-head" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <History size={15} style={{ color: "var(--paper-500)" }} />
-            <h2>Recent sessions</h2>
-          </div>
-          <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {history.sessions.map((row) => (
-              <HistoryRow key={row.session_id} row={row} onOpen={openSession} />
-            ))}
-          </div>
-        </section>
-      )}
+      <ResearchHistory />
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }`}</style>
     </>

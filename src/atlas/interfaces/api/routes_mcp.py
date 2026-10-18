@@ -5,7 +5,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from atlas.interfaces.api.auth import require_admin
+from atlas.tooling.mcp.models import ConnectionState
 
 router = APIRouter()
 
@@ -15,6 +18,16 @@ def _manager(request: Request) -> Any:
     if manager is None:
         raise HTTPException(status_code=503, detail="MCP runtime is not available")
     return manager
+
+
+def _ready_connection(manager: Any, server_id: str) -> Any:
+    try:
+        connection = manager.connection(server_id)
+    except Exception as exc:
+        raise HTTPException(404, "MCP server not found") from exc
+    if connection.state != ConnectionState.READY:
+        raise HTTPException(409, "Connect the MCP server before inspecting its resources or prompts")
+    return connection
 
 
 @router.get("/mcp/servers")
@@ -32,29 +45,29 @@ async def get_server(server_id: str, request: Request) -> dict[str, Any]:
     return out
 
 
-@router.post("/mcp/servers/{server_id}/connect")
+@router.post("/mcp/servers/{server_id}/connect", dependencies=[Depends(require_admin)])
 async def connect_server(server_id: str, request: Request) -> dict[str, Any]:
     manager = _manager(request)
     try:
         info = await manager.connect(server_id)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"MCP connect failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail="MCP connection failed") from exc
     out: dict[str, Any] = dict(info.model_dump(mode="json"))
     return out
 
 
-@router.post("/mcp/servers/{server_id}/disconnect")
+@router.post("/mcp/servers/{server_id}/disconnect", dependencies=[Depends(require_admin)])
 async def disconnect_server(server_id: str, request: Request) -> dict[str, Any]:
     await _manager(request).disconnect(server_id)
     return {"disconnected": server_id}
 
 
-@router.post("/mcp/servers/{server_id}/refresh")
+@router.post("/mcp/servers/{server_id}/refresh", dependencies=[Depends(require_admin)])
 async def refresh_server(server_id: str, request: Request) -> dict[str, Any]:
     try:
         tools = await _manager(request).refresh(server_id)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"MCP refresh failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail="MCP discovery refresh failed") from exc
     return {"server_id": server_id, "tools": [d.id for d in tools]}
 
 
@@ -77,11 +90,11 @@ async def server_tools(server_id: str, request: Request) -> list[dict[str, Any]]
 @router.get("/mcp/servers/{server_id}/resources")
 async def server_resources(server_id: str, request: Request) -> list[dict[str, Any]]:
     manager = _manager(request)
+    connection = _ready_connection(manager, server_id)
     try:
-        connection = await manager.ensure_ready(server_id)
         resources = await connection.discover_resources()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"MCP resource discovery failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail="MCP resource discovery failed") from exc
     return [
         {
             "uri": getattr(r, "uri", ""),
@@ -96,11 +109,11 @@ async def server_resources(server_id: str, request: Request) -> list[dict[str, A
 @router.get("/mcp/servers/{server_id}/prompts")
 async def server_prompts(server_id: str, request: Request) -> list[dict[str, Any]]:
     manager = _manager(request)
+    connection = _ready_connection(manager, server_id)
     try:
-        connection = await manager.ensure_ready(server_id)
         prompts = await connection.discover_prompts()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"MCP prompt discovery failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail="MCP prompt discovery failed") from exc
     return [
         {
             "name": getattr(p, "name", ""),

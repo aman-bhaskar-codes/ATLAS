@@ -18,7 +18,6 @@ export function useTaskRuntime(taskId: string) {
       }
       return 2000;
     },
-    retry: 2,
   });
 
   return { task, isTaskLoading, taskError, refetchTask };

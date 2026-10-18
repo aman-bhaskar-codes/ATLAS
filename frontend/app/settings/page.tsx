@@ -1,18 +1,39 @@
 "use client";
 
-import React from 'react';
+import React, { useRef, useState, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { atlasApi } from '@/lib/api/client';
+import { getApiCredential, setApiCredential, subscribeCredentialChange } from '@/lib/api/auth';
+import { Button } from '@/components/primitives/Button';
 import { ErrorState } from '@/components/primitives/ErrorState';
 
 /**
- * Settings — read-only posture view.
+ * Settings — runtime posture and the current tab’s API credential.
  * Configuration lives in typed YAML/env (never editable through the UI for
  * safety); this page surfaces the effective runtime state per group.
  */
 export default function SettingsPage() {
   const status = useQuery({ queryKey: ["runtime-status"], queryFn: atlasApi.runtimeStatus, refetchInterval: 15000 });
   const health = useQuery({ queryKey: ["runtime-health"], queryFn: atlasApi.runtimeHealth, refetchInterval: 30000 });
+
+  const credentialInputRef = useRef<HTMLInputElement>(null);
+  const [credential, setCredential] = useState("");
+  const [credentialError, setCredentialError] = useState<string | null>(null);
+  const [credentialNotice, setCredentialNotice] = useState<string | null>(null);
+  const hasCredential = Boolean(useSyncExternalStore(subscribeCredentialChange, getApiCredential, () => ""));
+
+  const saveCredential = (value: string) => {
+    try {
+      setApiCredential(value);
+      setCredential("");
+      setCredentialError(null);
+      setCredentialNotice(value.trim() ? "API key saved for this tab." : "API key removed.");
+    } catch (error) {
+      setCredentialError(error instanceof Error ? error.message : "Could not save the API key. Check browser storage permissions.");
+      setCredentialNotice(null);
+      credentialInputRef.current?.focus();
+    }
+  };
 
   const s = status.data;
   const err = status.error ?? health.error;
@@ -48,6 +69,28 @@ export default function SettingsPage() {
   return (
     <>
       <div className="crumb mb-6">ATLAS / <strong>Settings</strong></div>
+
+      <section className="panel mb-6" aria-labelledby="api-access-title">
+        <div className="section-head"><h2 id="api-access-title">API access</h2></div>
+        <form noValidate className="p-4 flex flex-col gap-3" onSubmit={(event) => { event.preventDefault(); saveCredential(credential); }}>
+          <p id="api-key-help" className="text-sm text-[var(--paper-500)]">
+            Enter the API key configured for your ATLAS backend. It is saved for this tab’s session.
+          </p>
+          <label htmlFor="api-key" className="text-sm text-[var(--paper-300)]">API key</label>
+          <input ref={credentialInputRef} id="api-key" type="password" value={credential} autoComplete="off" spellCheck={false}
+            aria-describedby={credentialError ? "api-key-help api-key-error" : "api-key-help api-key-status"} aria-invalid={Boolean(credentialError)}
+            className="ui-input"
+            onChange={(event) => { setCredential(event.target.value); setCredentialError(null); }} />
+          {credentialError && <p id="api-key-error" role="alert" className="text-sm text-[var(--ember-400)]">{credentialError}</p>}
+          <p id="api-key-status" role="status" className="text-sm text-[var(--paper-500)]">
+            {credentialNotice ?? (hasCredential ? "An API key is saved for this tab." : "No API key is saved. Local backends without authentication can connect directly.")}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Button type="submit" disabled={!credential.trim()}>Save API key</Button>
+            <Button type="button" variant="secondary" disabled={!hasCredential} onClick={() => saveCredential("")}>Remove API key</Button>
+          </div>
+        </form>
+      </section>
 
       {err ? (
         <ErrorState

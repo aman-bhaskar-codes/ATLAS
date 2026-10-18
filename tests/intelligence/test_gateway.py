@@ -6,7 +6,7 @@ import pytest
 
 from atlas.infra.ids import CorrelationId
 from atlas.infra.types import ModelCapability, ModelRequest
-from atlas.intelligence.contracts import InferenceRequest, InferenceResponse
+from atlas.intelligence.contracts import InferenceRequest, InferenceResponse, ModelSpec
 from atlas.intelligence.gateway import ModelGateway
 
 
@@ -21,7 +21,16 @@ class RecordingRouter:
 
 class SingleSelector:
     def select(self, required: object, constraints: object) -> list[object]:
-        return [object()]
+        return [
+            ModelSpec(
+                id="test-model",
+                provider="test",
+                provider_model="test-model",
+                context_length=8192,
+                usd_per_1m_input=0,
+                usd_per_1m_output=0,
+            )
+        ]
 
 
 class DirectFallback:

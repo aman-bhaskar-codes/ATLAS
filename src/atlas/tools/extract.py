@@ -22,6 +22,7 @@ import html as _htmllib
 import re
 import zlib
 
+MAX_PDF_DECODE_BYTES = 1_048_576
 MAX_EXTRACT_CHARS = 400_000  # matches knowledge.parsers.MAX_PARSED_CHARS
 
 # Blocks whose contents are chrome, not article prose. Dropped whole (§7 "canonicalize").
@@ -138,6 +139,8 @@ def extract_pdf_text(data: bytes) -> tuple[str, str]:
     "no extractable text" rather than indexing noise (§22).
     """
     try:
+        if re.search(rb"/Encrypt\b", data):
+            return ("", "")
         title = ""
         tm = _PDF_INFO_TITLE.search(data)
         if tm:
@@ -145,12 +148,19 @@ def extract_pdf_text(data: bytes) -> tuple[str, str]:
 
         pieces: list[str] = []
         total = 0
+        decoded_bytes = 0
         for sm in _PDF_STREAM.finditer(data):
             raw = sm.group(1)
             try:
-                content = zlib.decompress(raw)
+                decoder = zlib.decompressobj()
+                content = decoder.decompress(raw, MAX_PDF_DECODE_BYTES - decoded_bytes + 1)
+                if decoder.unconsumed_tail or not decoder.eof:
+                    return ("", "")
             except zlib.error:
                 content = raw  # uncompressed stream, or a filter we don't handle
+            decoded_bytes += len(content)
+            if decoded_bytes > MAX_PDF_DECODE_BYTES:
+                return ("", "")
             # A content stream with text operators is what we want; skip binary blobs.
             if b"Tj" not in content and b"TJ" not in content:
                 continue

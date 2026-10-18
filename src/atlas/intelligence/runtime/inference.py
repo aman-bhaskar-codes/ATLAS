@@ -14,6 +14,7 @@ ZERO-COST-FIRST ADDITIONS:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import TYPE_CHECKING
 
@@ -110,7 +111,12 @@ class InferenceRuntime:
             )
 
         try:
-            resp = await self._retry.run(_call)
+            try:
+                # One total deadline, including provider I/O and retry backoff.
+                async with asyncio.timeout(self._timeout_s):
+                    resp = await self._retry.run(_call)
+            except TimeoutError as exc:
+                raise ProviderError(f"model {spec.id!r} timed out after {self._timeout_s}s") from exc
         except RateLimitError as exc:
             latency = int((time.perf_counter() - start) * 1000)
             self._health.record(spec.provider, ok=False, latency_ms=latency)

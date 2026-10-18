@@ -20,11 +20,15 @@ grants authority, and never writes to personal memory.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any, Protocol
 
+import httpx
+
 from atlas.capabilities.browser.errors import UnsafeURLError
 from atlas.capabilities.browser.security.egress import EgressPolicy
+from atlas.capabilities.browser.security.pinned_transport import PinnedHTTPTransport
 from atlas.infra.logging import get_logger
 from atlas.infra.types import ToolResult
 from atlas.tools.extract import extract_pdf_text, html_to_text, looks_like_pdf
@@ -401,43 +405,72 @@ class HttpTextFetcher:
     text is declined with a reason rather than indexed as garbage.
     """
 
-    def __init__(self, timeout_s: float = 20.0) -> None:
+    def __init__(
+        self,
+        timeout_s: float = 20.0,
+        *,
+        egress_policy: EgressPolicy | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._transport = transport
         self._timeout = timeout_s
         # Global SSRF guard (no host scope): any public http(s) target is allowed,
         # every file://, localhost, RFC-1918, link-local (incl. 169.254.169.254
         # cloud metadata) or non-http target is denied — fail closed (§23). The
         # same policy the browser NavigationEngine enforces, so read_url cannot be
         # the ungoverned back door that reaches internal resources.
-        self._egress = EgressPolicy()
+        self._egress = egress_policy or EgressPolicy()
 
     async def __call__(self, url: str) -> tuple[str, str, str]:
-        import httpx
+        async with asyncio.timeout(self._timeout):
+            return await self._fetch(url)
 
-        # Redirects are followed by hand so EACH hop clears the egress policy: a
-        # public URL that 30x-redirects to http://169.254.169.254/ or file:// must
-        # be denied at the hop, not silently chased by httpx.
+    async def _fetch(self, url: str) -> tuple[str, str, str]:
+        # Stream each hop ourselves: neither implicit redirects nor buffering an
+        # unbounded response may occur before the egress/size gates.
         self._egress.check(url)
         async with httpx.AsyncClient(
             timeout=self._timeout,
             follow_redirects=False,
-            headers={"User-Agent": "ATLAS/1.0 (research agent)"},
+            transport=self._transport or PinnedHTTPTransport(self._egress),
+            trust_env=False,
+            headers={"User-Agent": "ATLAS/1.0 (research agent)", "Accept-Encoding": "identity"},
         ) as client:
             current = url
-            for _ in range(_MAX_REDIRECT_HOPS):
-                response = await client.get(current)
-                if response.is_redirect:
-                    location = response.headers.get("location", "")
-                    if not location:
-                        break
-                    current = str(httpx.URL(current).join(location))
-                    self._egress.check(current)  # re-check every hop, fail closed
-                    continue
-                break
+            for _ in range(_MAX_REDIRECT_HOPS + 1):
+                self._egress.check(current)
+                # Fixture/custom transports do not create pinned sockets. The
+                # production transport validates once at its TCP boundary.
+                if self._transport is not None and not isinstance(self._transport, PinnedHTTPTransport):
+                    await self._egress.check_resolved(current)
+                async with client.stream("GET", current) as response:
+                    if response.is_redirect:
+                        location = response.headers.get("location", "")
+                        if not location:
+                            raise ValueError("read_url failed: redirect has no location")
+                        current = str(httpx.URL(current).join(location))
+                        continue
+                    response.raise_for_status()
+                    content_type = response.headers.get("content-type", "text/plain").split(";")[0].strip()
+                    # Identity encoding keeps the downloaded byte budget equal
+                    # to the body budget, avoiding compressed-body expansion.
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        raise ValueError("read_url failed: compressed response is unsupported")
+                    length = response.headers.get("content-length")
+                    if length is not None and int(length) > MAX_FETCH_BYTES:
+                        raise ValueError(f"read_url exceeds {MAX_FETCH_BYTES} byte download limit")
+                    chunks: list[bytes] = []
+                    downloaded = 0
+                    async for chunk in response.aiter_raw():
+                        downloaded += len(chunk)
+                        if downloaded > MAX_FETCH_BYTES:
+                            raise ValueError(f"read_url exceeds {MAX_FETCH_BYTES} byte download limit")
+                        chunks.append(chunk)
+                    body = b"".join(chunks)
+                    encoding = response.encoding or "utf-8"
+                    break
             else:
                 raise UnsafeURLError(f"read_url denied: exceeded {_MAX_REDIRECT_HOPS} redirect hops")
-            response.raise_for_status()
-            content_type = response.headers.get("content-type", "text/plain").split(";")[0].strip()
-            body = response.content[:MAX_FETCH_BYTES]
 
         if looks_like_pdf(content_type, body):
             title, text = extract_pdf_text(body)
@@ -446,7 +479,7 @@ class HttpTextFetcher:
         if content_type == "application/octet-stream" and body[:5] != b"%PDF-":
             return ("", "", content_type)  # opaque binary — nothing to read
 
-        text = body.decode(response.encoding or "utf-8", errors="replace")
+        text = body.decode(encoding, errors="replace")
         if content_type in ("text/html", "application/xhtml+xml"):
             title, text = html_to_text(text)
         else:
@@ -506,6 +539,7 @@ def _answer_payload(answer: Any) -> dict[str, Any]:
             "title": getattr(c, "title", ""),
             "uri": getattr(c, "uri", ""),
             "quote": str(getattr(c, "quote", ""))[:400],
+            "location": str(getattr(c, "location", ""))[:200],
         }
         for i, c in enumerate(list(getattr(answer, "citations", ()) or ())[:MAX_CITATIONS])
     ]

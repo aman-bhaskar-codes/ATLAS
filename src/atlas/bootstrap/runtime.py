@@ -346,9 +346,9 @@ class RuntimeSupervisor:
         available = [p for p, h in health.items() if h]
         if not available:
             _log.warning("intelligence.no_providers", health=health)
-            # This is a degradation, not a failure
+            status = ComponentStatus.FAILED if getattr(self._settings, "strict_bootstrap", False) else ComponentStatus.DEGRADED
             self._set_component_health(
-                "intelligence_gateway", ComponentStatus.DEGRADED, detail="No providers available"
+                "intelligence_gateway", status, detail="No providers available"
             )
 
     async def _verify_memory(self) -> None:

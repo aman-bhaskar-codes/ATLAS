@@ -15,6 +15,7 @@ from typing import Any, Protocol
 
 from atlas.capabilities.browser.domain.locator import Locator
 from atlas.capabilities.browser.providers.capabilities import ProviderCapabilities
+from atlas.capabilities.browser.security.egress import EgressPolicy
 
 
 class BrowserProvider(Protocol):
@@ -32,6 +33,8 @@ class BrowserProvider(Protocol):
     async def new_tab(self, session_id: str) -> str: ...  # returns tab_id
     async def list_tabs(self, session_id: str) -> list[str]: ...
     async def close_tab(self, session_id: str, tab_id: str) -> None: ...
+
+    async def set_egress_policy(self, session_id: str, tab_id: str, policy: EgressPolicy) -> None: ...
 
     # navigation (read)
     async def goto(self, session_id: str, tab_id: str, url: str) -> None: ...

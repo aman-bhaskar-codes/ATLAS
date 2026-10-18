@@ -6,6 +6,7 @@ Accumulates usage and updates telemetry upon stream completion.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator
 
@@ -45,8 +46,10 @@ class StreamingRuntime:
             await self._governor.check(projected, task_id=req.task_id)
 
         start = time.perf_counter()
+        deadline = start + self._timeout_s
         # we don't currently retry streaming requests in-band (more complex with yields).
         # fallback handles it if it fails early.
+        stream: AsyncIterator[StreamChunk] | None = None
         try:
             stream = provider.stream(
                 model=spec.provider_model,
@@ -54,13 +57,29 @@ class StreamingRuntime:
                 max_tokens=req.max_tokens,
                 temperature=req.temperature,
             )
-            async for chunk in stream:
+            while True:
+                try:
+                    # Apply the total deadline only while advancing the provider;
+                    # a timeout context spanning yield would cancel the consumer.
+                    remaining = deadline - time.perf_counter()
+                    if remaining <= 0:
+                        raise TimeoutError
+                    async with asyncio.timeout(remaining):
+                        chunk = await anext(stream)
+                except StopAsyncIteration:
+                    break
+                except TimeoutError as exc:
+                    raise ProviderError(f"model {spec.id!r} timed out after {self._timeout_s}s") from exc
                 yield chunk
         except (ProviderError, RateLimitError) as exc:
             latency = int((time.perf_counter() - start) * 1000)
             self._health.record(spec.provider, ok=False, latency_ms=latency)
             await self._telemetry.record_failure(req, spec, exc, latency)
             raise
+        finally:
+            close = getattr(stream, "aclose", None) if stream is not None else None
+            if close is not None:
+                await close()
 
         latency = int((time.perf_counter() - start) * 1000)
         self._health.record(spec.provider, ok=True, latency_ms=latency)

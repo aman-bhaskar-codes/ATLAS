@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
+
+from fastapi import HTTPException
 
 from atlas.app import Atlas
 from atlas.interfaces.api.control_plane import AtlasTrustPlane
@@ -15,6 +18,8 @@ from atlas.interfaces.api.schemas_trust import (
     ApprovalDecisionCommand,
     ApprovalView,
     AuditEventView,
+    AuditExport,
+    AuditFilters,
     AuditPage,
     MemoryCorrectionCommand,
     MemoryFactView,
@@ -23,6 +28,7 @@ from atlas.interfaces.api.schemas_trust import (
     TaskPage,
     TaskView,
 )
+from atlas.safety.approvals import ApprovalCodeError, ApprovalConflict
 
 
 class DefaultAtlasTrustPlane(AtlasTrustPlane):
@@ -56,13 +62,33 @@ class DefaultAtlasTrustPlane(AtlasTrustPlane):
         return project_task(dict(row))
 
     async def pending_approvals(self) -> Sequence[ApprovalView]:
-        return []  # Phase 4
+        queue = getattr(self._atlas, "approvals", None)
+        return (
+            tuple(ApprovalView.model_validate(ticket.model_dump()) for ticket in await queue.pending()) if queue else ()
+        )
 
     async def get_approval(self, approval_id: str) -> ApprovalView:
-        raise NotFoundError(f"Approval not found: {approval_id}")
+        queue = getattr(self._atlas, "approvals", None)
+        ticket = await queue.get(approval_id) if queue else None
+        if ticket is None:
+            raise NotFoundError("Approval not found")
+        return ApprovalView.model_validate(ticket.model_dump())
 
     async def decide_approval(self, command: ApprovalDecisionCommand) -> ApprovalView:
-        raise NotImplementedError()
+        queue = getattr(self._atlas, "approvals", None)
+        if queue is None:
+            raise NotFoundError("Approval not found")
+        try:
+            ticket = await queue.decide(
+                command.approval_id, command.decision, command.idempotency_key, command.confirmation_code
+            )
+        except ApprovalCodeError as exc:
+            raise HTTPException(422, str(exc)) from None
+        except ApprovalConflict as exc:
+            raise HTTPException(409, str(exc)) from None
+        except LookupError:
+            raise NotFoundError("Approval not found") from None
+        return ApprovalView.model_validate(ticket.model_dump())
 
     async def search_memory(self, query: str, *, limit: int) -> Sequence[MemoryFactView]:
         return []
@@ -90,6 +116,8 @@ class DefaultAtlasTrustPlane(AtlasTrustPlane):
         execution_id: str | None,
         cursor: str | None,
         limit: int,
+        since: datetime | None = None,
+        tier: int | None = None,
     ) -> AuditPage:
         """Query the real audit_events table (safety.audit.AuditLog.record()
         is the single writer — see infra/db.py migration 001).
@@ -127,6 +155,13 @@ class DefaultAtlasTrustPlane(AtlasTrustPlane):
         if cursor:
             query += " AND id < ?"
             params.append(cursor)
+        if since is not None:
+            # SQLite datetime normalizes stored Z/UTC/offset forms before comparison.
+            query += " AND julianday(ts) >= julianday(?)"
+            params.append(since.isoformat())
+        if tier is not None:
+            query += " AND tier = ?"
+            params.append(str(tier))
         query += " ORDER BY id DESC LIMIT ?"
         params.append(str(limit + 1))
 
@@ -136,6 +171,27 @@ class DefaultAtlasTrustPlane(AtlasTrustPlane):
         items = [project_audit(dict(row)) for row in rows[:limit]]
         next_cursor = str(rows[limit - 1]["id"]) if len(rows) > limit else None
         return AuditPage(items=tuple(items), next_cursor=next_cursor)
+
+    async def export_audit(self, *, since: datetime | None, tier: int | None, max_events: int) -> AuditExport:
+        # Bound the work independently of transport validation. Fetching one extra
+        # row distinguishes a complete export from truncation at the exact boundary.
+        max_events = max(1, min(max_events, 1000))
+        page = await self.audit(
+            task_id=None,
+            correlation_id=None,
+            execution_id=None,
+            cursor=None,
+            limit=max_events,
+            since=since,
+            tier=tier,
+        )
+        return AuditExport(
+            items=page.items,
+            generated_at=datetime.now(UTC),
+            filters=AuditFilters(since=since, tier=tier),
+            max_events=max_events,
+            truncated=page.next_cursor is not None,
+        )
 
     async def audit_event(self, event_id: str) -> AuditEventView:
         raise NotFoundError(f"Event not found: {event_id}")

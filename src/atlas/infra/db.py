@@ -1929,6 +1929,28 @@ _MIGRATIONS: tuple[str, ...] = (
         PRIMARY KEY (provider, day)
     );
     """,
+    # Durable human approvals; only a live in-process waiter can consume a decision.
+    """
+    CREATE TABLE IF NOT EXISTS approval_tickets (
+        id TEXT PRIMARY KEY,
+        ticket TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending','approved','denied','expired')),
+        expires_at TEXT NOT NULL,
+        decision_key TEXT UNIQUE,
+        decision_value TEXT,
+        decision_code TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_approval_pending ON approval_tickets(status, expires_at);
+    """,
+    # Namespaced live execution owners. Expiry bounds crash recovery, not run length.
+    """
+    CREATE TABLE IF NOT EXISTS runtime_execution_leases (
+        resource_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        lease_until TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_runtime_lease_expiry ON runtime_execution_leases(lease_until);
+    """,
 )
 
 

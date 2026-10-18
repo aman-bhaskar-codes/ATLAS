@@ -57,10 +57,10 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: "RESEARCH",
+    title: "PLATFORMS",
     items: [
       { href: "/research", label: "Research", icon: FlaskConical },
-      { href: "/workspaces", label: "Workspaces", icon: LayoutGrid },
+      { href: "/workspaces", label: "IDE", icon: LayoutGrid },
     ],
   },
   {
@@ -78,6 +78,7 @@ const GROUPS: NavGroup[] = [
       { href: "/providers", label: "Providers", icon: Zap },
       { href: "/cost", label: "Cost", icon: DollarSign },
       { href: "/tools", label: "Tools", icon: Wrench },
+      { href: "/mcp", label: "MCP", icon: Boxes },
       { href: "/models", label: "Models", icon: Cpu },
       { href: "/schedules", label: "Schedules", icon: CalendarClock },
       { href: "/settings", label: "Settings", icon: Settings2 },

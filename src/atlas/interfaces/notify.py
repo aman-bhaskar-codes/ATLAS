@@ -9,6 +9,7 @@ Tier-2 action. Timeout resolves to DENY (fail-closed).
 from __future__ import annotations
 
 import asyncio
+import re
 import secrets
 import sys
 from typing import Protocol
@@ -18,7 +19,7 @@ import httpx
 from atlas.infra.errors import AtlasError
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
-from atlas.infra.types import SafetyDecision, ToolRequest
+from atlas.infra.types import SafetyDecision, Tier, ToolRequest
 
 _log = get_logger("atlas.notify")
 
@@ -120,6 +121,14 @@ class CliConfirmer:
     async def confirm(self, prompt: str, decision: SafetyDecision, req: ToolRequest) -> bool:
         if self._allow_stdin:
             print(prompt)
+            if decision.tier >= Tier.BLOCK:
+                return False
+            if decision.tier >= Tier.DANGEROUS:
+                codes = re.findall(r"Type confirmation code \[([0-9]{4})\] to proceed\.", prompt)
+                if not codes:
+                    return False
+                answer = await asyncio.to_thread(input, "confirmation code: ")
+                return secrets.compare_digest(answer.strip().encode(), codes[-1].encode())
             answer = await asyncio.to_thread(input, "approve? [y/N] ")
             return answer.strip().lower() in {"y", "yes"}
         _log.warning(

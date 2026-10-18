@@ -84,6 +84,7 @@ class MessageBus:
         self._db = db
         self._subs: dict[str, list[Handler]] = defaultdict(list)
         self._global_subs: list[Callable[[str, str], Awaitable[None]]] = []
+        self._identified_global_subs: list[Callable[[str, str, str], Awaitable[None]]] = []
         self._closed = False
         self._wake_event = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
@@ -104,6 +105,10 @@ class MessageBus:
     def subscribe_global(self, handler: Callable[[str, str], Awaitable[None]]) -> None:
         """Subscribe to all events (topic, payload_json) independent of specific typing."""
         self._global_subs.append(handler)
+
+    def subscribe_global_with_id(self, handler: Callable[[str, str, str], Awaitable[None]]) -> None:
+        """Subscribe with the durable event ID, which is stable across retries."""
+        self._identified_global_subs.append(handler)
 
     async def publish(self, topic: str, event: Event) -> None:
         if self._closed:
@@ -171,11 +176,10 @@ class MessageBus:
             try:
                 if self._closed:
                     break
-                cur = await self._db.conn.execute(
+                rows = await self._db.conn.execute_fetchall(
                     "SELECT id, type, payload FROM events "
                     "WHERE delivery_status = 'pending' ORDER BY occurred_at ASC LIMIT 50"
                 )
-                rows = await cur.fetchall()
 
                 if not rows:
                     self._wake_event.clear()
@@ -226,9 +230,10 @@ class MessageBus:
                                 handler_error = True
 
                     # Global subscribers
-                    if self._global_subs:
+                    if self._global_subs or self._identified_global_subs:
                         global_results = await asyncio.gather(
                             *(g(topic, payload_json) for g in self._global_subs),
+                            *(g(topic, payload_json, str(eid)) for g in self._identified_global_subs),
                             return_exceptions=True,
                         )
                         for res in global_results:
@@ -243,6 +248,7 @@ class MessageBus:
                         # Check if we've exceeded max retries
                         cur = await self._db.conn.execute("SELECT attempt_count FROM events WHERE id = ?", (eid,))
                         attempt_row: Row | None = await cur.fetchone()
+                        await cur.close()
                         attempts = attempt_row["attempt_count"] if attempt_row is not None else 1
                         if attempts >= _MAX_DELIVERY_ATTEMPTS:
                             dead_letter_ids.append(("max retries exceeded", eid))
@@ -310,8 +316,9 @@ class MessageBus:
         cur = await self._db.conn.execute(
             "UPDATE events SET delivery_status = 'pending' WHERE delivery_status = 'in_flight'",
         )
-        await self._db.conn.commit()
         recovered = cur.rowcount or 0
+        await cur.close()
+        await self._db.conn.commit()
         if recovered:
             _log.info("bus.recovered_in_flight", event_type="bus", count=recovered)
         return recovered
@@ -326,6 +333,7 @@ class MessageBus:
             (event_id,),
         )
         row = await cur.fetchone()
+        await cur.close()
         if row is None:
             return None
         await self._db.conn.execute(

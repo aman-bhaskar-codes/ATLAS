@@ -10,11 +10,19 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from atlas.infra.cognition import ModelTier
 from atlas.infra.ids import CorrelationId
-from atlas.infra.types import CostClass, CostPolicy, NetworkPolicy, PrivacyClass, ProviderToolCall, ToolCallSpec
+from atlas.infra.types import (
+    CostClass,
+    CostPolicy,
+    ImageInput,
+    NetworkPolicy,
+    PrivacyClass,
+    ProviderToolCall,
+    ToolCallSpec,
+)
 from atlas.intelligence.capabilities import CapabilitySet
 
 
@@ -45,6 +53,7 @@ class Message(BaseModel):
     tool_calls: tuple[ProviderToolCall, ...] = ()  # set on ASSISTANT turns that chose tools
     tool_call_id: str | None = None  # set on TOOL turns: which call this answers
     name: str | None = None  # set on TOOL turns: the tool's name
+    images: tuple[ImageInput, ...] = ()
 
 
 class Usage(BaseModel):
@@ -82,6 +91,9 @@ class ModelSpec(BaseModel):
     reliability_score: float = 1.0  # 0..1 updated by health monitor
     preferred_tasks: tuple[str, ...] = ()
     enabled: bool = True
+    # Explicit operator binding for a locally served, verified trained adapter.
+    # No registry entry or serving deployment is created by dataset preparation.
+    artifact_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 class Constraints(BaseModel):
@@ -110,6 +122,7 @@ class Constraints(BaseModel):
     require_streaming: bool = False
     prefer_local: bool = False
     pinned_model: str | None = None  # explicit override (still budget/health checked)
+    require_pinned_model: bool = False  # evaluation must fail rather than substitute another model
     # Zero-cost-first policy fields
     cost_policy: CostPolicy = CostPolicy.UNRESTRICTED
     network_policy: NetworkPolicy = NetworkPolicy.UNRESTRICTED

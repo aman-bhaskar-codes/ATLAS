@@ -22,8 +22,18 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol, runtime_checkable
 
-from atlas.infra.backends import PostgresConnection
+from atlas.infra.backends import PostgresConnection, SQLiteConnection
 from atlas.infra.db import Database
+from atlas.infra.execution_lease import (
+    ORPHAN_GUARD,
+    OWNER_GUARD,
+    POSTGRES_ORPHAN_CTE,
+    POSTGRES_ORPHAN_GUARD,
+    POSTGRES_OWNER_GUARD,
+    ExecutionLeaseStore,
+    OwnershipLostError,
+    guarded_upsert,
+)
 from atlas.infra.logging import get_logger
 from atlas.orchestration.research.records import ResearchEvent, ResearchSessionRecord
 
@@ -100,7 +110,20 @@ class ResearchSessionStore(Protocol):
 
     async def delete_session(self, session_id: str) -> None: ...
 
+    async def running_sessions(self) -> tuple[ResearchSessionRecord, ...]: ...
+
+    @property
+    def leases(self) -> ExecutionLeaseStore: ...
+
+    async def save_owned(self, record: ResearchSessionRecord, owner_id: str, *, now: str) -> None: ...
+
+    async def settle_orphan(self, before: ResearchSessionRecord, after: ResearchSessionRecord, *, now: str) -> bool: ...
+
     async def append_event(self, session_id: str, phase: str, payload: dict[str, Any], *, ts: str) -> ResearchEvent: ...
+
+    async def append_owned_event(
+        self, session_id: str, phase: str, payload: dict[str, Any], owner_id: str, *, ts: str
+    ) -> ResearchEvent: ...
 
     async def list_events(
         self, session_id: str, *, after_sequence: int = 0, limit: int = 1000
@@ -114,6 +137,40 @@ class SqliteResearchSessionStore:
 
     def __init__(self, db: Database) -> None:
         self._db = db
+
+    @property
+    def leases(self) -> ExecutionLeaseStore:
+        return ExecutionLeaseStore(SQLiteConnection(self._db.conn))
+
+    async def save_owned(self, record: ResearchSessionRecord, owner_id: str, *, now: str) -> None:
+        guard = ("research:" + record.session_id, owner_id, now)
+        cur = await self._db.conn.execute(guarded_upsert(_UPSERT), (*_params(record), *guard, *guard))
+        await self._db.conn.commit()
+        if cur.rowcount != 1:
+            raise OwnershipLostError(f"research session {record.session_id!r} no longer owned")
+
+    async def settle_orphan(self, before: ResearchSessionRecord, after: ResearchSessionRecord, *, now: str) -> bool:
+        cur = await self._db.conn.execute(
+            "SELECT payload FROM research_query_sessions WHERE session_id=?", (before.session_id,)
+        )
+        row = await cur.fetchone()
+        if row is None or ResearchSessionRecord.model_validate_json(row["payload"]) != before:
+            return False
+        cur = await self._db.conn.execute(
+            "UPDATE research_query_sessions SET status=?,payload=?,updated_ts=? "
+            "WHERE session_id=? AND status='running' AND payload=? AND " + ORPHAN_GUARD,
+            (
+                after.status,
+                after.model_dump_json(),
+                after.updated_ts,
+                before.session_id,
+                row["payload"],
+                "research:" + before.session_id,
+                now,
+            ),
+        )
+        await self._db.conn.commit()
+        return cur.rowcount == 1
 
     async def save_session(self, record: ResearchSessionRecord) -> None:
         await self._db.conn.execute(_UPSERT, _params(record))
@@ -136,6 +193,10 @@ class SqliteResearchSessionStore:
         rows = await cur.fetchall()
         return tuple(ResearchSessionRecord.model_validate_json(r["payload"]) for r in rows)
 
+    async def running_sessions(self) -> tuple[ResearchSessionRecord, ...]:
+        cur = await self._db.conn.execute("SELECT payload FROM research_query_sessions WHERE status='running'")
+        return tuple(ResearchSessionRecord.model_validate_json(row["payload"]) for row in await cur.fetchall())
+
     async def delete_session(self, session_id: str) -> None:
         await self._db.conn.execute("DELETE FROM research_query_sessions WHERE session_id=?", (session_id,))
         await self._db.conn.commit()
@@ -145,6 +206,20 @@ class SqliteResearchSessionStore:
         cur = await self._db.conn.execute(_INSERT_EVENT, (session_id, phase, json.dumps(payload), ts))
         await self._db.conn.commit()
         # AUTOINCREMENT sequence assigned by SQLite — the SSE cursor / Last-Event-ID key.
+        return ResearchEvent(
+            sequence=int(cur.lastrowid or 0), session_id=session_id, phase=phase, payload=payload, ts=ts
+        )
+
+    async def append_owned_event(
+        self, session_id: str, phase: str, payload: dict[str, Any], owner_id: str, *, ts: str
+    ) -> ResearchEvent:
+        sql = _INSERT_EVENT.replace("VALUES (?, ?, ?, ?)", "SELECT ?, ?, ?, ? WHERE " + OWNER_GUARD)
+        cur = await self._db.conn.execute(
+            sql, (session_id, phase, json.dumps(payload), ts, "research:" + session_id, owner_id, ts)
+        )
+        await self._db.conn.commit()
+        if cur.rowcount != 1:
+            raise OwnershipLostError(f"research session {session_id!r} no longer owned")
         return ResearchEvent(
             sequence=int(cur.lastrowid or 0), session_id=session_id, phase=phase, payload=payload, ts=ts
         )
@@ -166,6 +241,41 @@ class PostgresResearchSessionStore:
 
     def __init__(self, conn: PostgresConnection) -> None:
         self._conn = conn
+
+    @property
+    def leases(self) -> ExecutionLeaseStore:
+        return ExecutionLeaseStore(self._conn)
+
+    async def save_owned(self, record: ResearchSessionRecord, owner_id: str, *, now: str) -> None:
+        guard = ("research:" + record.session_id, owner_id, now)
+        changed = await self._conn.execute(
+            guarded_upsert(_UPSERT, owner_guard=POSTGRES_OWNER_GUARD), (*_params(record), *guard, *guard)
+        )
+        await self._conn.commit()
+        if changed != 1:
+            raise OwnershipLostError(f"research session {record.session_id!r} no longer owned")
+
+    async def settle_orphan(self, before: ResearchSessionRecord, after: ResearchSessionRecord, *, now: str) -> bool:
+        row = await self._conn.fetchone(
+            "SELECT payload FROM research_query_sessions WHERE session_id=?", (before.session_id,)
+        )
+        if row is None or ResearchSessionRecord.model_validate_json(row["payload"]) != before:
+            return False
+        changed = await self._conn.execute(
+            POSTGRES_ORPHAN_CTE + "UPDATE research_query_sessions SET status=?,payload=?,updated_ts=? "
+            "WHERE session_id=? AND status='running' AND payload=? AND " + POSTGRES_ORPHAN_GUARD,
+            (
+                "research:" + before.session_id,
+                after.status,
+                after.model_dump_json(),
+                after.updated_ts,
+                before.session_id,
+                row["payload"],
+                now,
+            ),
+        )
+        await self._conn.commit()
+        return changed == 1
 
     async def save_session(self, record: ResearchSessionRecord) -> None:
         await self._conn.execute(_UPSERT, _params(record))
@@ -190,6 +300,10 @@ class PostgresResearchSessionStore:
         )
         return tuple(ResearchSessionRecord.model_validate_json(r["payload"]) for r in rows)
 
+    async def running_sessions(self) -> tuple[ResearchSessionRecord, ...]:
+        rows = await self._conn.fetchall("SELECT payload FROM research_query_sessions WHERE status='running'")
+        return tuple(ResearchSessionRecord.model_validate_json(row["payload"]) for row in rows)
+
     async def delete_session(self, session_id: str) -> None:
         await self._conn.execute("DELETE FROM research_query_sessions WHERE session_id=?", (session_id,))
         await self._conn.commit()
@@ -204,6 +318,19 @@ class PostgresResearchSessionStore:
         sequence = int(row["sequence"]) if row is not None else 0
         await self._conn.commit()
         return ResearchEvent(sequence=sequence, session_id=session_id, phase=phase, payload=payload, ts=ts)
+
+    async def append_owned_event(
+        self, session_id: str, phase: str, payload: dict[str, Any], owner_id: str, *, ts: str
+    ) -> ResearchEvent:
+        sql = _INSERT_EVENT.replace("VALUES (?, ?, ?, ?)", "SELECT ?, ?, ?, ? WHERE " + POSTGRES_OWNER_GUARD)
+        row = await self._conn.fetchone(
+            sql + " RETURNING sequence",
+            (session_id, phase, json.dumps(payload), ts, "research:" + session_id, owner_id, ts),
+        )
+        await self._conn.commit()
+        if row is None:
+            raise OwnershipLostError(f"research session {session_id!r} no longer owned")
+        return ResearchEvent(sequence=int(row["sequence"]), session_id=session_id, phase=phase, payload=payload, ts=ts)
 
     async def list_events(
         self, session_id: str, *, after_sequence: int = 0, limit: int = 1000

@@ -9,10 +9,23 @@ exclusively in the Safety Engine; this is transport-level identity only.
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, WebSocket, WebSocketException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 _bearer = HTTPBearer(auto_error=False)
+
+# Shared with HTTP CORS: browser handshakes must originate at the dashboard.
+BROWSER_ORIGINS = (
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "http://localhost:3030",
+    "http://127.0.0.1:3030",
+    "http://localhost:3100",
+    "http://127.0.0.1:3100",
+)
+_WS_KEY_PREFIX = "atlas.api-key."
 
 
 class Principal:
@@ -63,7 +76,11 @@ def bearer_token(authorization: str | None) -> str | None:
     return token.strip() or None
 
 
-def resolve_principal(keys: dict[str, str], authorization: str | None) -> Principal | None:
+def resolve_principal(
+    keys: dict[str, str],
+    authorization: str | None,
+    x_api_key: str | None = None,
+) -> Principal | None:
     """Best-effort identity from a raw header. Never raises.
 
     WHY a non-raising variant exists alongside ``require_principal``: the quota
@@ -80,7 +97,7 @@ def resolve_principal(keys: dict[str, str], authorization: str | None) -> Princi
     """
     if not keys:
         return ANONYMOUS_LOCAL  # local mode: no keys configured, open on localhost
-    token = bearer_token(authorization)
+    token = bearer_token(authorization) or (x_api_key.strip() if x_api_key else None)
     if token is None:
         return None
     role = keys.get(token)
@@ -104,12 +121,13 @@ async def require_principal(
         request.state.principal = ANONYMOUS_LOCAL
         return ANONYMOUS_LOCAL
 
-    if credentials is None:
+    token = credentials.credentials if credentials else request.headers.get("x-atlas-api-key")
+    if not token:
         raise HTTPException(401, "authentication required (Bearer API key)")
-    role = keys.get(credentials.credentials)
+    role = keys.get(token)
     if role is None:
         raise HTTPException(401, "invalid API key")
-    principal = Principal(key_id=credentials.credentials[:8], role=role)
+    principal = Principal(key_id=token[:8], role=role)
     request.state.principal = principal
     return principal
 
@@ -118,3 +136,45 @@ async def require_admin(principal: Principal = Depends(require_principal)) -> Pr
     if principal.role != "admin":
         raise HTTPException(403, "read-only key cannot perform mutations")
     return principal
+
+
+async def require_websocket_principal(websocket: WebSocket) -> Principal:
+    """Validate identity and browser Origin before accepting the handshake.
+
+    Native clients use Authorization. Browsers may offer protocols ``atlas``
+    and ``atlas.api-key.<key>``; only ``atlas`` is negotiated, so credentials
+    are never echoed. Query parameters are deliberately not credentials.
+    Missing Origin is valid for native clients. Local mode still checks any
+    supplied Origin because a hostile page can otherwise reach localhost.
+    """
+    origin = websocket.headers.get("origin")
+    if origin is not None and origin not in BROWSER_ORIGINS:
+        raise WebSocketException(code=1008, reason="origin not allowed")
+
+    keys: dict[str, str] = getattr(websocket.app.state, "api_keys", {})
+    authorization = websocket.headers.get("authorization")
+    if authorization is None:
+        tokens = [
+            protocol.removeprefix(_WS_KEY_PREFIX)
+            for protocol in websocket.scope.get("subprotocols", [])
+            if protocol.startswith(_WS_KEY_PREFIX)
+        ]
+        if len(tokens) == 1:
+            authorization = f"Bearer {tokens[0]}"
+    principal = resolve_principal(keys, authorization)
+    if principal is None:
+        raise WebSocketException(code=1008, reason="authentication required")
+    websocket.state.principal = principal
+    return principal
+
+
+async def require_websocket_admin(websocket: WebSocket) -> Principal:
+    principal = await require_websocket_principal(websocket)
+    if principal.role != "admin":
+        raise WebSocketException(code=1008, reason="read-only key cannot perform mutations")
+    return principal
+
+
+def websocket_subprotocol(websocket: WebSocket) -> str | None:
+    """Select only the public protocol; never negotiate credential material."""
+    return "atlas" if "atlas" in websocket.scope.get("subprotocols", []) else None

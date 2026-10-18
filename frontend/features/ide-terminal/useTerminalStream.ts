@@ -14,6 +14,7 @@
 // are deduped by their globally-unique seq, so both the browser's own
 // `Last-Event-ID` replay and a fresh per-command stream are idempotent.
 
+import { AtlasEventStream } from "../../lib/api/stream";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TerminalChunkSchema, TerminalExitSchema, type TerminalExit } from "./contracts";
 
@@ -85,7 +86,7 @@ export function useTerminalStream(
     const url =
       `${API_BASE}/ide/workspaces/${encodeURIComponent(workspaceId)}` +
       `/terminal/${encodeURIComponent(terminalId)}/stream?after=${afterSeq}`;
-    const source = new EventSource(url);
+    const source = new AtlasEventStream(url);
     let closedByUs = false;
 
     const bumpSeq = (seq: number) => {
@@ -134,8 +135,8 @@ export function useTerminalStream(
       setStatus("closed");
     });
 
-    source.onerror = () => {
-      if (!closedByUs) setStatus("reconnecting");
+    source.onerror = ({ retrying }) => {
+      if (!closedByUs) setStatus(retrying ? "reconnecting" : "closed");
     };
 
     return () => {

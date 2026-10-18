@@ -101,6 +101,7 @@ class ResearchCitation(BaseModel):
     title: str = ""
     uri: str = ""
     quote: str = ""
+    location: str = ""
 
 
 class ResearchSource(BaseModel):
@@ -212,6 +213,7 @@ def _citations(payload: dict[str, Any]) -> tuple[ResearchCitation, ...]:
             title=str(c.get("title", "") or ""),
             uri=str(c.get("uri", "") or ""),
             quote=str(c.get("quote", "") or ""),
+            location=str(c.get("location", "") or "")[:200],
         )
         for i, c in enumerate(payload.get("citations", []) or [])
         if isinstance(c, dict)

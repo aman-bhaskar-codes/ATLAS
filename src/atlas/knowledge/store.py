@@ -95,22 +95,70 @@ class FabricStore:
             )
         await self._db.conn.commit()
 
-    async def find_document_by_hash(self, content_hash: str) -> KnowledgeDocument | None:
+    async def find_document_by_hash(
+        self, content_hash: str, *, source_type: SourceType | None = None
+    ) -> KnowledgeDocument | None:
         cur = await self._db.conn.execute(
-            "SELECT * FROM fabric_documents WHERE content_hash = ? LIMIT 1", (content_hash,)
+            """SELECT * FROM fabric_documents WHERE content_hash = ? AND status = 'READY'
+               AND (? IS NULL OR source_type = ?) LIMIT 1""",
+            (content_hash, source_type.value if source_type else None, source_type.value if source_type else None),
         )
         row = await cur.fetchone()
         return _row_to_document(row) if row else None
+
+    async def update_document_provenance(self, document_id: str, provenance: dict[str, Any]) -> None:
+        await self._db.conn.execute(
+            "UPDATE fabric_documents SET provenance_json = ? WHERE document_id = ?",
+            (json.dumps(provenance), document_id),
+        )
+        await self._db.conn.commit()
 
     async def get_document(self, document_id: str) -> KnowledgeDocument | None:
         cur = await self._db.conn.execute("SELECT * FROM fabric_documents WHERE document_id = ?", (document_id,))
         row = await cur.fetchone()
         return _row_to_document(row) if row else None
 
-    async def list_documents(self, limit: int = 50) -> list[KnowledgeDocument]:
-        cur = await self._db.conn.execute("SELECT * FROM fabric_documents ORDER BY retrieved_at DESC LIMIT ?", (limit,))
+    async def list_documents(self, limit: int = 50, offset: int = 0) -> list[KnowledgeDocument]:
+        cur = await self._db.conn.execute(
+            "SELECT * FROM fabric_documents ORDER BY retrieved_at DESC LIMIT ? OFFSET ?", (limit, offset)
+        )
         rows = await cur.fetchall()
         return [d for r in rows if (d := _row_to_document(r)) is not None]
+
+    async def documents_needing_embedding_space(self, space: str, *, limit: int) -> list[KnowledgeDocument]:
+        cur = await self._db.conn.execute(
+            """SELECT * FROM fabric_documents d WHERE status = 'READY' AND security_status != 'BLOCKED'
+               AND (COALESCE(json_extract(metadata_json, '$.embedding_space'), '') != ?
+                    OR EXISTS(SELECT 1 FROM fabric_chunks c WHERE c.document_id = d.document_id
+                              AND c.embedding_id IS NULL))
+               ORDER BY retrieved_at LIMIT ?""",
+            (space, limit),
+        )
+        return [d for row in await cur.fetchall() if (d := _row_to_document(row)) is not None]
+
+    async def chunks_for_document(self, document_id: str) -> list[FabricChunk]:
+        cur = await self._db.conn.execute(
+            "SELECT * FROM fabric_chunks WHERE document_id = ? ORDER BY chunk_index LIMIT 400",
+            (document_id,),
+        )
+        return [FabricChunk(**dict(row)) for row in await cur.fetchall()]
+
+    async def update_document_embeddings(
+        self,
+        doc: KnowledgeDocument,
+        refs: list[tuple[str, str]],
+        space: str,
+    ) -> None:
+        for chunk_id, ref in refs:
+            await self._db.conn.execute(
+                "UPDATE fabric_chunks SET embedding_id = ? WHERE chunk_id = ? AND document_id = ?",
+                (ref, chunk_id, doc.document_id),
+            )
+        await self._db.conn.execute(
+            "UPDATE fabric_documents SET metadata_json = ? WHERE document_id = ?",
+            (json.dumps({**doc.metadata, "embedding_space": space}), doc.document_id),
+        )
+        await self._db.conn.commit()
 
     async def delete_document(self, document_id: str) -> None:
         await self._db.conn.execute("DELETE FROM fabric_documents WHERE document_id = ?", (document_id,))

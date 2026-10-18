@@ -1,13 +1,12 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AtlasEventStream } from "../../lib/api/stream";
 import { atlasApi } from "../../lib/api/client";
 import { TaskEventSchema, isTerminal, type ConnectionState, type TaskEvent } from "../../lib/api/contracts";
 import { reconcile } from "./reconcile";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_ATLAS_API_URL ?? "http://localhost:8730/api/v1";
-
-const BACKOFF_DELAYS = [500, 1000, 2000, 4000, 8000, 10_000] as const;
 
 interface UseTaskEventsResult {
   events: TaskEvent[];
@@ -27,15 +26,13 @@ export function useTaskEvents(
   const [hasGap, setHasGap] = useState(false);
 
   const eventsRef = useRef<TaskEvent[]>([]);
-  const lastSeqRef = useRef<number>(0);
-  const backoffRef = useRef<number>(0);
   const stoppedRef = useRef<boolean>(false);
-  const sourceRef = useRef<EventSource | null>(null);
+  const sourceRef = useRef<AtlasEventStream | null>(null);
+  const generationRef = useRef(0);
 
   const updateEvents = useCallback((incoming: TaskEvent[]) => {
     const result = reconcile(eventsRef.current, incoming);
     eventsRef.current = result.events;
-    lastSeqRef.current = result.lastSequence;
     setEvents([...result.events]);
     setHasGap(result.hasGap);
     setLastSyncedAt(new Date().toISOString());
@@ -44,10 +41,12 @@ export function useTaskEvents(
   const resync = useCallback(async () => {
     if (!taskId) return;
     try {
+      const generation = generationRef.current;
       const fresh = await atlasApi.taskEvents(taskId, 0);
+      if (generation !== generationRef.current || stoppedRef.current) return;
       eventsRef.current = [];
       updateEvents(fresh);
-      setTimeout(() => setHasGap(false), 0);
+      setHasGap(false);
     } catch {
       // resync failure is non-fatal — keep existing events
     }
@@ -55,19 +54,16 @@ export function useTaskEvents(
 
   const connect = useCallback(() => {
     if (!taskId || stoppedRef.current) return;
-    if (taskState && isTerminal(taskState)) {
-      setTimeout(() => setConnection("offline"), 0);
-      return;
-    }
+    if (taskState && isTerminal(taskState)) return;
 
     const url = `${API_BASE}/tasks/${encodeURIComponent(taskId)}/events/stream`;
 
-    const source = new EventSource(url);
+    sourceRef.current?.close();
+    const source = new AtlasEventStream(url);
     sourceRef.current = source;
 
     source.onopen = () => {
       setConnection("connected");
-      backoffRef.current = 0;
     };
 
     source.addEventListener("task_event", (e: MessageEvent) => {
@@ -88,28 +84,17 @@ export function useTaskEvents(
       setLastSyncedAt(new Date().toISOString());
     });
 
-    source.onerror = () => {
-      source.close();
-      sourceRef.current = null;
+    source.onerror = ({ retrying }) => {
       if (stoppedRef.current) return;
-      setConnection("reconnecting");
-      const delay =
-        BACKOFF_DELAYS[Math.min(backoffRef.current, BACKOFF_DELAYS.length - 1)];
-      backoffRef.current += 1;
-      window.setTimeout(() => {
-        if (!stoppedRef.current) {
-          /* eslint-disable */
-          connect();
-          /* eslint-enable */
-        }
-      }, delay);
+      setConnection(retrying ? "reconnecting" : "offline");
     };
   }, [taskId, taskState, updateEvents]);
 
   // Gap recovery: when a gap is detected, refetch everything
   useEffect(() => {
     if (hasGap) {
-      setTimeout(() => { void resync(); }, 0);
+      const timer = setTimeout(() => { void resync(); }, 0);
+      return () => clearTimeout(timer);
     }
   }, [hasGap, resync]);
 
@@ -117,7 +102,10 @@ export function useTaskEvents(
   useEffect(() => {
     const handler = () => {
       if (!document.hidden && connection !== "connected" && taskId && taskState && !isTerminal(taskState)) {
-        void resync().then(() => connect());
+        const generation = generationRef.current;
+        void resync().then(() => {
+          if (!stoppedRef.current && generation === generationRef.current) connect();
+        });
       }
     };
     document.addEventListener("visibilitychange", handler);
@@ -128,23 +116,25 @@ export function useTaskEvents(
     if (!taskId) return;
     stoppedRef.current = false;
     eventsRef.current = [];
-    lastSeqRef.current = 0;
-    backoffRef.current = 0;
+    generationRef.current += 1;
 
     if (taskState && isTerminal(taskState)) {
       // Task already terminal — just fetch the history, no SSE needed
-      atlasApi.taskEvents(taskId).then(updateEvents).catch(() => {});
-      setTimeout(() => setConnection("offline"), 0);
-      return;
+      const generation = generationRef.current;
+      atlasApi.taskEvents(taskId).then((fresh) => {
+        if (!stoppedRef.current && generation === generationRef.current) updateEvents(fresh);
+      }).catch(() => {});
+      const timer = setTimeout(() => setConnection("offline"), 0);
+      return () => { clearTimeout(timer); stoppedRef.current = true; generationRef.current += 1; };
     }
 
     connect();
 
     return () => {
       stoppedRef.current = true;
+      generationRef.current += 1;
       sourceRef.current?.close();
       sourceRef.current = null;
-      setTimeout(() => setConnection("offline"), 0);
     };
   }, [taskId, taskState, connect, updateEvents]); 
 

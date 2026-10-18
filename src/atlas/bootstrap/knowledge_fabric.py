@@ -101,9 +101,10 @@ async def build_knowledge_fabric(
     # runner can only re-read an already-warm index, so a genuinely new
     # question returns nothing.
     live_bridge = LiveBridge(providers or [], pipeline)
+    reranker = FeatureReranker()
     fabric = KnowledgeFabric(
         retriever=hybrid,
-        reranker=FeatureReranker(),
+        reranker=reranker,
         selector=EvidenceSelector(ids, clock),
         contradictions=ContradictionDetector(),
         claims=ClaimExtractor(),
@@ -118,7 +119,9 @@ async def build_knowledge_fabric(
     )
     # The research runner executes ONE bounded round; the supervisor drives the
     # multi-round loop above it (resume, cross-round budget + stop adjudication).
-    research = ResearchRunner(hybrid, store, ids, clock, discovery=live_bridge if providers else None)
+    research = ResearchRunner(
+        hybrid, store, ids, clock, reranker=reranker, discovery=live_bridge if providers else None
+    )
     components = KnowledgeFabricComponents(
         fabric=fabric,
         pipeline=pipeline,

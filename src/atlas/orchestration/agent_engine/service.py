@@ -23,7 +23,8 @@ import asyncio
 from collections.abc import Sequence
 
 from atlas.infra.clock import Clock
-from atlas.infra.ids import CorrelationId, IdGenerator
+from atlas.infra.execution_lease import lease_times
+from atlas.infra.ids import CorrelationId, IdGenerator, UuidGenerator
 from atlas.infra.logging import get_logger
 from atlas.infra.types import ToolCallSpec
 from atlas.intelligence.contracts import Message
@@ -32,10 +33,9 @@ from atlas.orchestration.agent_engine.engine import AgentEngine, SupportsDispatc
 from atlas.orchestration.agent_engine.event_reader import AgentEventReader, AgentRunEvent
 from atlas.orchestration.agent_engine.persistence import AgentRunStore
 from atlas.orchestration.agent_engine.records import (
-    AgentEngineResult,
+    AgentCheckpoint,
     AgentRunRecord,
     RunStatus,
-    StopReason,
 )
 from atlas.orchestration.events import EventPublisher
 from atlas.orchestration.limits import ExecutionLimits
@@ -82,6 +82,9 @@ class AgentRunService:
         system_prompt: str = DEFAULT_AGENT_SYSTEM_PROMPT,
         max_tools: int = 8,
         max_output_tokens: int = 2048,
+        lease_ttl_s: float = 30.0,
+        lease_renewal_s: float = 5.0,
+        shutdown_timeout_s: float = 5.0,
     ) -> None:
         self._router = tool_router
         self._store = store
@@ -91,13 +94,98 @@ class AgentRunService:
         self._system_prompt = system_prompt
         self._max_tools = max_tools
         self._max_output_tokens = max_output_tokens
+        self._owner_id = str(UuidGenerator().execution_id())
+        self._lease_ttl_s = lease_ttl_s
+        self._lease_renewal_s = lease_renewal_s
+        self._shutdown_timeout_s = shutdown_timeout_s
+        self._closed = False
+        self._recovery_task: asyncio.Task[None] | None = None
         # The loop is stateless across runs (each run() builds its own LimitCounter),
         # so one engine instance is safe to reuse for every request.
         self._engine = AgentEngine(gateway=gateway, dispatcher=dispatcher, publisher=publisher, limits=limits)
         # In-flight background runs: run_id -> its executing task. A run sits here only
         # between start_run_background() and its terminal persistence; the task's
         # done-callback evicts it. Lets the surface await/report live runs (M2.2).
-        self._inflight: dict[str, asyncio.Task[None]] = {}
+        self._inflight: dict[str, asyncio.Task[object]] = {}
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise AgentRunError("agent run service is closed")
+
+    def _ownership_lost(self) -> None:
+        self._closed = True
+        for task in self._inflight.values():
+            task.cancel()
+
+    def _background_done(self, run_id: str, task: asyncio.Task[object]) -> None:
+        if self._inflight.get(run_id) is task:
+            self._inflight.pop(run_id, None)
+        if not task.cancelled() and (error := task.exception()) is not None:
+            _log.error("agent.background_failed", run_id=run_id, error=str(error))
+
+    async def recover_interrupted(self) -> int:
+        """Settle orphaned runs without replaying potentially completed side effects."""
+        recovered = 0
+        watch_needed = False
+        for record in await self._store.running_runs():
+            live = self._inflight.get(record.run_id)
+            if live is not None and not live.done():
+                continue
+            message = (
+                "Execution interrupted; outcomes unknown. Inspect the workspace and verify before retrying actions."
+            )
+            checkpoint = record.checkpoint
+            if record.result is not None and not checkpoint.steps:
+                checkpoint = AgentCheckpoint.model_validate(record.result.model_dump())
+            result = checkpoint.interrupted_result(message)
+            after = record.model_copy(
+                update={
+                    "status": RunStatus.ERROR.value,
+                    "result": result,
+                    "updated_ts": self._clock.now().isoformat(),
+                    "checkpoint": AgentCheckpoint.model_validate(result.model_dump()),
+                }
+            )
+            try:
+                now = self._clock.now().isoformat()
+                if await self._store.settle_orphan(record, after, now=now):
+                    recovered += 1
+                elif await self._store.leases.is_live("agent:" + record.run_id, now=now):
+                    watch_needed = True
+            except Exception:
+                _log.exception("agent.recovery_failed", run_id=record.run_id)
+                watch_needed = True
+        if watch_needed and self._recovery_task is None and not self._closed:
+            self._recovery_task = asyncio.create_task(self._recover_expired())
+        return recovered
+
+    async def _recover_expired(self) -> None:
+        try:
+            while not self._closed:
+                await asyncio.sleep(self._lease_renewal_s)
+                try:
+                    await self.recover_interrupted()
+                    if not await self._store.running_runs():
+                        break
+                except Exception:
+                    _log.exception("agent.recovery_monitor_failed")
+        finally:
+            self._recovery_task = None
+
+    async def close(self) -> None:
+        self._closed = True
+        tasks = tuple(task for task in self._inflight.values() if task is not asyncio.current_task())
+        if self._recovery_task is not None:
+            tasks += (self._recovery_task,)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.wait(tasks, timeout=self._shutdown_timeout_s)
+        try:
+            async with asyncio.timeout(self._shutdown_timeout_s):
+                await self.recover_interrupted()
+        except Exception:
+            _log.exception("agent.close_recovery_failed")
 
     async def start_run(
         self,
@@ -114,6 +202,7 @@ class AgentRunService:
         Always returns a record: the engine never raises — a limit/error terminates
         the run gracefully into a record whose ``status`` reflects the stop reason.
         """
+        self._ensure_open()
         run_id = str(self._ids.execution_id())
         cid = self._ids.correlation_id()
         seed = seed_messages(self._system_prompt, request)
@@ -146,6 +235,7 @@ class AgentRunService:
         and the SAME SafetyEngine funnel as ``start_run`` — backgrounding changes
         WHEN the work runs, never HOW it is governed.
         """
+        self._ensure_open()
         run_id = str(self._ids.execution_id())
         cid = self._ids.correlation_id()
         seed = seed_messages(self._system_prompt, request)
@@ -166,7 +256,16 @@ class AgentRunService:
             created_ts=now,
             updated_ts=now,
         )
-        await self._store.save_run(stub)
+        lease_now, until = lease_times(self._clock, self._lease_ttl_s)
+        if not await self._store.leases.claim("agent:" + run_id, self._owner_id, now=lease_now, lease_until=until):
+            raise AgentRunError("agent run already has a live owner")
+        try:
+            self._ensure_open()
+            await self._store.save_owned(stub, self._owner_id, now=self._clock.now().isoformat())
+            self._ensure_open()
+        except BaseException:
+            await self._store.leases.release("agent:" + run_id, self._owner_id)
+            raise
         # Governed loop runs on a detached task; the stub is already persisted, so
         # the run is addressable/streamable the instant we return. The done-callback
         # evicts the entry — _execute_and_persist guarantees a terminal record lands
@@ -186,7 +285,7 @@ class AgentRunService:
             )
         )
         self._inflight[run_id] = task
-        task.add_done_callback(lambda _t: self._inflight.pop(run_id, None))
+        task.add_done_callback(lambda task: self._background_done(run_id, task))
         return stub
 
     async def continue_run(self, run_id: str, request: str, *, max_tools: int | None = None) -> AgentRunRecord:
@@ -199,6 +298,7 @@ class AgentRunService:
         carries ``parent_run_id`` for lineage and inherits the parent's workspace/
         session binding.
         """
+        self._ensure_open()
         prior = await self._store.load_run(run_id)
         if prior is None:
             raise AgentRunError(f"cannot continue unknown run {run_id!r}")
@@ -271,15 +371,6 @@ class AgentRunService:
         parent_run_id: str | None,
         created_ts: str | None = None,
     ) -> AgentRunRecord:
-        # task_id == run_id: the engine keys its lifecycle/tool events on it, so a
-        # run's event stream and persisted task_events group under the run itself.
-        result = await self._engine.run(
-            correlation_id=correlation_id,
-            messages=messages,
-            tools=tools,
-            task_id=run_id,
-            max_tokens=self._max_output_tokens,
-        )
         now = self._clock.now().isoformat()
         record = AgentRunRecord(
             run_id=run_id,
@@ -291,12 +382,71 @@ class AgentRunService:
             request=request,
             tool_names=tuple(spec.name for spec in tools),
             seed_messages=tuple(seed_for_record),
-            result=result,
             created_ts=created_ts or now,
             updated_ts=now,
         )
-        await self._store.save_run(record)
-        return record
+        worker = asyncio.current_task()
+        if worker is not None:
+            self._inflight[run_id] = worker
+        try:
+            async with self._store.leases.hold(
+                "agent:" + run_id,
+                self._owner_id,
+                clock=self._clock,
+                ttl_s=self._lease_ttl_s,
+                renewal_s=self._lease_renewal_s,
+                on_lost=self._ownership_lost,
+            ):
+                self._ensure_open()
+                await self._store.save_owned(record, self._owner_id, now=self._clock.now().isoformat())
+
+                async def checkpoint(snapshot: AgentCheckpoint) -> None:
+                    nonlocal record
+                    self._ensure_open()
+                    record = record.model_copy(
+                        update={"checkpoint": snapshot, "updated_ts": self._clock.now().isoformat()}
+                    )
+                    await self._store.save_owned(record, self._owner_id, now=self._clock.now().isoformat())
+
+                cancelled = False
+                try:
+                    result = await self._engine.run(
+                        correlation_id=correlation_id,
+                        messages=messages,
+                        tools=tools,
+                        task_id=run_id,
+                        max_tokens=self._max_output_tokens,
+                        checkpoint=checkpoint,
+                    )
+                except asyncio.CancelledError:
+                    cancelled = True
+                    result = record.checkpoint.interrupted_result(
+                        "Execution interrupted; outcomes unknown. "
+                        "Inspect the workspace and verify before retrying actions."
+                    )
+                except Exception as exc:
+                    result = record.checkpoint.interrupted_result(str(exc))
+                record = record.model_copy(
+                    update={
+                        "result": result,
+                        "status": result.stop_reason.value,
+                        "checkpoint": AgentCheckpoint.model_validate(result.model_dump()),
+                        "updated_ts": self._clock.now().isoformat(),
+                    }
+                )
+                try:
+                    async with asyncio.timeout(self._shutdown_timeout_s):
+                        await self._store.save_owned(record, self._owner_id, now=self._clock.now().isoformat())
+                except Exception:
+                    if not cancelled:
+                        raise
+                    _log.exception("agent.cancel_checkpoint_failed", run_id=run_id)
+                if cancelled:
+                    raise asyncio.CancelledError
+                return record
+        finally:
+            if self._inflight.get(run_id) is worker:
+                self._inflight.pop(run_id, None)
 
     async def _execute_and_persist(
         self,
@@ -366,19 +516,13 @@ class AgentRunService:
         crashed before producing a result still lands a terminal record, so
         ``status`` leaves ``running`` and the live stream closes.
         """
-        now = self._clock.now().isoformat()
-        record = AgentRunRecord(
-            run_id=run_id,
-            task_id=run_id,
-            correlation_id=str(correlation_id),
-            workspace_id=workspace_id,
-            session_id=session_id,
-            parent_run_id=parent_run_id,
-            request=request,
-            tool_names=tuple(spec.name for spec in tools),
-            seed_messages=tuple(seed_for_record),
-            result=AgentEngineResult(ok=False, stop_reason=StopReason.ERROR, error=error),
-            created_ts=created_ts,
-            updated_ts=now,
+        # The lease has been released by _run. Compare-and-set recovery preserves
+        # its latest durable trace and cannot overwrite another active owner.
+        record = await self._store.load_run(run_id)
+        if record is None or record.status != RunStatus.RUNNING.value:
+            return
+        result = record.checkpoint.interrupted_result(error)
+        after = record.model_copy(
+            update={"result": result, "status": RunStatus.ERROR.value, "updated_ts": self._clock.now().isoformat()}
         )
-        await self._store.save_run(record)
+        await self._store.settle_orphan(record, after, now=self._clock.now().isoformat())

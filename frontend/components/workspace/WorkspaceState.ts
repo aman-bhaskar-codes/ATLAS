@@ -1,14 +1,15 @@
-import { useReducer, createContext, useContext } from "react";
+import { createContext, useContext } from "react";
 
 export type AttachmentType = "image" | "pdf" | "code" | "markdown" | "file";
 
 export interface Attachment {
-  id: string; // The ID assigned by the backend
+  id: string; // Local queue ID; server references belong to the submission coordinator
   file: File;
   type: AttachmentType;
   previewUrl?: string;
   metadata?: Record<string, unknown>;
-  status: "uploading" | "ready" | "error";
+  status: "queued" | "uploading" | "ready" | "error";
+  error?: string;
   progress?: number;
 }
 
@@ -77,6 +78,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
 export const WorkspaceContext = createContext<{
   state: WorkspaceState;
   dispatch: React.Dispatch<WorkspaceAction>;
+  isPending?: boolean;
 } | null>(null);
 
 export function useWorkspace() {

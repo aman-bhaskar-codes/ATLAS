@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from atlas.infra.errors import ConfigError, ManifestError
@@ -29,29 +29,54 @@ class Settings(BaseSettings):
 
     env: str = "dev"
     data_dir: Path = Path("./.atlas")
-    ollama_host: str = "http://localhost:11434"  # retained for compat; no longer used for models
-    default_model: str = "glm-5.2-free"
-    heavy_model: str = "nemotron-3-ultra-free"
-    # ── Embeddings (same key + base URL as the chat fleet) ────────────
-    # OpenRouter serves an OpenAI-shaped POST /embeddings, so embeddings ride
-    # OPENROUTER_API_KEY like everything else — one key for the whole system.
-    # qwen3-embedding-0.6b is 1024-dim (as bge-m3 was), so existing Chroma
-    # collections stay dimension-compatible. Swap provider by changing
-    # base_url/model + ATLAS_EMBED_API_KEY — no code change required.
-    embed_provider: str = "openrouter"
+    host: str = "127.0.0.1"
+    port: int = 8730
+    strict_bootstrap: bool = False
+    ollama_host: str = Field(
+        default="http://localhost:11434",
+        validation_alias=AliasChoices("ATLAS_OLLAMA_HOST", "OLLAMA_BASE_URL", "ATLAS_OLLAMA_BASE_URL"),
+    )
+    local_model: str = "qwen3:4b"
+    local_context_length: int = Field(default=8192, ge=1024, le=32768)
+    gemini_model: str = "gemini-3.8-flash"
+    primary_cloud_model: str = "gemini/gemini-2.5-flash"
+    primary_local_model: str = "ollama/qwen2.5-coder:7b"
+    embedding_model: str = "ollama/nomic-embed-text"
+    # Gemini has no provider-side zero-price ceiling. Only an explicitly
+    # unbilled project key may participate in a free-only profile.
+    gemini_billing_tier: Literal["free", "paid"] = "paid"
+    default_model: str = "local-qwen3"
+    heavy_model: str = "gemini-flash"
+
+    @field_validator("default_model", "heavy_model", mode="before")
+    @classmethod
+    def migrate_legacy_model_ids(cls, value: Any) -> Any:
+        # These historical labels incorrectly advertised paid models as free.
+        # Preserve identity, never price: catalog/profile policy still excludes
+        # the paid route when only free/local inference is authorized.
+        aliases = {"glm-5.2-free": "glm-5.2", "minimax-m3-free": "minimax-m3"}
+        return aliases.get(value, value) if isinstance(value, str) else value
+
+    # Local BGE-M3 needs no key. Explicit cloud embedding uses the OpenAI
+    # endpoint and OPENROUTER_API_KEY unless an embedding key is configured.
+    # Switching embedding models requires reindexing, even at the same width.
+    embed_provider: str = "ollama"
     embed_base_url: str = "https://openrouter.ai/api/v1"
-    embed_model: str = "qwen/qwen3-embedding-0.6b"
+    embed_model: str = "bge-m3:latest"
+    local_embed_model: str = "bge-m3:latest"
     # Empty -> falls back to openrouter_api_key (see effective_embed_api_key).
     embed_api_key: str = Field(default="", validation_alias="ATLAS_EMBED_API_KEY")
     ntfy_topic: str = ""
     ntfy_callback_base: str = "http://localhost:8730"
     # ── API keys ──────────────────────────────────────────────────────
     anthropic_api_key: str = ""
-    gemini_api_key: str = ""
+    gemini_api_key: str = Field(default="", validation_alias=AliasChoices("ATLAS_GEMINI_API_KEY", "GEMINI_API_KEY"))
     groq_api_key: str = ""
     openrouter_api_key: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
     master_key: str = ""
-    api_keys: str = ""  # comma-separated; 'ro:' prefix = readonly key (Batch 7)
+    api_keys: str = Field(
+        default="", validation_alias=AliasChoices("ATLAS_API_KEYS", "ATLAS_API_KEY")
+    )  # comma-separated; 'ro:' prefix = readonly key (Batch 7)
     github_webhook_secret: str = Field(
         default="", validation_alias="GITHUB_WEBHOOK_SECRET"
     )  # secret — never logged/echoed, by key name only
@@ -117,10 +142,9 @@ class Settings(BaseSettings):
     def effective_embed_api_key(self) -> str:
         """The key the embedder should use.
 
-        Embeddings default to OpenRouter, which authenticates with the same key
-        as chat — so an unset ``ATLAS_EMBED_API_KEY`` means "use the OpenRouter
-        key", not "no embeddings". Setting it explicitly (for Jina, Cohere, ...)
-        wins.
+        Local embeddings do not use a key. When cloud embeddings are explicitly
+        configured, an unset ``ATLAS_EMBED_API_KEY`` reuses the OpenRouter chat
+        key. An explicit embedding key wins.
         """
         return self.embed_api_key or self.openrouter_api_key
 

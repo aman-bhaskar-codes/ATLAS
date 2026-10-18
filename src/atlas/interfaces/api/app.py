@@ -40,6 +40,7 @@ from atlas.app import build
 from atlas.infra.bus import Event
 from atlas.infra.logging import bind_context, clear_context, get_logger
 from atlas.infra.tasks import spawn
+from atlas.interfaces.api.body_limit import AttachmentBodyLimitMiddleware
 from atlas.interfaces.api.errors import error_envelope, internal_error_response, register_exception_handlers
 
 _log = get_logger("atlas.api.app")
@@ -97,6 +98,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     memory_ws_broadcaster: object | None = None
 
     try:
+        from atlas.interfaces.api.auth import parse_api_keys
+        from atlas.safety.approvals import ApprovalQueue
+
+        secret_values = tuple(
+            value
+            for name, value in atlas.settings.model_dump().items()
+            if isinstance(value, str)
+            and value
+            and any(token in name for token in ("key", "password", "token", "dsn", "connection_string"))
+        )
+        secret_values += tuple(parse_api_keys(atlas.settings.api_keys))
+        atlas.approvals = ApprovalQueue(
+            atlas.db,
+            atlas.clock,
+            timeout_s=atlas.config.safety.confirm_timeout_s,
+            policy_version=str(atlas.manifest.version),
+            secret_values=secret_values,
+        )
+        atlas.safety.set_confirmer(atlas.approvals)
         await atlas.start()
 
         # Run a startup backup in the background. Tracked so it cannot be
@@ -115,10 +135,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Initialize Trigger Engine (Phase 3)
         from atlas.autonomy.automations import AutomationRegistry
         from atlas.autonomy.trigger_engine import TriggerEngine
+        from atlas.interfaces.api.facade import DefaultAtlasControlPlane
+        from atlas.interfaces.api.schemas import CreateTaskRequest
 
         automation_registry = AutomationRegistry(atlas.db)
-        trigger_engine = TriggerEngine(automation_registry)
-        atlas.bus.subscribe_global(trigger_engine.handle_event)
+
+        async def _dispatch_automation_task(request: str, idempotency_key: str) -> None:
+            control_plane = DefaultAtlasControlPlane(atlas, event_store, version("atlas"))
+            await control_plane.create_task(CreateTaskRequest(request=request, idempotency_key=idempotency_key))
+
+        trigger_engine = TriggerEngine(automation_registry, dispatch_task=_dispatch_automation_task)
+        atlas.bus.subscribe_global_with_id(trigger_engine.handle_event)
 
         # Subscribe to the orchestrator bus topic so every emitted event is
         # persisted to the task_events table and available for SSE streaming.
@@ -248,7 +275,7 @@ def create_app() -> FastAPI:
 
     # Batch 7: transport-level identity. No keys configured => local open mode.
     from atlas.infra.config import load_settings as _load_settings
-    from atlas.interfaces.api.auth import parse_api_keys, require_principal, resolve_principal
+    from atlas.interfaces.api.auth import BROWSER_ORIGINS, parse_api_keys, require_principal, resolve_principal
     from atlas.interfaces.api.rate_limit import TokenBucketLimiter, rate_limit
 
     keys_env = os.environ.get("ATLAS_API_KEYS")
@@ -316,6 +343,7 @@ def create_app() -> FastAPI:
         request.state.principal = resolve_principal(
             getattr(request.app.state, "api_keys", {}),
             request.headers.get("Authorization"),
+            request.headers.get("X-Atlas-API-Key"),
         )
         bind_context(request_id=request_id)
         try:
@@ -348,11 +376,12 @@ def create_app() -> FastAPI:
     # (`routes_automations.py`; `autonomyApi.updateAutomation` / `deleteAutomation`).
     # Without them the browser's preflight is refused and the Automations UI can
     # read but never edit — a dead control, not a visible error.
+    app.add_middleware(AttachmentBodyLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],
+        allow_origins=list(BROWSER_ORIGINS),
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
         expose_headers=["X-Request-ID"],
     )
@@ -380,6 +409,7 @@ def create_app() -> FastAPI:
     from atlas.interfaces.api.routes_runtime import router as runtime_router
     from atlas.interfaces.api.routes_tasks import router as tasks_router
     from atlas.interfaces.api.routes_tools import router as tools_router  # Universal tooling fabric
+    from atlas.interfaces.api.routes_training import router as training_router
     from atlas.interfaces.api.routes_trajectory import router as trajectory_router  # Phase 2
     from atlas.interfaces.api.routes_trust import router as trust_router
     from atlas.interfaces.api.routes_voice import router as voice_router  # Voice pipeline (optional)
@@ -404,7 +434,8 @@ def create_app() -> FastAPI:
     #     container HEALTHCHECK and any external probe, which have no key.
     #   * memory_router, events_ws_router — these declare WebSocket routes, and
     #     require_principal takes a Request, which does not resolve for a
-    #     WebSocket scope. WebSocket auth is tracked as debt, not faked here.
+    #     WebSocket scope. These routers authenticate HTTP reads per-route and
+    #     WebSockets before accepting the handshake.
     auth_required = [Depends(require_principal)]
 
     app.include_router(health_router, prefix="/api/v1")  # Runtime health endpoints (probes: no auth)
@@ -432,7 +463,7 @@ def create_app() -> FastAPI:
     # and events_ws_router — it cannot take the router-level require_principal
     # Request dependency (which cannot resolve a WebSocket scope). Its HTTP
     # endpoints (/voice/speak, /voice/transcribe) instead gate per-route via
-    # Depends(require_principal); only /ws/voice remains WS-auth debt, tracked
+    # Depends(require_principal); /ws/voice requires an admin principal before
     # with the other WS routers. Off by default, so no live surface exists until
     # enabled.
     app.include_router(voice_router, prefix="/api/v1")
@@ -442,6 +473,7 @@ def create_app() -> FastAPI:
     # is mounted with an empty prefix to avoid doubling. Off by default: the
     # routes return 503 until config.ide.enabled and the service is built.
     app.include_router(ide_router, prefix="", dependencies=auth_required)
+    app.include_router(training_router, prefix="", dependencies=auth_required)
 
     # Agent-run surface (M2.1): HTTP only, key-gated like the other HTTP routers.
     # Router declares its own /api/v1/agent prefix, so it is mounted with an empty

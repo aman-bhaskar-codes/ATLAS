@@ -9,8 +9,9 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
-import { parseContract, trustApi } from '../../lib/api/client';
-import { TaskPageSchema, TaskViewSchema, ApprovalViewSchema, MemoryFactViewSchema, AuditPageSchema } from './contracts';
+import { parseContract, requestContract, trustApi } from '../../lib/api/client';
+import { TaskPageSchema, TaskViewSchema, ApprovalViewSchema, MemoryFactViewSchema, AuditPageSchema, AuditExportSchema } from './contracts';
+import { auditQueryParams, type AuditFilters } from './audit';
 
 export function useTasks(cursor?: string, limit: number = 50) {
   return useQuery({
@@ -83,12 +84,15 @@ export function useMemoryFact(factId: string) {
   });
 }
 
-export function useAuditLog(cursor?: string, limit: number = 50, filters?: { taskId?: string, correlationId?: string, executionId?: string }) {
+export function useAuditLog(cursor?: string, limit: number = 50, filters?: AuditFilters) {
   return useQuery({
     queryKey: ['trust', 'audit', cursor, limit, filters],
-    queryFn: async () => {
-      const data = await trustApi.getAuditLog(cursor, limit, filters);
-      return parseContract('/audit', AuditPageSchema, data);
-    },
+    queryFn: () => requestContract(`/audit?${auditQueryParams(filters, cursor, limit)}`, AuditPageSchema),
   });
+}
+
+export function exportAuditLog(filters: Pick<AuditFilters, 'since' | 'tier'>) {
+  const params = auditQueryParams(filters);
+  params.set('max_events', '1000');
+  return requestContract(`/audit/export?${params}`, AuditExportSchema);
 }

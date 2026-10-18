@@ -21,6 +21,7 @@ surface is identical either way.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
@@ -116,7 +117,8 @@ class IDEService:
         # structured pass/fail and normalized problems, no second exec path (Slice 8).
         self._tests = TestRunner(self._runner) if self._runner is not None else None
         self._diagnostics = DiagnosticsCollector(self._runner) if self._runner is not None else None
-        self._workspaces: dict[WorkspaceId, _OpenWorkspace] = {}
+        self._max_active_workspaces = 3
+        self._workspaces: OrderedDict[WorkspaceId, _OpenWorkspace] = OrderedDict()
 
     # ---- lifecycle ------------------------------------------------------
     async def open_workspace(self, root_path: str, name: str) -> IDESession:
@@ -135,7 +137,12 @@ class IDEService:
             created_ts=now,
             updated_ts=now,
         )
-        self._workspaces[WorkspaceId(workspace_id)] = _OpenWorkspace(engine, writer, session)
+        wid = WorkspaceId(workspace_id)
+        self._workspaces[wid] = _OpenWorkspace(engine, writer, session)
+        self._workspaces.move_to_end(wid)
+        if len(self._workspaces) > self._max_active_workspaces:
+            evicted_id, evicted_ow = self._workspaces.popitem(last=False)
+            _log.info("ide.workspace_lru_evicted", workspace_id=str(evicted_id))
         if self._store is not None:
             await self._store.save_workspace(engine.ref)
             await self._store.save_session(session)
@@ -150,6 +157,11 @@ class IDEService:
 
     def sessions(self) -> tuple[IDESession, ...]:
         return tuple(ow.session for ow in self._workspaces.values())
+
+    async def get_session(self, workspace_id: str) -> IDESession:
+        """Return the resident or resumed IDESession for workspace_id."""
+        ow = await self._require(workspace_id)
+        return ow.session
 
     async def list_workspaces(self) -> tuple[Any, ...]:
         """List all durable workspaces."""
@@ -454,6 +466,7 @@ class IDEService:
         wid = WorkspaceId(workspace_id)
         ow = self._workspaces.get(wid)
         if ow is not None:
+            self._workspaces.move_to_end(wid)
             return ow
         if self._store is not None:
             resumed = await self._resume(wid)
@@ -480,5 +493,9 @@ class IDEService:
             session = IDESession(id=IDESessionId(self._ids.task_id()), workspace=ref, created_ts=now, updated_ts=now)
         ow = _OpenWorkspace(engine, writer, session)
         self._workspaces[wid] = ow
+        self._workspaces.move_to_end(wid)
+        if len(self._workspaces) > self._max_active_workspaces:
+            evicted_id, evicted_ow = self._workspaces.popitem(last=False)
+            _log.info("ide.workspace_lru_evicted", workspace_id=str(evicted_id))
         _log.info("ide.workspace.resumed", event_type="lifecycle", workspace_id=str(wid), root=str(engine.root))
         return ow

@@ -26,7 +26,8 @@ from __future__ import annotations
 import asyncio
 
 from atlas.infra.clock import Clock
-from atlas.infra.ids import CorrelationId, IdGenerator
+from atlas.infra.execution_lease import lease_times
+from atlas.infra.ids import CorrelationId, IdGenerator, UuidGenerator
 from atlas.infra.logging import get_logger
 from atlas.orchestration.agent_engine.engine import SupportsDispatch
 from atlas.orchestration.research.persistence import ResearchSessionStore
@@ -72,6 +73,9 @@ class ResearchService:
         default_mode: str = DEFAULT_MODE,
         max_question_chars: int = 4000,
         max_sessions_listed: int = 50,
+        lease_ttl_s: float = 30.0,
+        lease_renewal_s: float = 5.0,
+        shutdown_timeout_s: float = 5.0,
     ) -> None:
         self._dispatcher = dispatcher
         self._store = store
@@ -80,13 +84,94 @@ class ResearchService:
         self._default_mode = default_mode if default_mode in _VALID_MODES else DEFAULT_MODE
         self._max_question_chars = max_question_chars
         self._max_sessions_listed = max_sessions_listed
+        self._owner_id = str(UuidGenerator().execution_id())
+        self._lease_ttl_s = lease_ttl_s
+        self._lease_renewal_s = lease_renewal_s
+        self._shutdown_timeout_s = shutdown_timeout_s
+        self._closed = False
+        self._recovery_task: asyncio.Task[None] | None = None
         # In-flight background runs: session_id -> executing task. A session sits here
         # only between start_session_background() and its terminal persistence; the
         # done-callback evicts it. Lets the surface await/report live runs (Slice R3).
-        self._inflight: dict[str, asyncio.Task[None]] = {}
+        self._inflight: dict[str, asyncio.Task[object]] = {}
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise ResearchError("research service is closed")
+
+    def _ownership_lost(self) -> None:
+        self._closed = True
+        for task in self._inflight.values():
+            task.cancel()
+
+    def _background_done(self, session_id: str, task: asyncio.Task[object]) -> None:
+        if self._inflight.get(session_id) is task:
+            self._inflight.pop(session_id, None)
+        if not task.cancelled() and (error := task.exception()) is not None:
+            _log.error("research.background_failed", session_id=session_id, error=str(error))
+
+    async def recover_interrupted(self) -> int:
+        recovered = 0
+        watch_needed = False
+        for record in await self._store.running_sessions():
+            live = self._inflight.get(record.session_id)
+            if live is not None and not live.done():
+                continue
+            error = "Research execution interrupted; outcome unknown. Resume only from verified evidence."
+            after = record.model_copy(
+                update={
+                    "status": ResearchStatus.FAILED.value,
+                    "error": error,
+                    "updated_ts": self._clock.now().isoformat(),
+                }
+            )
+            try:
+                now = self._clock.now().isoformat()
+                if await self._store.settle_orphan(record, after, now=now):
+                    recovered += 1
+                    await self._store.append_event(
+                        record.session_id, ResearchPhase.FAILED.value, {"error": error}, ts=now
+                    )
+                elif await self._store.leases.is_live("research:" + record.session_id, now=now):
+                    watch_needed = True
+            except Exception:
+                _log.exception("research.recovery_failed", session_id=record.session_id)
+                watch_needed = True
+        if watch_needed and self._recovery_task is None and not self._closed:
+            self._recovery_task = asyncio.create_task(self._recover_expired())
+        return recovered
+
+    async def _recover_expired(self) -> None:
+        try:
+            while not self._closed:
+                await asyncio.sleep(self._lease_renewal_s)
+                try:
+                    await self.recover_interrupted()
+                    if not await self._store.running_sessions():
+                        break
+                except Exception:
+                    _log.exception("research.recovery_monitor_failed")
+        finally:
+            self._recovery_task = None
+
+    async def close(self) -> None:
+        self._closed = True
+        tasks = tuple(task for task in self._inflight.values() if task is not asyncio.current_task())
+        if self._recovery_task is not None:
+            tasks += (self._recovery_task,)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.wait(tasks, timeout=self._shutdown_timeout_s)
+        try:
+            async with asyncio.timeout(self._shutdown_timeout_s):
+                await self.recover_interrupted()
+        except Exception:
+            _log.exception("research.close_recovery_failed")
 
     def _validate(self, question: str, mode: str | None) -> tuple[str, str]:
         """Clean + bound the question and resolve the mode, or raise ``ResearchError``."""
+        self._ensure_open()
         cleaned = question.strip()
         if not cleaned:
             raise ResearchError("research question must not be empty")
@@ -102,7 +187,9 @@ class ResearchService:
         reaches that state, never as a fabricated token stream (§69). The store
         assigns the monotonic ``sequence`` used as the SSE cursor / ``Last-Event-ID``.
         """
-        return await self._store.append_event(session_id, phase, dict(payload), ts=self._clock.now().isoformat())
+        return await self._store.append_owned_event(
+            session_id, phase, dict(payload), self._owner_id, ts=self._clock.now().isoformat()
+        )
 
     async def start_session(
         self,
@@ -163,8 +250,19 @@ class ResearchService:
             created_ts=now,
             updated_ts=now,
         )
-        await self._store.save_session(stub)
-        await self._emit(session_id, ResearchPhase.STARTED.value, mode=chosen_mode)
+        lease_now, until = lease_times(self._clock, self._lease_ttl_s)
+        if not await self._store.leases.claim(
+            "research:" + session_id, self._owner_id, now=lease_now, lease_until=until
+        ):
+            raise ResearchError("research session already has a live owner")
+        try:
+            self._ensure_open()
+            await self._store.save_owned(stub, self._owner_id, now=self._clock.now().isoformat())
+            await self._emit(session_id, ResearchPhase.STARTED.value, mode=chosen_mode)
+            self._ensure_open()
+        except BaseException:
+            await self._store.leases.release("research:" + session_id, self._owner_id)
+            raise
         task = asyncio.create_task(
             self._execute_and_persist(
                 session_id=session_id,
@@ -176,10 +274,104 @@ class ResearchService:
             )
         )
         self._inflight[session_id] = task
-        task.add_done_callback(lambda _t: self._inflight.pop(session_id, None))
+        task.add_done_callback(lambda task: self._background_done(session_id, task))
         return stub
 
     async def _run_research(
+        self,
+        *,
+        session_id: str,
+        correlation_id: CorrelationId,
+        goal: str,
+        mode: str,
+        parent_session_id: str | None,
+        created_ts: str,
+    ) -> ResearchSessionRecord:
+        worker = asyncio.current_task()
+        if worker is not None:
+            self._inflight[session_id] = worker
+        try:
+            async with self._store.leases.hold(
+                "research:" + session_id,
+                self._owner_id,
+                clock=self._clock,
+                ttl_s=self._lease_ttl_s,
+                renewal_s=self._lease_renewal_s,
+                on_lost=self._ownership_lost,
+            ):
+                self._ensure_open()
+                stub = ResearchSessionRecord(
+                    session_id=session_id,
+                    correlation_id=str(correlation_id),
+                    parent_session_id=parent_session_id,
+                    question=goal,
+                    mode=mode,
+                    created_ts=created_ts,
+                    updated_ts=self._clock.now().isoformat(),
+                )
+                await self._store.save_owned(stub, self._owner_id, now=self._clock.now().isoformat())
+                try:
+                    return await self._dispatch_research(
+                        session_id=session_id,
+                        correlation_id=correlation_id,
+                        goal=goal,
+                        mode=mode,
+                        parent_session_id=parent_session_id,
+                        created_ts=created_ts,
+                    )
+                except asyncio.CancelledError:
+                    try:
+                        async with asyncio.timeout(self._shutdown_timeout_s):
+                            await self._persist_failure(
+                                session_id=session_id,
+                                correlation_id=correlation_id,
+                                goal=goal,
+                                mode=mode,
+                                parent_session_id=parent_session_id,
+                                created_ts=created_ts,
+                                error=(
+                                    "Research execution interrupted; outcome unknown. "
+                                    "Resume only from verified evidence."
+                                ),
+                                owned=True,
+                            )
+                    except Exception:
+                        _log.exception("research.cancel_checkpoint_failed", session_id=session_id)
+                    raise
+                except Exception as exc:
+                    await self._persist_failure(
+                        session_id=session_id,
+                        correlation_id=correlation_id,
+                        goal=goal,
+                        mode=mode,
+                        parent_session_id=parent_session_id,
+                        created_ts=created_ts,
+                        error=str(exc),
+                        owned=True,
+                    )
+                    record = await self._store.load_session(session_id)
+                    if record is None:
+                        raise
+                    # The observation may already be durable while a derived
+                    # progress event failed. Preserve that known result and close
+                    # its trace with the corresponding terminal phase.
+                    if record.status != ResearchStatus.RUNNING.value:
+                        phase = {
+                            ResearchStatus.COMPLETED.value: ResearchPhase.COMPLETED.value,
+                            ResearchStatus.REFUSED.value: ResearchPhase.REFUSED.value,
+                        }.get(record.status, ResearchPhase.FAILED.value)
+                        try:
+                            events = await self._store.list_events(session_id)
+                            if not events or events[-1].phase != phase:
+                                await self._emit(session_id, phase, status=record.status)
+                        except Exception:
+                            _log.exception("research.terminal_trace_failed", session_id=session_id)
+                    return record
+        finally:
+            if self._inflight.get(session_id) is worker:
+                self._inflight.pop(session_id, None)
+
+    async def _dispatch_research(
         self,
         *,
         session_id: str,
@@ -198,6 +390,7 @@ class ResearchService:
         Exactly one terminal phase (``completed``/``refused``/``failed``) closes the trace.
         """
         await self._emit(session_id, ResearchPhase.RETRIEVING.value, mode=mode)
+        self._ensure_open()
         observation = await self._dispatcher.dispatch(
             Action(
                 step=0,
@@ -225,12 +418,31 @@ class ResearchService:
                 created_ts=created_ts,
                 updated_ts=now,
             )
-            await self._store.save_session(record)
+            await self._store.save_owned(record, self._owner_id, now=self._clock.now().isoformat())
             await self._emit(session_id, ResearchPhase.FAILED.value, error=error)
             _log.warning("research.session.failed", event_type="research", session_id=session_id, error=error)
             return record
 
         outcome = build_result(observation.content)
+        record = ResearchSessionRecord(
+            session_id=session_id,
+            correlation_id=str(correlation_id),
+            parent_session_id=parent_session_id,
+            question=goal,
+            mode=mode,
+            answer=outcome.answer,
+            sources=outcome.sources,
+            stop_reason=outcome.stop_reason,
+            total_rounds=outcome.total_rounds,
+            total_discovered=outcome.total_discovered,
+            open_questions=outcome.open_questions,
+            rounds=outcome.rounds,
+            questions=outcome.questions,
+            created_ts=created_ts,
+            updated_ts=now,
+        )
+        # Acknowledge the actual observation before secondary event publication.
+        await self._store.save_owned(record, self._owner_id, now=self._clock.now().isoformat())
         # REAL derived phases — each mirrors a fact the fabric actually produced.
         for r in outcome.rounds:
             await self._emit(
@@ -251,24 +463,6 @@ class ResearchService:
             confidence=outcome.answer.confidence,
         )
 
-        record = ResearchSessionRecord(
-            session_id=session_id,
-            correlation_id=str(correlation_id),
-            parent_session_id=parent_session_id,
-            question=goal,
-            mode=mode,
-            answer=outcome.answer,
-            sources=outcome.sources,
-            stop_reason=outcome.stop_reason,
-            total_rounds=outcome.total_rounds,
-            total_discovered=outcome.total_discovered,
-            open_questions=outcome.open_questions,
-            rounds=outcome.rounds,
-            questions=outcome.questions,
-            created_ts=created_ts,
-            updated_ts=now,
-        )
-        await self._store.save_session(record)
         # The terminal phase mirrors the derived status exactly — one closes the trace.
         terminal = (
             ResearchPhase.COMPLETED.value
@@ -333,23 +527,20 @@ class ResearchService:
         parent_session_id: str | None,
         created_ts: str,
         error: str,
+        owned: bool = False,
     ) -> None:
         """Overwrite a stranded ``running`` stub with a ``FAILED`` terminal record and
         close the trace — the convergence backstop for ``_execute_and_persist``."""
+        before = await self._store.load_session(session_id)
+        if before is None or before.status != ResearchStatus.RUNNING.value:
+            return
         now = self._clock.now().isoformat()
-        record = ResearchSessionRecord(
-            session_id=session_id,
-            correlation_id=str(correlation_id),
-            parent_session_id=parent_session_id,
-            question=goal,
-            mode=mode,
-            status=ResearchStatus.FAILED.value,
-            error=error,
-            created_ts=created_ts,
-            updated_ts=now,
-        )
-        await self._store.save_session(record)
-        await self._emit(session_id, ResearchPhase.FAILED.value, error=error)
+        record = before.model_copy(update={"status": ResearchStatus.FAILED.value, "error": error, "updated_ts": now})
+        if owned:
+            await self._store.save_owned(record, self._owner_id, now=now)
+            await self._emit(session_id, ResearchPhase.FAILED.value, error=error)
+        elif await self._store.settle_orphan(before, record, now=now):
+            await self._store.append_event(session_id, ResearchPhase.FAILED.value, {"error": error}, ts=now)
 
     async def follow_up(self, session_id: str, question: str, *, mode: str | None = None) -> ResearchSessionRecord:
         """Ask a follow-up against an existing session — a fresh, linked session.

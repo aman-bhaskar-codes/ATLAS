@@ -21,15 +21,17 @@ from atlas.infra.ids import CorrelationId, IdGenerator
 from atlas.infra.llm_tracker import LLMCallTracker
 from atlas.infra.logging import get_logger
 from atlas.infra.profiles import ProfileConfig, resolve_profile
-from atlas.infra.types import AuditRecord, NetworkPolicy
+from atlas.infra.types import AuditRecord, CostClass, NetworkPolicy
 from atlas.intelligence.cache import SemanticCache
 from atlas.intelligence.contracts import Constraints, Usage
+from atlas.intelligence.errors import ConfigurationError
 from atlas.intelligence.gateway import ModelGateway
 from atlas.intelligence.governance.budget import Budgets
 from atlas.intelligence.governance.cost_governor import CostGovernor
 from atlas.intelligence.governance.quota_governor import FreeQuotaGovernor, ProviderQuota
 from atlas.intelligence.health.health_monitor import HealthMonitor
 from atlas.intelligence.observability.telemetry import Telemetry
+from atlas.intelligence.providers.ollama import OllamaProvider
 from atlas.intelligence.providers.openai_compatible import OpenAICompatibleProvider
 from atlas.intelligence.registry.capability_index import CapabilityIndex
 from atlas.intelligence.registry.model_registry import ModelRegistry
@@ -38,7 +40,7 @@ from atlas.intelligence.runtime.fallback import FallbackEngine
 from atlas.intelligence.runtime.inference import InferenceRuntime
 from atlas.intelligence.selection.router import CapabilityRouter
 from atlas.intelligence.selection.selector import ModelSelector
-from atlas.memory.embedder import CloudEmbedder, Embedder
+from atlas.memory.embedder import CloudEmbedder, Embedder, embedding_space_of
 from atlas.memory.vectorstore import ChromaVectorStore
 from atlas.safety.audit import AuditLog
 
@@ -86,6 +88,64 @@ async def build_intelligence(
         allowed_cost_classes=sorted(profile.allowed_cost_classes),
     )
 
+    # Validate before constructing any HTTP clients. A preference typo must
+    # produce a clear configuration error rather than a silent fallback.
+    model_registry = ModelRegistry.from_yaml(config_dir / "models.yaml")
+    preferences = {
+        "default_model": (settings.default_model,),
+        "heavy_model": (settings.heavy_model,),
+        "fast_models": config.models.fast_models,
+        "deep_models": config.models.deep_models,
+        "fallback_models": config.models.fallback_models,
+    }
+    for field_name, model_ids in preferences.items():
+        for model_id in model_ids:
+            if model_registry.get(model_id) is None:
+                raise ConfigurationError(f"unknown model {model_id!r} in {field_name}")
+
+    local_target_id = settings.default_model if model_registry.get(settings.default_model) else "local-qwen3"
+    local_spec = model_registry.get(local_target_id)
+    if local_spec is not None:
+        alternatives = [
+            spec
+            for spec in model_registry.all()
+            if spec.provider == "ollama" and spec.provider_model == settings.local_model
+        ]
+        if not alternatives:
+            raise ConfigurationError(
+                f"unknown local model {settings.local_model!r}; add verified metadata to models.yaml"
+            )
+        local_spec = alternatives[0].model_copy(
+            update={
+                "id": local_target_id,
+                "context_length": min(settings.local_context_length, alternatives[0].context_length),
+            }
+        )
+        model_registry.register(local_spec)
+
+    gemini_target_id = settings.heavy_model if model_registry.get(settings.heavy_model) else "gemini-flash"
+    gemini_spec = model_registry.get(gemini_target_id)
+    if gemini_spec is not None:
+        alternatives = [
+            spec
+            for spec in model_registry.all()
+            if spec.provider == "gemini" and spec.provider_model == settings.gemini_model
+        ]
+        if not alternatives:
+            raise ConfigurationError(
+                f"unknown Gemini model {settings.gemini_model!r}; add verified metadata to models.yaml"
+            )
+        gemini_spec = alternatives[0].model_copy(update={"id": gemini_target_id})
+        if settings.gemini_billing_tier == "free" or gemini_spec.cost_class == CostClass.FREE_QUOTA:
+            gemini_spec = gemini_spec.model_copy(
+                update={
+                    "cost_class": CostClass.FREE_QUOTA,
+                    "usd_per_1m_input": 0.0,
+                    "usd_per_1m_output": 0.0,
+                }
+            )
+        model_registry.register(gemini_spec)
+
     # ── Telemetry & Health ────────────────────────────────────────────
 
     async def on_audit_cost(corr: str, provider: str, model_id: str, usage: Usage, latency_ms: int) -> None:
@@ -117,7 +177,8 @@ async def build_intelligence(
     # ── Free quota governor ───────────────────────────────────────────
     quota_governor = FreeQuotaGovernor()
     if profile.enable_quota_governor:
-        # Configure quotas for known free-tier providers
+        # These are local request caps, not authoritative account quotas.
+        # Actual project/model limits are enforced by the vendor (429).
         quota_governor.configure(
             "groq", ProviderQuota(daily_requests=1000, daily_tokens=500_000, requests_per_minute=30)
         )
@@ -135,8 +196,16 @@ async def build_intelligence(
     # ── Provider registration (profile-filtered) ──────────────────────
     provider_registry = ProviderRegistry()
 
-    # No local Ollama provider: the fleet is five OpenRouter free models.
-    # OpenRouter registration below is the sole chat provider.
+    if local_spec is not None and "local" in profile.allowed_cost_classes:
+        provider_registry.register(
+            OllamaProvider(
+                host=settings.ollama_host,
+                timeout_s=config.models.local_timeout_s,
+                model=local_spec.provider_model,
+                context_length=local_spec.context_length,
+            )
+        )
+        _log.info("provider.registered", event_type="lifecycle", provider="ollama", cost_class="local")
 
     if profile.allow_cloud:
         # ── Groq (free-tier) ──────────────────────────────────────────
@@ -153,7 +222,7 @@ async def build_intelligence(
                 _log.warning("provider.groq_failed", event_type="lifecycle", error=str(exc))
 
         # ── Gemini (free-tier) ────────────────────────────────────────
-        if settings.gemini_api_key and "free_quota" in profile.allowed_cost_classes:
+        if settings.gemini_api_key and gemini_spec and gemini_spec.cost_class.value in profile.allowed_cost_classes:
             try:
                 from atlas.intelligence.providers.gemini import GeminiProvider
 
@@ -162,9 +231,15 @@ async def build_intelligence(
                         name="gemini",
                         api_key=settings.gemini_api_key,
                         timeout_s=config.models.cloud_timeout_s,
+                        model=gemini_spec.provider_model,
                     )
                 )
-                _log.info("provider.registered", event_type="lifecycle", provider="gemini", cost_class="free_quota")
+                _log.info(
+                    "provider.registered",
+                    event_type="lifecycle",
+                    provider="gemini",
+                    cost_class=gemini_spec.cost_class.value,
+                )
             except Exception as exc:
                 _log.warning("provider.gemini_failed", event_type="lifecycle", error=str(exc))
 
@@ -177,6 +252,7 @@ async def build_intelligence(
                     base_url="https://openrouter.ai/api/v1",
                     api_key=settings.openrouter_api_key,
                     timeout_s=config.models.cloud_timeout_s,
+                    zero_cost=profile.daily_usd == 0 and profile.per_task_usd == 0,
                 )
             )
             _log.info("provider.registered", event_type="lifecycle", provider="openrouter", cost_class="hybrid")
@@ -205,8 +281,6 @@ async def build_intelligence(
     )
 
     # ── Model registry + selection ────────────────────────────────────
-    model_registry = ModelRegistry.from_yaml(config_dir / "models.yaml")
-
     # Startup discovery of ALL free OpenRouter models is gated OFF by default so
     # only the five curated models.yaml ids exist. Opt in via
     # models.sync_openrouter_free=true (leaves openrouter_sync.py available).
@@ -238,13 +312,19 @@ async def build_intelligence(
     )
     fallback = FallbackEngine(bus=cast("MessageBus | None", bus))
     cap_router = CapabilityRouter()
-    selector = ModelSelector(capability_index, health)
+    selector = ModelSelector(capability_index, health, providers=provider_registry)
 
-    if settings.embed_provider == "ollama":
+    if settings.embed_provider == "ollama" or not profile.allow_cloud:
         from atlas.memory.embedder import OllamaEmbedder
 
         embedder: Embedder = OllamaEmbedder(
-            settings=settings,
+            settings=(
+                settings
+                if settings.embed_provider == "ollama"
+                else settings.model_copy(
+                    update={"embed_provider": "ollama", "embed_model": settings.local_embed_model},
+                )
+            ),
             timeout_s=config.models.local_timeout_s,
         )
     else:
@@ -254,8 +334,17 @@ async def build_intelligence(
             model=settings.embed_model,
             timeout_s=config.models.cloud_timeout_s,
         )
-    cache_vectors = ChromaVectorStore(str(settings.data_dir / "chroma"), collection="atlas_cache")
-    semantic_cache = SemanticCache(db, cache_vectors, embedder)
+    cache_vectors = ChromaVectorStore(
+        str(settings.data_dir / "chroma"),
+        collection="atlas_cache",
+        embedding_space=embedding_space_of(embedder),
+    )
+    semantic_cache = SemanticCache(
+        db,
+        cache_vectors,
+        embedder,
+        embedding_is_local=getattr(embedder, "is_local", False),
+    )
 
     # ── Phase 4/5: policy-bearing default constraints ─────────────────
     # WHY the gateway holds the profile's policy: legacy callers hand the
@@ -281,8 +370,12 @@ async def build_intelligence(
         runtime=runtime,
         cache=semantic_cache,
         default_constraints=default_constraints,
-        fast_models=config.models.fast_models,
-        deep_models=config.models.deep_models,
+        fast_models=tuple(
+            dict.fromkeys((settings.default_model, *config.models.fast_models, *config.models.fallback_models))
+        ),
+        deep_models=tuple(
+            dict.fromkeys((settings.heavy_model, *config.models.deep_models, *config.models.fallback_models))
+        ),
     )
 
     return IntelligenceComponents(

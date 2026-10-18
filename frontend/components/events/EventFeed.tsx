@@ -40,9 +40,10 @@ export interface EventFeedProps {
 interface EventCardProps {
   event: AtlasEvent;
   compact?: boolean;
+  showTimestamps: boolean;
 }
 
-function EventCard({ event, compact = false }: EventCardProps) {
+function EventCard({ event, compact = false, showTimestamps }: EventCardProps) {
   const [expanded, setExpanded] = useState(false);
   
   // Get event type badge color
@@ -138,9 +139,9 @@ function EventCard({ event, compact = false }: EventCardProps) {
           )}
         </div>
         
-        <div className="text-xs text-gray-500 whitespace-nowrap">
+        {showTimestamps && <div className="text-xs text-gray-500 whitespace-nowrap">
           {formatTime(event._timestamp)}
-        </div>
+        </div>}
       </div>
     </div>
   );
@@ -269,6 +270,7 @@ export function EventFeed({
                 key={`${event.correlation_id}-${index}`}
                 event={event}
                 compact={compact}
+                showTimestamps={showTimestamps}
               />
             ))}
           </div>

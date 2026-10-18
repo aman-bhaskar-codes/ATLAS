@@ -34,6 +34,22 @@ class LimitCounter:
     recursion: int = 0
     _start: float = field(default_factory=time.perf_counter)
 
+    def reserve_tool_step(self) -> None:
+        """Check and reserve both budgets before dispatch, without yielding.
+
+        Async workers sharing this counter cannot interleave between the checks
+        and increments. Rejected work consumes neither reservation.
+        """
+        self._check_time()
+        if self.tokens > self.limits.max_tokens:
+            raise ReasoningError(f"max_tokens {self.limits.max_tokens} exceeded")
+        if self.steps >= self.limits.max_steps:
+            raise ReasoningError(f"max_steps {self.limits.max_steps} exceeded")
+        if self.tool_calls >= self.limits.max_tool_calls:
+            raise ReasoningError(f"max_tool_calls {self.limits.max_tool_calls} exceeded")
+        self.steps += 1
+        self.tool_calls += 1
+
     def tick_step(self) -> None:
         self.steps += 1
         if self.steps > self.limits.max_steps:

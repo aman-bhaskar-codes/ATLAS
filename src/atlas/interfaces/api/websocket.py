@@ -15,6 +15,7 @@ from fastapi import WebSocket
 
 from atlas.infra.bus import Event, MessageBus
 from atlas.infra.logging import get_logger
+from atlas.interfaces.api.auth import require_websocket_principal, websocket_subprotocol
 
 _log = get_logger("atlas.api.ws")
 
@@ -29,7 +30,8 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, client_id: str | None = None) -> str:
         """Accept a WebSocket connection and assign it a unique client_id."""
-        await websocket.accept()
+        await require_websocket_principal(websocket)
+        await websocket.accept(subprotocol=websocket_subprotocol(websocket))
         cid = client_id or str(uuid.uuid4())
 
         async with self._lock:

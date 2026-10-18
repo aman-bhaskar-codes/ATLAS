@@ -52,7 +52,19 @@ def _external_mocks(data_dir: Path) -> Iterator[None]:
     with contextlib.ExitStack() as stack:
         # A dummy key guarantees the OpenRouter provider registers on any machine;
         # `complete` is patched below, so no request ever leaves the box.
-        stack.enter_context(patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"}))
+        stack.enter_context(
+            patch.dict(
+                os.environ,
+                {
+                    "OPENROUTER_API_KEY": "test-key",
+                    "ATLAS_DEFAULT_MODEL": "north-mini-code-free",
+                    "ATLAS_HEAVY_MODEL": "nemotron-3-ultra-free",
+                    "ATLAS_PROFILE": "free_hybrid",
+                    "ATLAS_EMBED_PROVIDER": "openrouter",
+                    "ATLAS_EMBED_MODEL": "qwen/qwen3-embedding-0.6b",
+                },
+            )
+        )
         stack.enter_context(
             patch(
                 "atlas.memory.embedder.CloudEmbedder.embed",
@@ -63,6 +75,16 @@ def _external_mocks(data_dir: Path) -> Iterator[None]:
         stack.enter_context(
             patch(
                 "atlas.intelligence.providers.openai_compatible.OpenAICompatibleProvider.complete",
+                new_callable=AsyncMock,
+                return_value=ProviderCompletion(
+                    text=_FINAL_ANSWER_JSON,
+                    usage=Usage(input_tokens=10, output_tokens=5, usd=0.0),
+                ),
+            )
+        )
+        stack.enter_context(
+            patch(
+                "atlas.intelligence.providers.ollama.OllamaProvider.complete",
                 new_callable=AsyncMock,
                 return_value=ProviderCompletion(
                     text=_FINAL_ANSWER_JSON,

@@ -17,7 +17,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from atlas.app import Atlas
 from atlas.capabilities.ide.contracts import (
@@ -72,6 +72,25 @@ class FileNodeResponse(BaseModel):
 class TreeResponse(BaseModel):
     workspace_id: str
     nodes: list[FileNodeResponse]
+
+
+class TreeDeltaRequest(BaseModel):
+    known_hashes: dict[str, str] = Field(default_factory=dict)
+
+
+class MerkleDeltaNodeResponse(BaseModel):
+    path: str
+    is_dir: bool
+    hash: str
+    size: int
+    change_type: str
+
+
+class TreeDeltaResponse(BaseModel):
+    workspace_id: str
+    root_hash: str
+    unchanged: bool
+    deltas: list[MerkleDeltaNodeResponse]
 
 
 class DocumentResponse(BaseModel):
@@ -363,6 +382,43 @@ async def get_tree(workspace_id: str, atlas: Atlas = Depends(get_atlas)) -> Tree
                 path=n.path, name=n.name, is_dir=n.is_dir, size=n.size, version=n.version, language=n.language
             )
             for n in nodes
+        ],
+    )
+
+
+@router.post("/workspaces/{workspace_id}/tree/delta", response_model=TreeDeltaResponse)
+async def get_tree_delta(
+    workspace_id: str,
+    req: TreeDeltaRequest,
+    atlas: Atlas = Depends(get_atlas),
+) -> TreeDeltaResponse:
+    from pathlib import Path
+    from atlas.engineering.merkle import MerklePrefixTrie
+
+    svc = _service(atlas)
+    try:
+        session = await svc.get_session(workspace_id)
+    except IDEServiceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    root_path = Path(session.workspace.root_paths[0])
+    trie = MerklePrefixTrie()
+    tree = trie.build_tree(root_path)
+    unchanged, deltas = trie.compute_delta(tree, req.known_hashes)
+
+    return TreeDeltaResponse(
+        workspace_id=workspace_id,
+        root_hash=tree.hash,
+        unchanged=unchanged,
+        deltas=[
+            MerkleDeltaNodeResponse(
+                path=d.path,
+                is_dir=d.is_dir,
+                hash=d.hash,
+                size=d.size,
+                change_type=d.change_type,
+            )
+            for d in deltas
         ],
     )
 

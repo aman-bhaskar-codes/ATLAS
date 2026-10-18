@@ -9,12 +9,11 @@ any internal error returns a hit.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-_CRED_NAMES = {"id_rsa", "id_ed25519", ".env", "credentials", ".netrc", ".pgpass"}
-_CRED_SUFFIXES = {".pem", ".key", ".p12", ".keychain"}
+from atlas.infra.path_security import is_credential_access as is_credential_access
+
 _FIN_PATH_HINTS = ("/charge", "/payment", "/payout", "/transfer", "/withdraw", "/checkout")
 _FIN_CLI_HINTS = ("stripe", "paypal", "razorpay", "web3", "eth-", "coinbase")
 
@@ -34,32 +33,6 @@ KNOWN_MATCHERS: frozenset[str] = frozenset(
         "mass_research_deletion",
     }
 )
-
-
-def _canonical(raw: str) -> Path | None:
-    if not raw:
-        return None
-    try:
-        return Path(raw).expanduser().resolve(strict=False)
-    except (OSError, RuntimeError, ValueError):
-        return None
-
-
-def is_credential_access(paths: list[str], credential_dirs: list[str]) -> tuple[bool, str]:
-    try:
-        cred_dirs = [Path(d).expanduser().resolve(strict=False) for d in credential_dirs]
-        for raw in paths:
-            p = _canonical(raw)
-            if p is None:
-                return True, f"unresolvable path treated as credential risk: {raw!r}"
-            if p.name in _CRED_NAMES or p.suffix in _CRED_SUFFIXES:
-                return True, f"credential-like file: {p}"
-            for d in cred_dirs:
-                if d == p or d in p.parents:
-                    return True, f"path inside credential dir {d}: {p}"
-        return False, ""
-    except Exception as exc:  # fail closed
-        return True, f"matcher error, failing closed: {exc!r}"
 
 
 def is_mass_deletion(target_count: int, targets_glob: str | None, threshold: int) -> tuple[bool, str]:

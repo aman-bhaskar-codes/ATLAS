@@ -28,6 +28,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Local document parsing; native tesseract and Poppler pdftoppm are required for scans.
+ocr = ["pypdf>=6.19.0", "Pillow>=12.0"]
 macos = [
     "pyobjc-core>=10.3; sys_platform == 'darwin'",
     "pyobjc-framework-Cocoa>=10.3; sys_platform == 'darwin'",

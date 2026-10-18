@@ -61,6 +61,10 @@ class ApprovalView(BaseModel):
     expires_at: datetime
     status: Literal["pending", "approved", "denied", "expired"]
     decision_source: Literal["dashboard", "telegram", "cli"] | None = None
+    correlation_id: str = ""
+    preview: str = ""
+    code_required: bool = False
+    confirmation_code: str | None = None
 
 
 class MemoryFactView(BaseModel):
@@ -112,7 +116,25 @@ class AuditPage(BaseModel):
     next_cursor: str | None = None
 
 
+class AuditFilters(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    since: datetime | None = None
+    tier: int | None = None
+
+
+class AuditExport(BaseModel):
+    """Bounded export of public projections; never includes raw audit payloads."""
+
+    model_config = ConfigDict(frozen=True)
+    items: tuple[AuditEventView, ...]
+    generated_at: datetime
+    filters: AuditFilters
+    max_events: int
+    truncated: bool
+
+
 class ApprovalDecisionCommand(BaseModel):
+    confirmation_code: str | None = Field(default=None, pattern=r"^[0-9]{4}$", min_length=4, max_length=4)
     approval_id: str
     decision: Literal["approve", "deny"]
     idempotency_key: str = Field(min_length=16, max_length=200)

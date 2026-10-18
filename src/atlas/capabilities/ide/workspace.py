@@ -31,6 +31,7 @@ from atlas.capabilities.ide.contracts import (
     WorkspaceRef,
 )
 from atlas.infra.logging import get_logger
+from atlas.infra.path_security import DEFAULT_CREDENTIAL_DIRS, is_credential_access
 
 _log = get_logger("atlas.ide.workspace")
 
@@ -131,6 +132,8 @@ class WorkspaceEngine:
             candidate.relative_to(self._root)
         except ValueError as exc:
             raise WorkspaceError(f"path escapes workspace root: {rel!r}") from exc
+        if is_credential_access([str(candidate)], list(DEFAULT_CREDENTIAL_DIRS))[0]:
+            raise WorkspaceError("credential paths cannot be exposed through the IDE")
         return candidate
 
     def _rel(self, path: Path) -> str:
@@ -158,6 +161,14 @@ class WorkspaceEngine:
         for child in children:
             if len(out) >= max_entries:
                 return
+            try:
+                self._resolve(self._rel(child))
+            except WorkspaceError:
+                continue
+            if child.is_symlink() and child.is_dir():
+                # Directory aliases can cycle or duplicate entire trees. Reads
+                # still resolve explicitly selected in-workspace paths safely.
+                continue
             if child.is_dir():
                 if child.name in _IGNORED_DIRS:
                     continue

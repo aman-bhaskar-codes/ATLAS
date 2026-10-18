@@ -48,11 +48,14 @@ async def _await_terminal(client: AsyncClient, task_id: str, *, timeout_s: float
     state = "unknown"
     while asyncio.get_running_loop().time() < deadline:
         response = await client.get(f"/api/v1/tasks/{task_id}")
+        if response.status_code == 429:
+            await asyncio.sleep(0.2)
+            continue
         assert response.status_code == 200, response.text
         state = response.json()["state"]
         if state in _TERMINAL:
             return state
-        await asyncio.sleep(0.02)
+        await asyncio.sleep(0.1)
     pytest.fail(f"task {task_id} never reached a terminal state (stuck in {state!r})")
 
 

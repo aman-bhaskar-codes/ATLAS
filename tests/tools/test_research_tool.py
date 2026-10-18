@@ -8,11 +8,16 @@ untrusted DATA, and `dry_run` never touches the network.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
 
+from atlas.capabilities.browser.security.egress import EgressPolicy
 from atlas.tools.research import MAX_ANSWER_CHARS, HttpTextFetcher, ResearchTool, _html_to_text
+
+
+async def _public_dns(host: str) -> list[str]:
+    return ["8.8.8.8"]
 
 
 # ── fabric / runner / pipeline doubles ──────────────────────────────────
@@ -458,7 +463,7 @@ async def test_fetcher_denies_a_redirect_into_an_internal_host() -> None:
         # First (public) hop redirects to the cloud-metadata IP.
         return httpx.Response(302, headers={"location": "http://169.254.169.254/latest/meta-data/"})
 
-    fetcher = HttpTextFetcher()
+    fetcher = HttpTextFetcher(egress_policy=EgressPolicy(resolver=_public_dns))
     real_client = httpx.AsyncClient
 
     def _client(*_a: object, **kw: object) -> httpx.AsyncClient:
@@ -617,69 +622,43 @@ def test_html_to_text_tolerates_a_missing_title() -> None:
     assert "Body only." in text
 
 
-async def test_fetcher_declines_binary_bodies_rather_than_indexing_garbage(monkeypatch: pytest.MonkeyPatch) -> None:
-    class FakeResponse:
-        headers: ClassVar[dict[str, str]] = {"content-type": "application/pdf"}
-        content = b"%PDF-1.7 binary junk"
-        encoding = None
-        is_redirect = False
-
-        def raise_for_status(self) -> None: ...
-
-    class FakeClient:
-        def __init__(self, *a: Any, **k: Any) -> None: ...
-        async def __aenter__(self) -> FakeClient:
-            return self
-
-        async def __aexit__(self, *exc: Any) -> None: ...
-        async def get(self, url: str) -> FakeResponse:
-            return FakeResponse()
-
+async def test_fetcher_declines_binary_bodies_rather_than_indexing_garbage() -> None:
     import httpx
 
-    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
-    title, text, content_type = await HttpTextFetcher()("https://ex.test/a.pdf")
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200, headers={"content-type": "application/pdf"}, stream=httpx.ByteStream(b"%PDF-1.7 binary junk")
+        )
+    )
+    title, text, content_type = await HttpTextFetcher(
+        egress_policy=EgressPolicy(resolver=_public_dns), transport=transport
+    )("https://ex.test/a.pdf")
     assert (title, text) == ("", "")
     assert content_type == "application/pdf"
 
 
-async def test_fetcher_converts_html_and_sends_a_research_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: dict[str, Any] = {}
-
-    class FakeResponse:
-        headers: ClassVar[dict[str, str]] = {"content-type": "text/html; charset=utf-8"}
-        content = b"<html><head><title>Paper</title></head><body><p>Findings.</p></body></html>"
-        encoding = "utf-8"
-        is_redirect = False
-
-        def raise_for_status(self) -> None: ...
-
-    class FakeClient:
-        def __init__(self, *a: Any, **k: Any) -> None:
-            seen.update(k)
-
-        async def __aenter__(self) -> FakeClient:
-            return self
-
-        async def __aexit__(self, *exc: Any) -> None: ...
-        async def get(self, url: str) -> FakeResponse:
-            return FakeResponse()
-
+async def test_fetcher_converts_html_and_sends_a_research_user_agent() -> None:
     import httpx
 
-    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
-    title, text, content_type = await HttpTextFetcher()("https://ex.test/p")
+    def response(request: httpx.Request) -> httpx.Response:
+        assert "ATLAS" in request.headers["user-agent"]
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html; charset=utf-8"},
+            stream=httpx.ByteStream(b"<html><head><title>Paper</title></head><body><p>Findings.</p></body></html>"),
+        )
 
+    title, text, content_type = await HttpTextFetcher(
+        egress_policy=EgressPolicy(resolver=_public_dns), transport=httpx.MockTransport(response)
+    )("https://ex.test/p")
     assert title == "Paper" and "Findings." in text
     assert content_type == "text/markdown"
-    assert "ATLAS" in seen["headers"]["User-Agent"]
-    # Redirects are followed by hand (each hop re-checked against the egress
-    # policy), so the httpx client itself must NOT auto-follow.
-    assert seen["follow_redirects"] is False
 
 
-async def test_fetcher_extracts_a_pdf_text_layer(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_fetcher_extracts_a_pdf_text_layer() -> None:
     import zlib
+
+    import httpx
 
     stream = zlib.compress(b"BT (Autonomous adaptation benchmarks.) Tj ET")
     stream_obj = b"4 0 obj\n<< /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream\nendobj\n" % (
@@ -687,28 +666,12 @@ async def test_fetcher_extracts_a_pdf_text_layer(monkeypatch: pytest.MonkeyPatch
         stream,
     )
     pdf = b"%PDF-1.7\n" + stream_obj + b"%%EOF"
-
-    class FakeResponse:
-        headers: ClassVar[dict[str, str]] = {"content-type": "application/pdf"}
-        content = pdf
-        encoding = None
-        is_redirect = False
-
-        def raise_for_status(self) -> None: ...
-
-    class FakeClient:
-        def __init__(self, *a: Any, **k: Any) -> None: ...
-        async def __aenter__(self) -> FakeClient:
-            return self
-
-        async def __aexit__(self, *exc: Any) -> None: ...
-        async def get(self, url: str) -> FakeResponse:
-            return FakeResponse()
-
-    import httpx
-
-    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
-    title, text, content_type = await HttpTextFetcher()("https://ex.test/a.pdf")
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, headers={"content-type": "application/pdf"}, stream=httpx.ByteStream(pdf))
+    )
+    title, text, content_type = await HttpTextFetcher(
+        egress_policy=EgressPolicy(resolver=_public_dns), transport=transport
+    )("https://ex.test/a.pdf")
     assert "Autonomous adaptation benchmarks." in text
     assert content_type == "text/markdown"
-    assert title == ""  # this minimal PDF carries no /Title
+    assert title == ""

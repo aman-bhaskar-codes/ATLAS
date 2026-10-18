@@ -24,8 +24,17 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from atlas.infra.backends import PostgresConnection
+from atlas.infra.backends import PostgresConnection, SQLiteConnection
 from atlas.infra.db import Database
+from atlas.infra.execution_lease import (
+    ORPHAN_GUARD,
+    POSTGRES_ORPHAN_CTE,
+    POSTGRES_ORPHAN_GUARD,
+    POSTGRES_OWNER_GUARD,
+    ExecutionLeaseStore,
+    OwnershipLostError,
+    guarded_upsert,
+)
 from atlas.infra.logging import get_logger
 from atlas.orchestration.agent_engine.records import AgentRunRecord
 
@@ -78,6 +87,15 @@ class AgentRunStore(Protocol):
 
     async def delete_run(self, run_id: str) -> None: ...
 
+    async def running_runs(self) -> tuple[AgentRunRecord, ...]: ...
+
+    @property
+    def leases(self) -> ExecutionLeaseStore: ...
+
+    async def save_owned(self, record: AgentRunRecord, owner_id: str, *, now: str) -> None: ...
+
+    async def settle_orphan(self, before: AgentRunRecord, after: AgentRunRecord, *, now: str) -> bool: ...
+
 
 class SqliteAgentRunStore:
     """`AgentRunStore` over the shared `infra/db.py` SQLite substrate. Upserts are
@@ -86,6 +104,42 @@ class SqliteAgentRunStore:
 
     def __init__(self, db: Database) -> None:
         self._db = db
+
+    @property
+    def leases(self) -> ExecutionLeaseStore:
+        return ExecutionLeaseStore(SQLiteConnection(self._db.conn))
+
+    async def save_owned(self, record: AgentRunRecord, owner_id: str, *, now: str) -> None:
+        guard = ("agent:" + record.run_id, owner_id, now)
+        cur = await self._db.conn.execute(guarded_upsert(_UPSERT), (*_params(record), *guard, *guard))
+        await self._db.conn.commit()
+        if cur.rowcount != 1:
+            raise OwnershipLostError(f"agent run {record.run_id!r} no longer owned")
+
+    async def settle_orphan(self, before: AgentRunRecord, after: AgentRunRecord, *, now: str) -> bool:
+        cur = await self._db.conn.execute("SELECT payload FROM agent_runs WHERE run_id=?", (before.run_id,))
+        row = await cur.fetchone()
+        if row is None or AgentRunRecord.model_validate_json(row["payload"]) != before:
+            return False
+        cur = await self._db.conn.execute(
+            "UPDATE agent_runs SET status=?,payload=?,updated_ts=? WHERE run_id=? AND status='running' "
+            "AND payload=? AND " + ORPHAN_GUARD,
+            (
+                after.status,
+                after.model_dump_json(),
+                after.updated_ts,
+                before.run_id,
+                row["payload"],
+                "agent:" + before.run_id,
+                now,
+            ),
+        )
+        await self._db.conn.commit()
+        return cur.rowcount == 1
+
+    async def running_runs(self) -> tuple[AgentRunRecord, ...]:
+        cur = await self._db.conn.execute("SELECT payload FROM agent_runs WHERE status='running'")
+        return tuple(AgentRunRecord.model_validate_json(row["payload"]) for row in await cur.fetchall())
 
     async def save_run(self, record: AgentRunRecord) -> None:
         await self._db.conn.execute(_UPSERT, _params(record))
@@ -134,6 +188,44 @@ class PostgresAgentRunStore:
 
     def __init__(self, conn: PostgresConnection) -> None:
         self._conn = conn
+
+    @property
+    def leases(self) -> ExecutionLeaseStore:
+        return ExecutionLeaseStore(self._conn)
+
+    async def save_owned(self, record: AgentRunRecord, owner_id: str, *, now: str) -> None:
+        guard = ("agent:" + record.run_id, owner_id, now)
+        changed = await self._conn.execute(
+            guarded_upsert(_UPSERT, owner_guard=POSTGRES_OWNER_GUARD), (*_params(record), *guard, *guard)
+        )
+        await self._conn.commit()
+        if changed != 1:
+            raise OwnershipLostError(f"agent run {record.run_id!r} no longer owned")
+
+    async def settle_orphan(self, before: AgentRunRecord, after: AgentRunRecord, *, now: str) -> bool:
+        row = await self._conn.fetchone("SELECT payload FROM agent_runs WHERE run_id=?", (before.run_id,))
+        if row is None or AgentRunRecord.model_validate_json(row["payload"]) != before:
+            return False
+        changed = await self._conn.execute(
+            POSTGRES_ORPHAN_CTE
+            + "UPDATE agent_runs SET status=?,payload=?,updated_ts=? WHERE run_id=? AND status='running' "
+            "AND payload=? AND " + POSTGRES_ORPHAN_GUARD,
+            (
+                "agent:" + before.run_id,
+                after.status,
+                after.model_dump_json(),
+                after.updated_ts,
+                before.run_id,
+                row["payload"],
+                now,
+            ),
+        )
+        await self._conn.commit()
+        return changed == 1
+
+    async def running_runs(self) -> tuple[AgentRunRecord, ...]:
+        rows = await self._conn.fetchall("SELECT payload FROM agent_runs WHERE status='running'")
+        return tuple(AgentRunRecord.model_validate_json(row["payload"]) for row in rows)
 
     async def save_run(self, record: AgentRunRecord) -> None:
         await self._conn.execute(_UPSERT, _params(record))

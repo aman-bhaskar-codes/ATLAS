@@ -5,6 +5,8 @@ Phase-5 capability router picks a model by declared capabilities."""
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -20,4 +22,6 @@ class ProviderCapabilities(BaseModel):
     multi_tab: bool = True
     device_emulation: bool = True
     remote: bool = False  # cloud browser (Browserbase/Steel)
+    network_transport: Literal["unverified", "pinned_proxy"] = "unverified"
+    external_attach: bool = False
     vision_native: bool = False  # provider-side element detection

@@ -88,3 +88,8 @@ describe("degenerate inputs", () => {
     expect(describeError(42)).toBe("42");
   });
 });
+it("directs an authentication failure to the Settings credential control", () => {
+  const message = describeError(apiError(401, null, "invalid API key"));
+  expect(message).toContain("Settings");
+  expect(message).not.toContain("without ATLAS_API_KEYS");
+});

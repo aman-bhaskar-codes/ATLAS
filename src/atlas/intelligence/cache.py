@@ -16,12 +16,14 @@ The exact-hash fast path above it keeps working regardless.
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
+from atlas.infra.types import CostPolicy, NetworkPolicy, PrivacyClass
 from atlas.intelligence.contracts import InferenceRequest, InferenceResponse
 
 _log = get_logger("atlas.cache")
@@ -60,14 +62,55 @@ class _VectorStore(Protocol):
 
 
 class SemanticCache:
-    def __init__(self, db: Database, vectors: _VectorStore, embedder: _Embedder) -> None:
+    def __init__(
+        self,
+        db: Database,
+        vectors: _VectorStore,
+        embedder: _Embedder,
+        *,
+        embedding_is_local: bool = False,
+    ) -> None:
         self._db = db
         self._vectors = vectors
         self._embedder = embedder
+        self._embedding_is_local = embedding_is_local
+
+    def can_cache(self, req: InferenceRequest) -> bool:
+        """Do not replay actions/media or send constrained data to cloud embedding.
+
+        Cloud embeddings have no governed free-price contract, so requests
+        forbidding spend cannot silently purchase them as a cache side effect.
+        """
+        if (
+            req.stream
+            or req.tools
+            or any(
+                message.images or message.tool_calls or message.tool_call_id or message.role == "tool"
+                for message in req.messages
+            )
+        ):
+            return False
+        if not self._embedding_is_local and (
+            req.constraints.privacy_class in {PrivacyClass.PRIVATE, PrivacyClass.SENSITIVE, PrivacyClass.SECRET}
+            or req.constraints.network_policy in {NetworkPolicy.OFFLINE, NetworkPolicy.LOCAL_ONLY}
+            or req.constraints.cost_policy in {CostPolicy.ZERO_COST, CostPolicy.FREE_ONLY}
+        ):
+            return False
+        return True
+
+    def _namespace(self, req: InferenceRequest) -> str:
+        # Semantic similarity may vary the final user question, but never the
+        # instruction/history, capabilities, generation parameters, or policy.
+        payload = req.model_dump(mode="json", exclude={"correlation_id", "task_id"})
+        payload["required_capabilities"] = sorted(cap.value for cap in req.required_capabilities)
+        if payload["messages"] and payload["messages"][-1]["role"] == "user":
+            payload["messages"][-1]["content"] = ""
+        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
     def _hash_prompt(self, req: InferenceRequest) -> str:
-        prompt_text = "\n".join(f"{m.role}: {m.content}" for m in req.messages)
-        return hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
+        messages = [message.model_dump(mode="json") for message in req.messages]
+        encoded = json.dumps([self._namespace(req), messages], sort_keys=True).encode()
+        return hashlib.sha256(encoded).hexdigest()
 
     async def _embed(self, text: str, *, phase: str) -> list[float] | None:
         """Embed for cache purposes, or None if the embedder is unavailable.
@@ -83,7 +126,7 @@ class SemanticCache:
 
     async def get(self, req: InferenceRequest) -> InferenceResponse | None:
         # Avoid caching streaming responses
-        if req.stream:
+        if not self.can_cache(req):
             return None
 
         prompt_hash = self._hash_prompt(req)
@@ -113,7 +156,7 @@ class SemanticCache:
             _log.warning("cache.query_failed", event_type="cache", error=repr(exc))
             return None
 
-        if hits and hits[0].score > 0.97:
+        if hits and hits[0].score > 0.97 and hits[0].ref.startswith(self._namespace(req) + ":"):
             ref = hits[0].ref
             cur = await self._db.conn.execute(
                 "SELECT response_json, ttl_expires_ts FROM semantic_cache WHERE embedding_ref = ?",
@@ -130,7 +173,7 @@ class SemanticCache:
         return None
 
     async def put(self, req: InferenceRequest, resp: InferenceResponse) -> None:
-        if req.stream:
+        if not self.can_cache(req) or resp.tool_calls:
             return
 
         # Time-sensitive capabilities get a short TTL
@@ -142,7 +185,7 @@ class SemanticCache:
         prompt_hash = self._hash_prompt(req)
         prompt_text = "\n".join(f"{m.role}: {m.content}" for m in req.messages)
 
-        ref = str(uuid.uuid4())
+        ref = f"{self._namespace(req)}:{uuid.uuid4()}"
         embedding = await self._embed(prompt_text, phase="put")
 
         # No embedding -> store the row anyway so the exact-hash fast path still

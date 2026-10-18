@@ -52,6 +52,27 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
   return true;
 }
 
+/** Base delay in ms for exponential backoff. */
+export const BASE_DELAY_MS = 1000;
+
+/** Max delay cap in ms for exponential backoff. */
+export const MAX_DELAY_MS = 30000;
+
+/**
+ * Truncated Exponential Backoff with Full Jitter:
+ * sleep_ms = Math.random() * Math.min(MAX_DELAY_MS, BASE_DELAY_MS * Math.pow(2, attempt))
+ *
+ * Desynchronizes concurrent tab/component retries in O(1) time.
+ */
+export function fullJitterBackoff(
+  attempt: number,
+  baseMs: number = BASE_DELAY_MS,
+  maxMs: number = MAX_DELAY_MS,
+): number {
+  const capped = Math.min(maxMs, baseMs * Math.pow(2, attempt));
+  return Math.floor(Math.random() * capped);
+}
+
 /**
  * Whether a failure is worth offering a "retry" button for.
  *

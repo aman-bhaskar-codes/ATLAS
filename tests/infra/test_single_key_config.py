@@ -1,10 +1,4 @@
-"""The single-key promise, at the config layer.
-
-WHY: "one OpenRouter key runs chat, embeddings and speech" is enforced by
-``Settings.effective_embed_api_key()`` and by the embed defaults pointing at
-OpenRouter. If a default drifts back to a second vendor, embeddings silently
-start failing with "no API key" on a machine that has a perfectly good key.
-"""
+"""Local embedding defaults and optional OpenRouter key reuse."""
 
 from __future__ import annotations
 
@@ -14,7 +8,7 @@ from atlas.infra.config import Settings
 def _settings(*, openrouter: str = "", embed: str = "") -> Settings:
     # These fields are alias-only, and naming both keeps the test independent of
     # the developer's real .env.
-    return Settings(OPENROUTER_API_KEY=openrouter, ATLAS_EMBED_API_KEY=embed)  # type: ignore[call-arg]
+    return Settings(_env_file=None, OPENROUTER_API_KEY=openrouter, ATLAS_EMBED_API_KEY=embed)  # type: ignore[call-arg]
 
 
 class TestEffectiveEmbedApiKey:
@@ -32,15 +26,10 @@ class TestEffectiveEmbedApiKey:
 
 
 class TestEmbedDefaults:
-    def test_embeddings_default_to_openrouter(self) -> None:
+    def test_embeddings_default_to_local_ollama(self) -> None:
         settings = _settings()
         assert settings.embed_base_url == "https://openrouter.ai/api/v1"
-        assert settings.embed_provider == "openrouter"
+        assert settings.embed_provider == "ollama"
 
-    def test_default_embed_model_is_1024_dim_compatible(self) -> None:
-        """qwen3-embedding-0.6b is 1024-dim, as bge-m3/jina-v3 were.
-
-        Changing this to a model of another width silently breaks every existing
-        Chroma collection, so the id is pinned here as a tripwire.
-        """
-        assert _settings().embed_model == "qwen/qwen3-embedding-0.6b"
+    def test_default_embed_model_uses_installed_local_bge(self) -> None:
+        assert _settings().embed_model == "bge-m3:latest"

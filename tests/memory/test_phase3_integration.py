@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -76,10 +77,13 @@ class _FakeBus:
 
 
 @pytest_asyncio.fixture
-async def db(tmp_path: Path) -> Database:
+async def db(tmp_path: Path) -> AsyncIterator[Database]:
     d = Database(tmp_path / "test.db")
     await d.start()
-    return d
+    try:
+        yield d
+    finally:
+        await d.stop()
 
 
 @pytest_asyncio.fixture

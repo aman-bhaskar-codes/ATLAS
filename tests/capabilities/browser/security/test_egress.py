@@ -70,3 +70,69 @@ def test_scope_still_denies_internal_hosts() -> None:
     policy = EgressPolicy(allowed_hosts=frozenset({"localhost"}))
     with pytest.raises(UnsafeURLError, match=r"internal|loopback"):
         policy.check("http://localhost/x")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://2130706433/",
+        "http://127.1/",
+        "http://0177.0.0.1/",
+        "http://0x7f000001/",
+        "http://localhost./",
+        "http://localhost。/",
+        "http://224.0.0.1/",
+        "http://example.com:invalid/",
+        "http://user@example.com/",
+        "http://example.com\\@evil.com/",
+        "http://%31%32%37.0.0.1/",
+        "http://example.com\n/",
+    ],
+)
+def test_ambiguous_and_non_public_hosts_are_denied(url: str) -> None:
+    with pytest.raises(UnsafeURLError):
+        EgressPolicy().check(url)
+
+
+@pytest.mark.parametrize("answers", [["127.0.0.1"], ["8.8.8.8", "10.0.0.1"], [], ["invalid"], ["::ffff:127.0.0.1"]])
+async def test_resolved_check_denies_any_non_public_answer(answers: list[str]) -> None:
+    async def resolve(host: str) -> list[str]:
+        assert host == "public.example.test"
+        return answers
+
+    policy = EgressPolicy(resolver=resolve)
+    with pytest.raises(UnsafeURLError):
+        await policy.check_resolved("https://public.example.test/")
+
+
+async def test_resolved_check_allows_only_public_answers_and_preserves_scope() -> None:
+    calls: list[str] = []
+
+    async def resolve(host: str) -> list[str]:
+        calls.append(host)
+        return ["8.8.8.8", "2606:4700:4700::1111"]
+
+    policy = EgressPolicy(allowed_hosts=frozenset({"example.test"}), resolver=resolve)
+    await policy.check_resolved("https://public.example.test/")
+    with pytest.raises(UnsafeURLError, match="scope"):
+        await policy.check_resolved("https://outside.test/")
+    assert calls == ["public.example.test"]
+
+
+async def test_dns_error_fails_closed() -> None:
+    async def resolve(host: str) -> list[str]:
+        raise OSError("resolver unavailable")
+
+    with pytest.raises(UnsafeURLError, match="resolution"):
+        await EgressPolicy(resolver=resolve).check_resolved("https://public.example.test/")
+
+
+async def test_dns_uses_browser_compatible_idna_hostname() -> None:
+    calls: list[str] = []
+
+    async def resolve(host: str) -> list[str]:
+        calls.append(host)
+        return ["8.8.8.8"]
+
+    await EgressPolicy(resolver=resolve).check_resolved("https://faß.test/")
+    assert calls == ["xn--fa-hia.test"]

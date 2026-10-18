@@ -20,6 +20,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from atlas.infra.types import ProviderToolCall
 from atlas.intelligence.contracts import Message
 
 
@@ -67,6 +68,7 @@ class ToolCallRecord(BaseModel):
 
     model_config = {"frozen": True}
     call_id: str
+    thought_signature: str | None = None
     tool: str
     operation: str | None = None
     args: dict[str, Any] = Field(default_factory=dict)
@@ -74,6 +76,9 @@ class ToolCallRecord(BaseModel):
     output: Any = None
     error: str | None = None
     latency_ms: int = 0
+    # Old JSON rows are completed observations. New write-ahead rows distinguish
+    # a persisted dispatch intent from an acknowledged outcome.
+    state: str = "completed"
 
 
 class AgentStep(BaseModel):
@@ -83,6 +88,49 @@ class AgentStep(BaseModel):
     index: int
     assistant_text: str = ""
     tool_calls: tuple[ToolCallRecord, ...] = ()
+    assistant_tool_calls: tuple[ProviderToolCall, ...] = ()
+    reasoning_details: str | None = None
+
+
+class AgentCheckpoint(BaseModel):
+    """Incremental trace and counters, independent of the terminal result."""
+
+    model_config = {"frozen": True}
+    steps: tuple[AgentStep, ...] = ()
+    model_calls: int = 0
+    tool_calls: int = 0
+    tokens_used: int = 0
+    final_text: str = ""
+
+    def interrupted_result(self, error: str) -> AgentEngineResult:
+        steps = tuple(
+            step.model_copy(
+                update={
+                    "tool_calls": tuple(
+                        call.model_copy(
+                            update={
+                                "state": "unknown",
+                                "error": "Execution interrupted: outcome unknown; verify before retry.",
+                            }
+                        )
+                        if call.state == "pending"
+                        else call
+                        for call in step.tool_calls
+                    )
+                }
+            )
+            for step in self.steps
+        )
+        return AgentEngineResult(
+            ok=False,
+            stop_reason=StopReason.ERROR,
+            steps=steps,
+            model_calls=self.model_calls,
+            tool_calls=self.tool_calls,
+            tokens_used=self.tokens_used,
+            final_text=self.final_text,
+            error=error,
+        )
 
 
 class AgentEngineResult(BaseModel):
@@ -134,6 +182,7 @@ class AgentRunRecord(BaseModel):
     tool_names: tuple[str, ...] = ()
     seed_messages: tuple[Message, ...] = ()
     result: AgentEngineResult | None = None
+    checkpoint: AgentCheckpoint = Field(default_factory=AgentCheckpoint)
     status: str = ""
     created_ts: str = ""
     updated_ts: str = ""

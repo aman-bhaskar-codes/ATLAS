@@ -6,6 +6,7 @@ and the CLI commands (atlas providers, atlas cost, atlas profile).
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -20,15 +21,28 @@ async def providers_health(request: Request) -> list[dict[str, Any]]:
     registry = atlas.gateway._runtime._providers
     health = atlas.gateway._runtime._health
     quota = getattr(atlas.gateway._runtime, "_quota", None)
+    observations = health.snapshot()
+    models = getattr(atlas, "model_registry", None)
 
     result = []
     for name in registry.names():
         provider = registry.get(name)
+        ready = False
+        try:
+            if provider is not None:
+                async with asyncio.timeout(5):
+                    ready = bool(await provider.health())
+        except Exception:
+            # Vendor exceptions can include URLs and credentials. Report the
+            # failed probe without returning their raw messages to the browser.
+            ready = False
+        cost_classes = sorted({m.cost_class.value for m in models.all() if m.provider == name}) if models else []
         entry: dict[str, Any] = {
             "name": name,
-            "healthy": health.is_available(name),
-            "avg_latency_ms": int(health.latency(name)),
+            "healthy": ready and health.is_available(name),
+            "avg_latency_ms": int(observations.get(name, {}).get("avg_latency_ms", 0)),
             "is_local": getattr(provider, "is_local", False),
+            "cost_classes": cost_classes,
         }
         if quota:
             q = quota.remaining(name)
@@ -43,7 +57,7 @@ async def providers_health(request: Request) -> list[dict[str, Any]]:
 async def providers_free(request: Request) -> list[dict[str, Any]]:
     """Only free and local providers."""
     all_providers = await providers_health(request)
-    return [p for p in all_providers if p.get("is_local") or p.get("quota_pct", 0) > 0]
+    return [p for p in all_providers if p.get("is_local") or {"free", "free_quota"}.intersection(p["cost_classes"])]
 
 
 @router.get("/profile")

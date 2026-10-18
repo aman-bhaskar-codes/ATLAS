@@ -19,11 +19,10 @@ allowed_paths:
 # project's code is consequential.
 # Deliberately absent: `git push` / `git fetch` — the agent never talks to a remote.
 allowed_commands:
-  read_only:   ["ls", "cat", "grep", "find", "git status", "git log", "git diff", "curl", "wget", "head", "tail", "wc",
-                "python3 -c",
+  read_only:   ["ls", "cat", "grep", "find", "git status", "git log", "git diff", "head", "tail", "wc",
                 # pure git reads: the status/diff engine plus checkpoint resolve + list
                 "git rev-parse", "git for-each-ref"]
-  side_effect: ["git add", "git commit", "npm install", "python",
+  side_effect: ["git add", "git commit", "npm install", "python", "python3", "curl", "wget",
                 # git verbs that write the index, worktree, object DB, or refs.
                 # Checkpoints are writes too: snapshot = stash create + update-ref.
                 "git checkout", "git restore", "git update-ref", "git stash",
@@ -167,4 +166,3 @@ require_confirm:
   # DANGEROUS (approval + confirmation code). A dry_run preview mutates nothing
   # and stays at the base CONFIRM tier.
   - {tool: knowledge,  operation: forget,   match: mass_research_deletion, tier: 3}
-

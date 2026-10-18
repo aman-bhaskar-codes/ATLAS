@@ -5,16 +5,9 @@
 // `connected`, `research_event` (with `id: {sequence}`), `heartbeat`,
 // `stream_closed` — and resumes from the `Last-Event-ID` header.
 //
-// WHY native EventSource reconnection (no manual close+reopen): resume is driven by
-// `Last-Event-ID`, which the browser tracks from each frame's `id:` line and resends
-// automatically on ITS OWN reconnect. Manually closing and constructing a new
-// EventSource would drop that cursor and replay the whole snapshot. So on a
-// transient error we let EventSource retry itself; we only close deliberately on
-// `stream_closed` (terminal) or unmount. Events are deduped by `sequence`, so the
-// snapshot a fresh (cursorless) connection replays is idempotent.
-//
-// Mirrors features/agent-runs/useAgentRunStream.ts — same seam, research URL/schema.
+// The authenticated transport retains the replay cursor across transient failures.
 
+import { AtlasEventStream } from "../../lib/api/stream";
 import { useEffect, useMemo, useState } from "react";
 import { ResearchEventSchema, type ResearchEvent } from "./contracts";
 
@@ -50,7 +43,7 @@ export function useResearchStream(sessionId: string | null): ResearchStream {
     // browser-driven reconnect replay. Local to the effect so it resets per session.
     const seen = new Set<number>();
     const url = `${API_BASE}/research/sessions/${encodeURIComponent(sessionId)}/stream`;
-    const source = new EventSource(url);
+    const source = new AtlasEventStream(url);
     let closedByUs = false;
 
     source.addEventListener("connected", () => setStatus("live"));
@@ -81,10 +74,9 @@ export function useResearchStream(sessionId: string | null): ResearchStream {
       setStatus("closed");
     });
 
-    source.onerror = () => {
-      // Terminal close already handled above; otherwise the browser is retrying
-      // (it will resend Last-Event-ID). Reflect that without tearing the source down.
-      if (!closedByUs) setStatus("reconnecting");
+    source.onerror = ({ retrying }) => {
+      // A credential error pauses attempts until the operator updates Settings.
+      if (!closedByUs) setStatus(retrying ? "reconnecting" : "closed");
     };
 
     return () => {

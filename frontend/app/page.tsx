@@ -1,5 +1,6 @@
 "use client";
 
+import { PlatformLauncher } from "@/components/dashboard/PlatformLauncher";
 import { HeroSection } from "@/components/dashboard/HeroSection";
 import { CommandWorkspace } from "@/components/workspace/CommandWorkspace";
 import { ActivityTimeline } from "@/components/dashboard/ActivityTimeline";
@@ -13,6 +14,7 @@ export default function Dashboard() {
 
       {/* Full Width Zone: Command Composer */}
       <CommandWorkspace />
+      <PlatformLauncher />
 
       {/* Primary & Secondary Zones */}
       <div className="grid-cols-panel">

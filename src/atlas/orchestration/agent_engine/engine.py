@@ -17,7 +17,7 @@ network and no registry, and production passes the real gateway/dispatcher.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from time import perf_counter
 from typing import Any, Protocol
 
@@ -26,6 +26,7 @@ from atlas.infra.types import ToolCallSpec
 from atlas.intelligence.capabilities import CapabilitySet
 from atlas.intelligence.contracts import Constraints, InferenceRequest, InferenceResponse, Message, Role
 from atlas.orchestration.agent_engine.records import (
+    AgentCheckpoint,
     AgentEngineResult,
     AgentStep,
     StopReason,
@@ -98,6 +99,7 @@ class AgentEngine:
         temperature: float = 0.2,
         required_capabilities: CapabilitySet = frozenset(),
         constraints: Constraints | None = None,
+        checkpoint: Callable[[AgentCheckpoint], Awaitable[None]] | None = None,
     ) -> AgentEngineResult:
         counter = LimitCounter(self._limits)
         convo: list[Message] = list(messages)
@@ -107,6 +109,18 @@ class AgentEngine:
         model_calls = 0
         tool_calls = 0
         last_text = ""
+
+        async def persist_checkpoint() -> None:
+            if checkpoint is not None:
+                await checkpoint(
+                    AgentCheckpoint(
+                        steps=tuple(steps),
+                        model_calls=model_calls,
+                        tool_calls=tool_calls,
+                        tokens_used=counter.tokens,
+                        final_text=last_text,
+                    )
+                )
 
         await self._emit(tid, correlation_id, state="executing", kind="agent.started")
         try:
@@ -124,11 +138,24 @@ class AgentEngine:
                 )
                 resp = await self._gateway.infer(request)
                 model_calls += 1
-                counter.add_tokens(resp.usage.input_tokens + resp.usage.output_tokens)
                 last_text = resp.text or last_text
+                step_index = len(steps)
+                steps.append(
+                    AgentStep(
+                        index=step_index,
+                        assistant_text=resp.text,
+                        assistant_tool_calls=resp.tool_calls,
+                        reasoning_details=resp.reasoning_details,
+                    )
+                )
+                try:
+                    counter.add_tokens(resp.usage.input_tokens + resp.usage.output_tokens)
+                finally:
+                    # Even a returned turn that exhausts the token budget is real
+                    # history; preserve its signatures and counters before stopping.
+                    await persist_checkpoint()
 
                 if not resp.tool_calls:
-                    steps.append(AgentStep(index=len(steps), assistant_text=resp.text))
                     await self._emit(tid, correlation_id, state="completed", kind="agent.completed")
                     return AgentEngineResult(
                         ok=True,
@@ -141,18 +168,50 @@ class AgentEngine:
                     )
 
                 # Replay the model's own tool choice back to it on the next turn.
-                convo.append(Message(role=Role.ASSISTANT, content=resp.text, tool_calls=resp.tool_calls))
+                convo.append(
+                    Message(
+                        role=Role.ASSISTANT,
+                        content=resp.text,
+                        reasoning_details=resp.reasoning_details,
+                        tool_calls=resp.tool_calls,
+                    )
+                )
                 records: list[ToolCallRecord] = []
                 for call in resp.tool_calls:
                     counter.tick_tool()
                     tool_calls += 1
                     operation, args = _decode_arguments(call.arguments)
                     call_id = call.id or call.name
-                    action = Action(step=len(steps), kind="tool_call", tool=call.name, operation=operation, args=args)
+                    action = Action(step=step_index, kind="tool_call", tool=call.name, operation=operation, args=args)
+                    records.append(
+                        ToolCallRecord(
+                            call_id=call_id,
+                            thought_signature=call.thought_signature,
+                            tool=call.name,
+                            operation=operation,
+                            args=args,
+                            state="pending",
+                        )
+                    )
+                    steps[step_index] = steps[step_index].model_copy(update={"tool_calls": tuple(records)})
+                    # This commit is the dispatch boundary: failure stops execution.
+                    await persist_checkpoint()
                     await self._emit_tool(tid, correlation_id, "tool.requested", call.name, operation, args)
                     t0 = perf_counter()
                     obs = await self._dispatcher.dispatch(action, correlation_id)
                     latency_ms = int((perf_counter() - t0) * 1000)
+                    records[-1] = records[-1].model_copy(
+                        update={
+                            "state": "completed",
+                            "ok": obs.ok,
+                            "output": obs.content,
+                            "error": obs.error,
+                            "latency_ms": latency_ms,
+                        }
+                    )
+                    steps[step_index] = steps[step_index].model_copy(update={"tool_calls": tuple(records)})
+                    # Acknowledge the observation before events or the next action.
+                    await persist_checkpoint()
                     await self._emit_tool(
                         tid,
                         correlation_id,
@@ -164,27 +223,11 @@ class AgentEngine:
                         error=obs.error,
                         latency_ms=latency_ms,
                     )
-                    records.append(
-                        ToolCallRecord(
-                            call_id=call_id,
-                            tool=call.name,
-                            operation=operation,
-                            args=args,
-                            ok=obs.ok,
-                            output=obs.content,
-                            error=obs.error,
-                            latency_ms=latency_ms,
-                        )
-                    )
                     convo.append(
                         Message(
-                            role=Role.TOOL,
-                            content=_serialize_observation(obs),
-                            tool_call_id=call_id,
-                            name=call.name,
+                            role=Role.TOOL, content=_serialize_observation(obs), tool_call_id=call_id, name=call.name
                         )
                     )
-                steps.append(AgentStep(index=len(steps), assistant_text=resp.text, tool_calls=tuple(records)))
         except (ReasoningError, OrchestrationTimeoutError) as exc:
             await self._emit(tid, correlation_id, state="limited", kind="agent.limited")
             return AgentEngineResult(
@@ -199,16 +242,13 @@ class AgentEngine:
             )
         except Exception as exc:
             await self._emit(tid, correlation_id, state="error", kind="agent.error")
-            return AgentEngineResult(
-                ok=False,
-                stop_reason=StopReason.ERROR,
-                final_text=last_text,
+            return AgentCheckpoint(
                 steps=tuple(steps),
                 model_calls=model_calls,
                 tool_calls=tool_calls,
                 tokens_used=counter.tokens,
-                error=str(exc),
-            )
+                final_text=last_text,
+            ).interrupted_result(str(exc))
 
     async def _emit(self, task_id: str, correlation_id: str, *, state: str, kind: str) -> None:
         if self._publisher is not None:

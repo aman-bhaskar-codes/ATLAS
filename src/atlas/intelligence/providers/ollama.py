@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import json
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
+from urllib.parse import urlsplit
+from uuid import uuid4
 
 import httpx
 
 from atlas.infra.types import ProviderToolCall, ToolCallSpec
-from atlas.intelligence.contracts import Message, StreamChunk, Usage
+from atlas.intelligence.contracts import Message, Role, StreamChunk, Usage
 from atlas.intelligence.errors import ProviderError
 from atlas.intelligence.providers.base import ProviderCompletion
 
@@ -17,10 +21,53 @@ from atlas.intelligence.providers.base import ProviderCompletion
 class OllamaProvider:
     is_local = True
 
-    def __init__(self, host: str, timeout_s: float) -> None:
+    def __init__(
+        self,
+        host: str,
+        timeout_s: float,
+        *,
+        model: str | None = None,
+        context_length: int = 8192,
+    ) -> None:
+        url = urlsplit(host)
+        hostname = url.hostname or ""
+        try:
+            loopback = ipaddress.ip_address(hostname).is_loopback
+        except ValueError:
+            loopback = hostname.lower() == "localhost"
+        if (
+            not loopback
+            or url.scheme not in {"http", "https"}
+            or url.username
+            or url.password
+            or url.query
+            or url.fragment
+            or url.path not in {"", "/"}
+        ):
+            raise ValueError("local Ollama must use a loopback HTTP(S) host without credentials or a path")
         self.name = "ollama"
         self._host = host.rstrip("/")
-        self._client = httpx.AsyncClient(timeout=timeout_s)
+        self._model = model
+        self._context_length = context_length
+        # Environment proxies must never move local/SECRET inputs off machine.
+        self._client = httpx.AsyncClient(timeout=timeout_s, trust_env=False)
+        self._sem = asyncio.Semaphore(1)
+
+    @staticmethod
+    def _encode_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
+        encoded: list[dict[str, Any]] = []
+        for message in messages:
+            turn: dict[str, Any] = {"role": message.role.value, "content": message.content}
+            if message.tool_calls:
+                turn["tool_calls"] = [
+                    {"function": {"name": call.name, "arguments": dict(call.arguments)}} for call in message.tool_calls
+                ]
+            if message.role is Role.TOOL:
+                turn["tool_name"] = message.name or message.tool_call_id or "tool"
+            if message.images:
+                turn["images"] = [image.data for image in message.images]
+            encoded.append(turn)
+        return encoded
 
     def _payload(
         self,
@@ -33,7 +80,7 @@ class OllamaProvider:
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": model,
-            "messages": [{"role": m.role.value, "content": m.content} for m in messages],
+            "messages": self._encode_messages(messages),
             "stream": stream,
             # WHY think=False: qwen3 is a thinking model that spends all token budget
             # on internal reasoning, returning empty content. Disable thinking mode
@@ -42,6 +89,7 @@ class OllamaProvider:
             "options": {
                 "num_predict": max_tokens,
                 "temperature": temperature,
+                "num_ctx": self._context_length,
             },
         }
 
@@ -84,27 +132,24 @@ class OllamaProvider:
         tools: Sequence[ToolCallSpec] = (),
     ) -> ProviderCompletion:
         try:
-            r = await self._client.post(
-                f"{self._host}/api/chat",
-                json=self._payload(model, messages, max_tokens, temperature, False, tools),
-            )
+            async with self._sem:
+                r = await self._client.post(
+                    f"{self._host}/api/chat",
+                    json=self._payload(model, messages, max_tokens, temperature, False, tools),
+                )
             r.raise_for_status()
         except httpx.HTTPError as exc:
             raise ProviderError(f"{self.name} transport: {exc}") from exc
 
-        data = r.json()
+        try:
+            data = r.json()
+        except ValueError as exc:
+            raise ProviderError(f"{self.name} returned invalid JSON") from exc
         text = data.get("message", {}).get("content", "")
-        if not text:
-            import logging
-
-            thinking = data.get("message", {}).get("thinking", "")
-            logging.getLogger("atlas.intel.ollama").warning(
-                "ollama returned empty content. done_reason=%s thinking_len=%d",
-                data.get("done_reason"),
-                len(thinking or ""),
-            )
         it, ot = int(data.get("prompt_eval_count", 0)), int(data.get("eval_count", 0))
         tool_calls = self._parse_tool_calls(data)
+        if not str(text or "").strip() and not tool_calls:
+            raise ProviderError(f"{self.name} returned no visible response or tool calls")
         # ollama is free
         return ProviderCompletion(str(text), Usage(input_tokens=it, output_tokens=ot, usd=0.0), tool_calls)
 
@@ -121,7 +166,9 @@ class OllamaProvider:
                     args = json.loads(args)
                 if not isinstance(args, dict):
                     continue
-                calls.append(ProviderToolCall(id=str(tc.get("id", "")), name=str(fn["name"]), arguments=args))
+                calls.append(
+                    ProviderToolCall(id=str(tc.get("id") or uuid4().hex), name=str(fn["name"]), arguments=args)
+                )
             except (KeyError, json.JSONDecodeError, TypeError):
                 continue
         return tuple(calls)
@@ -135,32 +182,39 @@ class OllamaProvider:
         temperature: float,
     ) -> AsyncIterator[StreamChunk]:
         try:
-            async with self._client.stream(
-                "POST",
-                f"{self._host}/api/chat",
-                json=self._payload(model, messages, max_tokens, temperature, True),
-            ) as r:
-                r.raise_for_status()
-                async for line in r.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
+            async with self._sem:
+                async with self._client.stream(
+                    "POST",
+                    f"{self._host}/api/chat",
+                    json=self._payload(model, messages, max_tokens, temperature, True),
+                ) as r:
+                    r.raise_for_status()
+                    async for line in r.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
 
-                    delta = data.get("message", {}).get("content", "")
-                    done = data.get("done", False)
-                    if delta or done:
-                        yield StreamChunk(delta=delta, done=done)
+                        delta = data.get("message", {}).get("content", "")
+                        done = data.get("done", False)
+                        if delta or done:
+                            yield StreamChunk(delta=delta, done=done)
         except httpx.HTTPError as exc:
             raise ProviderError(f"{self.name} stream transport: {exc}") from exc
 
     async def health(self) -> bool:
         try:
-            r = await self._client.get(f"{self._host}/api/version", timeout=2.0)
-            return r.status_code == 200
-        except httpx.HTTPError:
+            r = await self._client.get(f"{self._host}/api/tags", timeout=2.0)
+            if r.status_code != 200:
+                return False
+            models = r.json().get("models", [])
+            if self._model is None:
+                return bool(models)
+            target = self._model if ":" in self._model else f"{self._model}:latest"
+            return any(entry.get("name") == target or entry.get("model") == target for entry in models)
+        except (httpx.HTTPError, ValueError, TypeError, AttributeError):
             return False
 
     async def close(self) -> None:

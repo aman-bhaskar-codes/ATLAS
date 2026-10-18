@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import pytest
+
 from atlas.infra.ids import CorrelationId
 from atlas.orchestration.dag_executor import DagExecutor
+from atlas.orchestration.limits import ExecutionLimits
 from atlas.orchestration.types import Action, Observation, Plan, PlanStep
 
 CORR = CorrelationId("corr-1")
@@ -41,6 +44,58 @@ def _plan(steps: list[dict[str, Any]]) -> Plan:
 
 
 class TestDagExecutor:
+    @pytest.mark.parametrize(
+        ("limits", "reason"),
+        [
+            (ExecutionLimits(max_steps=1), "max_steps"),
+            (ExecutionLimits(max_tool_calls=1), "max_tool_calls"),
+            (ExecutionLimits(max_runtime_s=-1), "max_runtime"),
+        ],
+    )
+    async def test_limits_reserve_budget_before_parallel_dispatch(
+        self, limits: ExecutionLimits, reason: str,
+    ) -> None:
+        plan = _plan([{"index": i, "intent": "s", "tool": "fs", "operation": "write"} for i in range(8)])
+        dispatcher = RecordingDispatcher(delay_s=0)
+        results = await DagExecutor(dispatcher, max_concurrency=8, limits=limits).execute(plan, CORR)
+
+        admitted = 0 if reason == "max_runtime" else 1
+        assert len(dispatcher.calls) == admitted
+        assert len(results) == 8
+        assert sum(obs.ok for obs in results.values()) == admitted
+        assert all(reason in (obs.error or "") for obs in results.values() if not obs.ok)
+        if admitted:
+            assert results[0].content == "done 0"
+            assert results[0].error is None
+
+    @pytest.mark.parametrize(
+        "steps",
+        [
+            [{"index": 0, "depends_on": [99]}],
+            [{"index": 0, "depends_on": [0]}, {"index": 1, "depends_on": [0]}],
+            [{"index": 0, "depends_on": [1]}, {"index": 1, "depends_on": [0]}],
+            [{"index": 0}, {"index": 0}],
+        ],
+    )
+    async def test_invalid_graph_fails_before_any_dispatch(self, steps: list[dict[str, Any]]) -> None:
+        plan = _plan([dict(step, intent="s", tool="fs", operation="write") for step in steps])
+        dispatcher = RecordingDispatcher(delay_s=0)
+        results = await DagExecutor(dispatcher).execute(plan, CORR)
+
+        assert dispatcher.calls == []
+        assert set(results) == {step.index for step in plan.steps}
+        assert all(not obs.ok and "invalid dependency graph" in (obs.error or "") for obs in results.values())
+
+    async def test_dependency_on_non_executable_step_blocks_dispatch(self) -> None:
+        plan = _plan([
+            {"index": 0, "intent": "reason first"},
+            {"index": 1, "intent": "write", "tool": "fs", "operation": "write", "depends_on": [0]},
+        ])
+        dispatcher = RecordingDispatcher(delay_s=0)
+
+        assert await DagExecutor(dispatcher).execute(plan, CORR) == {}
+        assert dispatcher.calls == []
+
     async def test_independent_steps_run_and_all_succeed(self) -> None:
         plan = _plan(
             [

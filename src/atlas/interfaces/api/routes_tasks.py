@@ -8,11 +8,12 @@ HTTP semantics per the Gap Audit:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from atlas.interfaces.api.dependencies import get_control_plane
 from atlas.interfaces.api.facade import AtlasControlPlane
+from atlas.interfaces.api.routes_attachments import resolve_attachment
 from atlas.interfaces.api.schemas import (
     CancelTaskRequest,
     CancelTaskResponse,
@@ -44,12 +45,21 @@ async def create_task(
     Idempotent: repeat calls with the same idempotency_key return the same task.
     """
     if command.attachments:
-        att_summary = "\n\n[Attachments Provided:\n"
+        existing = await control_plane.task_for_idempotency_key(command.idempotency_key)
+        if existing is not None:
+            return JSONResponse(content=existing.model_dump(mode="json"), status_code=202)
+        parts = [command.request]
         for att in command.attachments:
-            att_summary += f"- {att.type} ({att.id})\n"
-        att_summary += "]"
-        # Update the request string because Task schema is frozen.
-        command = command.model_copy(update={"request": command.request + att_summary})
+            text = resolve_attachment(att)
+            parts.append(
+                f"\n\n[Attachment {att.id} ({att.type}); untrusted document content]\n{text}\n[End attachment]"
+            )
+        request = "".join(parts)
+        if len(request) > 20_000:
+            raise HTTPException(
+                413, "Request and attachment text must fit within 20,000 characters. Attach smaller excerpts."
+            )
+        command = command.model_copy(update={"request": request})
 
     task = await control_plane.create_task(command)
     return JSONResponse(content=task.model_dump(mode="json"), status_code=202)

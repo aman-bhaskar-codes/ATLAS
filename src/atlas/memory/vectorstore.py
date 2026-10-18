@@ -8,6 +8,7 @@ never a paid API.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Protocol
 
 from pydantic import BaseModel
@@ -41,15 +42,44 @@ class ChromaVectorStore:
     Phase 3: Enhanced for real-time episode storage with separate collections.
     """
 
-    def __init__(self, path: str, collection: str = "atlas_semantic") -> None:
+    def __init__(
+        self,
+        path: str,
+        collection: str = "atlas_semantic",
+        *,
+        embedding_space: str | None = None,
+    ) -> None:
         import chromadb
 
+        self.embedding_space = embedding_space
         self._client = chromadb.PersistentClient(path=path)
-        self._col = self._client.get_or_create_collection(collection)
+        if embedding_space is not None:
+            if not embedding_space:
+                raise ValueError("embedding_space must not be empty")
+            suffix = "_emb_" + hashlib.sha256(embedding_space.encode("utf-8")).hexdigest()[:32]
+            metadata: dict[str, str] | None = {"atlas_embedding_space": embedding_space, "hnsw:space": "cosine"}
+        else:
+            # Explicit legacy callers retain access. Runtime bootstrap always
+            # uses an identity; old collections are never renamed or deleted.
+            suffix = ""
+            metadata = None
+        self._col = self._client.get_or_create_collection(
+            collection + suffix,
+            metadata=metadata,
+            embedding_function=None,
+        )
         # Phase 3: Separate collection for episodes
-        self._episodes_col = self._client.get_or_create_collection("atlas_episodes")
+        self._episodes_col = self._client.get_or_create_collection(
+            "atlas_episodes" + suffix,
+            metadata=metadata,
+            embedding_function=None,
+        )
         # Phase 3: Separate collection for knowledge documents
-        self._knowledge_col = self._client.get_or_create_collection("atlas_knowledge")
+        self._knowledge_col = self._client.get_or_create_collection(
+            "atlas_knowledge" + suffix,
+            metadata=metadata,
+            embedding_function=None,
+        )
 
     async def upsert(self, ref: str, text: str, embedding: list[float]) -> None:
         self._col.upsert(ids=[ref], documents=[text], embeddings=[embedding])  # type: ignore

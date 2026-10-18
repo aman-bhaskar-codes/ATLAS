@@ -1,10 +1,9 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("approvals reflect real backend state (storage deferred)", () => {
+test.describe("approvals reflect durable backend state", () => {
   test("Home Approval Inbox shows Inbox Zero when nothing is pending", async ({ page }) => {
     await page.goto("/");
-    // GET /approvals/pending returns [] today (approval storage is a documented
-    // deferral), so the inbox is honestly empty rather than faking rows.
+    // A clean runtime has no pending guarded actions; the durable inbox stays empty.
     await expect(page.getByText("Inbox Zero")).toBeVisible({ timeout: 15_000 });
   });
 
@@ -12,5 +11,9 @@ test.describe("approvals reflect real backend state (storage deferred)", () => {
     const response = await page.goto("/approvals");
     expect(response?.status() ?? 500).toBeLessThan(400);
     await expect(page.locator("header.topbar")).toBeVisible();
+    await expect(page.getByText("mail.send", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("calendar.delete_event", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Yesterday · Tier 2", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "audit log", exact: true })).toBeVisible();
   });
 });

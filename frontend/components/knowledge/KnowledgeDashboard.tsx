@@ -1,19 +1,30 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useKnowledgeDocuments, useKnowledgeSearch, useIngestDocument, useDeleteDocument } from '@/features/knowledge/queries';
+import { useKnowledgeDocuments, useKnowledgeSearch, useIngestDocument, useDeleteDocument, useReindexCorpus } from '@/features/knowledge/queries';
 import type { SearchResult } from '@/features/knowledge/contracts';
 import { Search, Database, BookOpen, Trash2, Plus, UploadCloud } from 'lucide-react';
 import { ErrorRow } from '@/components/primitives/ErrorState';
 
 export function KnowledgeDashboard() {
   const [activeTab, setActiveTab] = useState<'documents' | 'search' | 'ingest'>('documents');
+  const reindex = useReindexCorpus();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%' }}>
       <div className="crumb">
         ATLAS / <strong>Knowledge Fabric</strong>
       </div>
+
+      <section className="panel" style={{ padding: '1rem' }} aria-label="Embedding maintenance">
+        <p>After changing embedding models, refresh up to 10 documents per batch. Source text and previous indexes are preserved.</p>
+        <button className="btn" disabled={reindex.isPending} onClick={() => reindex.mutate()}>
+          {reindex.isPending ? 'Refreshing embeddings…' : 'Refresh embedding batch'}
+        </button>
+        {reindex.isPending && <p role="status">Processing this batch for up to 30 seconds.</p>}
+        {reindex.data && <p role="status">Updated {reindex.data.documents} documents and {reindex.data.embedded} chunks. Errors: {reindex.data.errors}.{reindex.data.timed_out ? ' Time limit reached; run another batch to continue.' : ' Run another batch if more documents need refreshing.'}</p>}
+        {reindex.isError && <ErrorRow error={reindex.error} onRetry={() => reindex.mutate()} />}
+      </section>
 
       <div className="panel" style={{ display: 'flex', gap: '1rem', padding: '1rem' }}>
         <button

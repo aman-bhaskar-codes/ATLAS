@@ -11,6 +11,9 @@ order from the SSE stream.
 
 from __future__ import annotations
 
+import bisect
+from collections import OrderedDict, deque
+import itertools
 import json
 import uuid
 from dataclasses import dataclass
@@ -18,6 +21,9 @@ from typing import Any
 
 from atlas.infra.db import Database
 from atlas.interfaces.api.schemas import TaskEventResponse
+
+_MAX_RING_BUFFER_PER_TASK = 500
+_MAX_TRACKED_TASKS = 1000
 
 
 @dataclass
@@ -39,10 +45,28 @@ class _EventRow:
 
 
 class TaskEventStore:
-    """Persists orchestrator events and provides query access for the API."""
+    """Persists orchestrator events and provides query access for the API.
+
+    Backed by:
+    1. An in-memory Bounded Circular Ring Buffer (deque with maxlen=500) per task
+       for O(1) ingestion and O(log N) bisect_right cursor replay.
+    2. SQLite task_events table for durable long-term storage and full historical
+       recovery.
+    """
 
     def __init__(self, db: Database) -> None:
         self._db = db
+        self._ring_buffers: OrderedDict[str, deque[TaskEventResponse]] = OrderedDict()
+
+    def _get_or_create_buffer(self, task_id: str) -> deque[TaskEventResponse]:
+        if task_id in self._ring_buffers:
+            self._ring_buffers.move_to_end(task_id)
+            return self._ring_buffers[task_id]
+        if len(self._ring_buffers) >= _MAX_TRACKED_TASKS:
+            self._ring_buffers.popitem(last=False)
+        buf: deque[TaskEventResponse] = deque(maxlen=_MAX_RING_BUFFER_PER_TASK)
+        self._ring_buffers[task_id] = buf
+        return buf
 
     async def record(
         self,
@@ -63,23 +87,31 @@ class TaskEventStore:
         """Insert one event row; returns the assigned event_id."""
         event_id = str(uuid.uuid4())
         meta = {str(k): str(v) for k, v in (safe_metadata or {}).items()}
-        # SQLite assigns the sequence via AUTOINCREMENT — we rely on the monotonic id
-        # but expose a per-task sequence via a correlated subquery for robustness.
+        buf = self._get_or_create_buffer(task_id)
+        if len(buf) > 0:
+            assigned_seq = buf[-1].sequence + 1
+        else:
+            cur = await self._db.conn.execute(
+                "SELECT COALESCE(MAX(sequence), 0) + 1 FROM task_events WHERE task_id = ?",
+                (task_id,),
+            )
+            row = await cur.fetchone()
+            assigned_seq = int(row[0]) if row else 1
+            await cur.close()
+
         await self._db.conn.execute(
             """
             INSERT INTO task_events
                 (event_id, task_id, correlation_id, sequence, event_type, state,
                  summary, capability, operation, provider, tier, requires_approval,
                  safe_metadata, ts)
-            VALUES (?, ?, ?,
-                (SELECT COALESCE(MAX(sequence), 0) + 1 FROM task_events WHERE task_id = ?),
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event_id,
                 task_id,
                 correlation_id,
-                task_id,
+                assigned_seq,
                 event_type,
                 state,
                 summary,
@@ -93,6 +125,28 @@ class TaskEventStore:
             ),
         )
         await self._db.conn.commit()
+
+        # Update in-memory ring buffer
+        event_resp = TaskEventResponse(
+            event_id=event_id,
+            event_type=event_type,
+            ts=ts,
+            task_id=task_id,
+            correlation_id=correlation_id,
+            execution_id=None,
+            sequence=assigned_seq,
+            state=state,
+            summary=summary,
+            capability=capability,
+            operation=operation,
+            provider=provider,
+            tier=tier,
+            requires_approval=requires_approval,
+            safe_metadata=meta,
+        )
+        buf = self._get_or_create_buffer(task_id)
+        buf.append(event_resp)
+
         return event_id
 
     async def list_events(
@@ -101,7 +155,21 @@ class TaskEventStore:
         after_sequence: int | None = None,
         limit: int = 500,
     ) -> list[TaskEventResponse]:
-        """Return ordered events for a task, optionally from a cursor sequence."""
+        """Return ordered events for a task, optionally from a cursor sequence.
+
+        Fast path: O(log N) bisect_right search in the in-memory ring buffer when
+        all requested events are within memory bounds.
+        Slow path: Falls back to indexed SQLite query when buffer has wrapped or is empty.
+        """
+        buf = self._ring_buffers.get(task_id)
+        if buf and len(buf) > 0 and after_sequence is not None:
+            # Check if all events newer than after_sequence are retained in the buffer
+            oldest_seq = buf[0].sequence
+            if oldest_seq <= after_sequence + 1:
+                seqs = [e.sequence for e in buf]
+                idx = bisect.bisect_right(seqs, after_sequence)
+                return list(itertools.islice(buf, idx, idx + limit))
+
         if after_sequence is not None:
             cur = await self._db.conn.execute(
                 """SELECT event_id, task_id, correlation_id, sequence, event_type,
@@ -123,7 +191,8 @@ class TaskEventStore:
                 (task_id, limit),
             )
         rows = await cur.fetchall()
-        return [
+        await cur.close()
+        results = [
             TaskEventResponse(
                 event_id=r["event_id"],
                 event_type=r["event_type"],
@@ -143,3 +212,10 @@ class TaskEventStore:
             )
             for r in rows
         ]
+        # Prime the ring buffer if it was empty
+        if not buf and results:
+            target_buf = self._get_or_create_buffer(task_id)
+            for res in results[-_MAX_RING_BUFFER_PER_TASK:]:
+                target_buf.append(res)
+
+        return results

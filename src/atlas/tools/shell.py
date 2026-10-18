@@ -11,15 +11,21 @@ from __future__ import annotations
 import shlex
 from typing import Any, cast
 
+from atlas.infra.command_policy import (
+    SHELL_OPERATORS,
+    command_paths,
+    is_read_only_command,
+    matches_command_prefix,
+    parse_command,
+)
 from atlas.infra.logging import get_logger
+from atlas.infra.path_security import DEFAULT_CREDENTIAL_DIRS, is_credential_access
 from atlas.infra.types import SideEffect, ToolResult
 from atlas.safety.sandbox import Sandbox, SandboxChunk, SandboxResult, StreamingSandbox
 from atlas.tools.command_stream import current_sink
 
 _log = get_logger("atlas.tools.shell")
-
-# Shell operators that MUST be rejected before execution.
-_SHELL_OPERATORS = frozenset({"|", "||", "&&", ";", "`", "$(", ">>", ">", "<"})
+_SHELL_OPERATORS = SHELL_OPERATORS
 
 
 def _matches_prefix(argv: list[str], entries: list[str]) -> bool:
@@ -29,11 +35,7 @@ def _matches_prefix(argv: list[str], entries: list[str]) -> bool:
     must NOT satisfy a `git status` entry, so we compare token *prefixes* rather
     than the first token alone — otherwise every git subcommand would slip
     through (or, as it did before, be wrongly denied)."""
-    for entry in entries:
-        toks = entry.split()
-        if toks and argv[: len(toks)] == toks:
-            return True
-    return False
+    return matches_command_prefix(argv, entries)
 
 
 class ShellTool:
@@ -46,32 +48,32 @@ class ShellTool:
         side_effect: list[str],
         sandbox: Sandbox,
         mounts: dict[str, str],
+        credential_dirs: list[str] | None = None,
     ) -> None:
         self._read_only = read_only
         self._side_effect = side_effect
         self._sandbox = sandbox
         self._mounts = mounts  # permitted host->container mounts for shell work
+        self._credential_dirs = credential_dirs if credential_dirs is not None else list(DEFAULT_CREDENTIAL_DIRS)
 
     def dry_run(self, args: dict[str, Any]) -> str:
         return f"RUN (sandboxed) {args.get('command')!r}"
 
-    def _allowed(self, command: str) -> tuple[bool, str]:
+    def _allowed(self, command: str, *, cwd: str | None = None) -> tuple[bool, str]:
         """Parse command with shlex, validate executable exactly against allowlist.
 
         Returns (allowed, reason).
         """
         try:
-            argv = shlex.split(command)
+            argv = parse_command(command)
         except ValueError as exc:
             return False, f"unparseable command: {exc}"
         if not argv:
             return False, "empty command"
 
-        # Reject shell operators in raw command text
-        for op in _SHELL_OPERATORS:
-            if op in command:
-                return False, f"shell operator {op!r} is not permitted"
-
+        blocked, reason = is_credential_access(command_paths(argv, cwd=cwd, mounts=self._mounts), self._credential_dirs)
+        if blocked:
+            return False, reason
         executable = argv[0]
         if not (_matches_prefix(argv, self._read_only) or _matches_prefix(argv, self._side_effect)):
             return False, f"executable {executable!r} not in allowlist"
@@ -83,7 +85,9 @@ class ShellTool:
         if not command:
             return ToolResult(ok=False, error="no command")
 
-        allowed, reason = self._allowed(command)
+        raw_cwd = args.get("cwd")
+        cwd = raw_cwd if isinstance(raw_cwd, str) and raw_cwd else None
+        allowed, reason = self._allowed(command, cwd=cwd)
         if not allowed:
             return ToolResult(ok=False, error=f"command not allowlisted: {reason}")
         try:
@@ -91,7 +95,7 @@ class ShellTool:
         except ValueError as exc:
             return ToolResult(ok=False, error=f"unparseable command: {exc}")
 
-        network = argv[0] in {"npm", "pip"} or " ".join(argv[:2]) in {"git clone", "git pull"}
+        network = argv[0] in {"npm", "pip", "curl", "wget"} or " ".join(argv[:2]) in {"git clone", "git pull"}
 
         # Callers may extend the wall-clock budget via args (the interactive
         # terminal passes 120s; a long-lived dev server passes a much larger
@@ -132,7 +136,7 @@ class ShellTool:
                 timeout_s=timeout_s,
                 cwd=cwd,
             )
-        is_side_effect = _matches_prefix(argv, self._side_effect)
+        is_side_effect = not is_read_only_command(argv, self._read_only)
         effects: tuple[SideEffect, ...] = ()
         if is_side_effect:
             effects = (SideEffect(kind="command", target=argv[0], detail=command, reversible=False),)

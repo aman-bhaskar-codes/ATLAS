@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from atlas.infra.logging import get_logger
+from atlas.knowledge.chunking import chunk_parsed
+from atlas.knowledge.parsers import parse_text
 
 _log = get_logger("atlas.knowledge.documents")
 
@@ -88,6 +90,8 @@ class DocumentProcessor:
         chunk_overlap: int = 200,
         max_file_size_mb: float = 10.0,
     ) -> None:
+        if chunk_size <= 0 or not 0 <= chunk_overlap < chunk_size:
+            raise ValueError("chunk size must be positive and 0 <= overlap < chunk size")
         self._store = vector_store
         self._embedder = embedder
         self._chunk_size = chunk_size
@@ -99,57 +103,17 @@ class DocumentProcessor:
         if not text.strip():
             return []
 
-        chunks: list[Chunk] = []
-        # Prefer splitting on paragraph boundaries
-        paragraphs = text.split("\n\n")
-        current = ""
-        chunk_idx = 0
-
-        for para in paragraphs:
-            if len(current) + len(para) + 2 > self._chunk_size and current:
-                chunk_id = hashlib.sha256(f"{source}:{chunk_idx}:{current[:100]}".encode()).hexdigest()[:16]
-                chunks.append(
-                    Chunk(
-                        chunk_id=chunk_id,
-                        text=current.strip(),
-                        source_path=source,
-                        chunk_index=chunk_idx,
-                        total_chunks=0,  # filled in after
-                        metadata={},
-                    )
-                )
-                # Overlap: keep last N chars
-                current = current[-self._overlap :] + "\n\n" + para
-                chunk_idx += 1
-            else:
-                current = current + "\n\n" + para if current else para
-
-        # Last chunk
-        if current.strip():
-            chunk_id = hashlib.sha256(f"{source}:{chunk_idx}:{current[:100]}".encode()).hexdigest()[:16]
-            chunks.append(
-                Chunk(
-                    chunk_id=chunk_id,
-                    text=current.strip(),
-                    source_path=source,
-                    chunk_index=chunk_idx,
-                    total_chunks=0,
-                    metadata={},
-                )
-            )
-
-        # Fill in total_chunks
-        total = len(chunks)
+        windows = chunk_parsed(parse_text(text), source, max_chars=self._chunk_size, overlap=self._overlap)
         return [
             Chunk(
-                chunk_id=c.chunk_id,
-                text=c.text,
-                source_path=c.source_path,
+                chunk_id=hashlib.sha256(f"{source}:{c.chunk_index}:{c.content}".encode()).hexdigest()[:16],
+                text=c.content,
+                source_path=source,
                 chunk_index=c.chunk_index,
-                total_chunks=total,
-                metadata={"total_chunks": total},
+                total_chunks=c.total_chunks,
+                metadata={"total_chunks": c.total_chunks, "char_start": c.char_start, "char_end": c.char_end},
             )
-            for c in chunks
+            for c in windows
         ]
 
     async def ingest_file(self, path: Path) -> dict[str, Any]:

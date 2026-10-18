@@ -21,9 +21,14 @@ export function MobileNav() {
       <Link href="/memory" className={pathname === "/memory" ? "active" : ""}>
         <Brain /> Memory
       </Link>
-      <button>
-        <Menu /> More
-      </button>
+      <details className="mobile-more">
+        <summary><Menu /> More</summary>
+        <div className="mobile-more-links" onClick={() => { const menu = document.querySelector<HTMLDetailsElement>(".mobile-more"); if (menu) menu.open = false; }}>
+          <Link href="/research">Research</Link><Link href="/workspaces">IDE</Link>
+          <Link href="/models">Models</Link><Link href="/tools">Tools</Link>
+          <Link href="/mcp">MCP</Link><Link href="/settings">Settings</Link>
+        </div>
+      </details>
     </nav>
   );
 }

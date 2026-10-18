@@ -14,7 +14,6 @@ export function useRuntimeStatus() {
     queryKey: ["runtimeStatus"],
     queryFn: atlasApi.runtimeStatus,
     refetchInterval: 3000,
-    retry: 2,
   });
 }
 

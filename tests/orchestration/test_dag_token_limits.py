@@ -4,8 +4,7 @@ Mirrors test_limits.py conventions and the existing test_dag_executor.py
 patterns. Tests cover:
 a. Observation without usage: counter.tokens stays 0.
 b. Steps with usage: counter accumulates input+output across steps.
-c. Budget trip: max_tokens set tiny, second step raises ReasoningError,
-   batch siblings are cancelled, run result honestly reports failure.
+c. Budget trip: completed observations remain truthful and further dispatch stops.
 d. Concurrency: batched parallel steps accumulate correctly.
 e. Existing limits behaviour unchanged: max_steps / max_tool_calls trip
    exactly as before.
@@ -113,12 +112,13 @@ class TestUsageAccumulation:
 
 
 class TestBudgetTrip:
-    async def test_max_tokens_trips_and_cancels_siblings(self) -> None:
+    async def test_max_tokens_preserves_completed_steps_and_blocks_dependents(self) -> None:
         """With max_tokens=200, step 0 (150 tokens) succeeds, step 1 (300
         tokens) trips the budget. The run must end with honest failure."""
         plan = _plan([
             {"index": 0, "intent": "first", "tool": "fs", "operation": "read"},
             {"index": 1, "intent": "second", "tool": "fs", "operation": "read", "depends_on": [0]},
+            {"index": 2, "intent": "third", "tool": "fs", "operation": "read", "depends_on": [1]},
         ])
         usage = {
             0: TokenUsage(input_tokens=100, output_tokens=50),   # 150 total
@@ -132,14 +132,17 @@ class TestBudgetTrip:
         # Step 0 succeeded
         assert results[0].ok is True
 
-        # Step 1 must be present and failed with a budget error
-        assert 1 in results
-        assert results[1].ok is False
-        assert "token budget exceeded" in (results[1].error or "")
+        # Accounting overflow cannot undo a successful tool side effect.
+        assert results[1].ok is True
+        assert results[1].content == "done 1"
+        assert results[1].error is None
+        assert results[1].usage == usage[1]
+        assert d.calls == [0, 1]
+        assert results[2].ok is False
+        assert "max_tokens" in (results[2].error or "")
 
     async def test_parallel_batch_budget_trip(self) -> None:
-        """Two independent steps in the same batch. One trips the budget;
-        the other must not be orphaned (it gets a failure record)."""
+        """Already dispatched siblings finish and retain their real observations."""
         plan = _plan([
             {"index": 0, "intent": "a", "tool": "fs", "operation": "read"},
             {"index": 1, "intent": "b", "tool": "fs", "operation": "read"},
@@ -158,13 +161,21 @@ class TestBudgetTrip:
         # Both steps must have a result (not orphaned)
         assert 0 in results
         assert 1 in results
-        # At least one must report the budget failure
-        errors = [r.error or "" for r in results.values()]
-        assert any("token budget exceeded" in e for e in errors)
-        # None should report ok=True if the budget was exceeded
-        budget_failed = [r for r in results.values() if "token budget exceeded" in (r.error or "")]
-        for r in budget_failed:
-            assert r.ok is False
+        assert all(obs.ok and obs.error is None for obs in results.values())
+        assert results[0].content == "done 0"
+        assert results[1].content == "done 1"
+
+    async def test_token_overflow_prevents_queued_sibling_dispatch(self) -> None:
+        plan = _plan([
+            {"index": i, "intent": "s", "tool": "fs", "operation": "write"} for i in range(3)
+        ])
+        d = UsageDispatcher(usage_per_step={0: TokenUsage(output_tokens=101)}, delay_s=0)
+        limits = ExecutionLimits(max_tokens=100)
+        results = await DagExecutor(d, max_concurrency=1, limits=limits).execute(plan, CORR)  # type: ignore[arg-type]
+
+        assert d.calls == [0]
+        assert results[0].ok is True
+        assert all(not results[i].ok and "max_tokens" in (results[i].error or "") for i in (1, 2))
 
 
 # ── (d) Concurrency: parallel steps accumulate correctly ─────────────── #

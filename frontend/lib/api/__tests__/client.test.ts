@@ -248,7 +248,7 @@ describe("the happy path still works", () => {
 
     const [url, init] = spy.mock.calls[0];
     expect(url).toBe("http://localhost:8730/api/v1/runtime/status");
-    expect((init?.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    expect(new Headers(init?.headers).get("Content-Type")).toBe("application/json");
   });
 
   it("requests trajectory experiences without the duplicated /api/v1 prefix", async () => {
@@ -280,5 +280,16 @@ describe("parseContract", () => {
 
     expect(error).toBeInstanceOf(AtlasContractError);
     expect(error?.issues).toContain("(root)");
+  });
+});
+
+describe("multipart uploads", () => {
+  it("lets the browser set the multipart boundary rather than forcing JSON", async () => {
+    const spy = stubFetch(respond(200, { id: "upload" }));
+    const { requestContract } = await import("../client");
+    const form = new FormData();
+    form.set("file", new Blob(["hello"]), "hello.txt");
+    await requestContract("/attachments", z.object({ id: z.string() }), { method: "POST", body: form });
+    expect(new Headers(spy.mock.calls[0][1]?.headers).has("Content-Type")).toBe(false);
   });
 });

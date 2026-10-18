@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from atlas.infra.cognition import RiskLevel
 from atlas.infra.ids import CorrelationId, TaskId
@@ -127,6 +127,20 @@ class Observation(BaseModel):
     content: Any = None
     error: str | None = None
     usage: TokenUsage | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _truncate_payload(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            content = data.get("content")
+            if isinstance(content, str) and len(content) > 4000:
+                data = dict(data)
+                data["content"] = content[:4000] + f"\n... [truncated {len(content) - 4000} chars]"
+            error = data.get("error")
+            if isinstance(error, str) and len(error) > 2000:
+                data = dict(data)
+                data["error"] = error[:2000] + f"\n... [truncated {len(error) - 2000} chars]"
+        return data
 
 
 class TaskResult(BaseModel):

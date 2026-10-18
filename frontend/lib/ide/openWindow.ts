@@ -6,7 +6,7 @@
 // back to same-window navigation rather than silently doing nothing.
 
 export const DEV_WINDOW_FEATURES =
-  "noopener=false,width=1600,height=1000,menubar=no,toolbar=no,location=yes";
+  "width=1600,height=1000,menubar=no,toolbar=no,location=yes";
 
 /** The route a workspace's workbench lives at. Single source of the path shape. */
 export function devWorkspacePath(workspaceId: string): string {
@@ -31,6 +31,7 @@ export function openWorkbenchWindow(workspaceId: string): OpenWorkbenchResult {
   );
   // A blocked popup is either null or an already-closed window.
   if (!handle || handle.closed) return { opened: false, reason: "blocked" };
+  handle.opener = null;
   handle.focus();
   return { opened: true, window: handle };
 }

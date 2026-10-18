@@ -21,6 +21,7 @@ from atlas.infra.clock import Clock
 from atlas.infra.ids import IdGenerator
 from atlas.infra.logging import get_logger
 from atlas.knowledge.domain import ResearchQuestionStatus, content_hash
+from atlas.knowledge.reranking import FeatureReranker
 from atlas.knowledge.retrieval import Candidate, HybridRetriever, RetrievalResult
 from atlas.knowledge.store import FabricStore
 
@@ -267,6 +268,7 @@ class ResearchRunner:
         clock: Clock,
         *,
         planner: ResearchPlanner | None = None,
+        reranker: FeatureReranker | None = None,
         discovery: Discovery | None = None,
         max_discovery_queries: int = 3,
         discovery_timeout_s: float = 25.0,
@@ -276,6 +278,7 @@ class ResearchRunner:
         self._ids = ids
         self._clock = clock
         self._planner = planner or ResearchPlanner()
+        self._reranker = reranker or FeatureReranker()
         self._discovery = discovery
         # Discovery is the expensive leg (N providers, each an HTTP call). Bound
         # it independently of the query budget so a wide question list cannot
@@ -347,7 +350,8 @@ class ResearchRunner:
                 discovery_rounds += 1
                 discovered += await self._discover(q.text)
             result: RetrievalResult = await self._retriever.retrieve(q.text, k=20)
-            fresh = [c for c in result.candidates if _source_of(c) not in session.visited_urls]
+            ranked = self._reranker.rerank(q.text, result.candidates, k=20)
+            fresh = [c for c in ranked if _source_of(c) not in session.visited_urls]
             if not fresh:
                 gains.append(0.0)
                 streak += 1

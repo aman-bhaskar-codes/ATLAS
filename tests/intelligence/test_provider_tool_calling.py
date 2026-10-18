@@ -9,12 +9,13 @@ tool-call response (parsing).
 
 from __future__ import annotations
 
+import base64
 import json
 from typing import Any
 
 import httpx
 
-from atlas.infra.types import ProviderToolCall, ToolCallSpec
+from atlas.infra.types import ImageInput, ProviderToolCall, ToolCallSpec
 from atlas.intelligence.contracts import Message, Role
 from atlas.intelligence.providers.anthropic import AnthropicProvider
 from atlas.intelligence.providers.gemini import GeminiProvider
@@ -31,6 +32,21 @@ LOOP = [
     ),
     Message(role=Role.TOOL, content="found: X is 42", tool_call_id="call_1", name="search"),
 ]
+
+
+def test_openai_image_turn_preserves_text_and_image() -> None:
+    data = base64.b64encode(b"\x89PNG\r\n\x1a\nimage").decode()
+    messages = [Message(role=Role.USER, content="Read this", images=(ImageInput(mime_type="image/png", data=data),))]
+    encoded = OpenAICompatibleProvider._encode_messages(messages)
+    assert encoded == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Read this"},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{data}"}},
+            ],
+        }
+    ]
 
 
 def _mock(provider: Any, response_json: dict[str, Any], captured: dict[str, Any]) -> None:
@@ -114,7 +130,7 @@ async def test_gemini_round_trip() -> None:
     comp = await p.complete(
         model="gemini-2.0", messages=LOOP, max_tokens=64, temperature=0.0, usd_in=0.0, usd_out=0.0, tools=[TOOL]
     )
-    assert comp.tool_calls == (ProviderToolCall(id="search", name="search", arguments={"q": "Y"}),)
+    assert comp.tool_calls == (ProviderToolCall(id="", name="search", arguments={"q": "Y"}),)
     payload = captured["payload"]
     assert payload["tools"][0]["functionDeclarations"][0]["name"] == "search"
     contents = payload["contents"]

@@ -19,11 +19,16 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from atlas.infra.clock import Clock
-from atlas.infra.ids import IdGenerator
+from atlas.infra.ids import IdGenerator, UuidGenerator
+from atlas.infra.execution_lease import (
+    ExecutionOwner, OwnershipLostError, bind_execution_owner, lease_times,
+)
 from atlas.infra.logging import get_logger
 from atlas.infra.tasks import spawn
 from atlas.infra.types import InboundEvent
 from atlas.orchestration.agents.types import RunOutcome
+from atlas.orchestration.checkpoint import CheckpointStore
+from atlas.orchestration.recovery import recover_interrupted_tasks
 from atlas.orchestration.context_builder import ContextBuilder
 from atlas.orchestration.events import EventPublisher
 from atlas.orchestration.goal import GoalState
@@ -112,6 +117,10 @@ class Orchestrator:
         world_state: Any = None,  # Batch 4: environment facts
         dag_executor: Any = None,  # Batch 5: parallel plan execution
         supervisor: Any = None,  # Multi-agent: AgentSupervisor | None
+        checkpoint_store: CheckpointStore | None = None,
+        lease_ttl_s: float = 30.0,
+        lease_renewal_s: float = 5.0,
+        shutdown_timeout_s: float = 5.0,
     ) -> None:
         self._ids = ids
         self._clock = clock
@@ -131,10 +140,101 @@ class Orchestrator:
         self._dag_executor = dag_executor
         self._supervisor = supervisor
         self._cancels: dict[str, CancellationToken] = {}
+        self._checkpoint_store = checkpoint_store
+        self._lease_ttl_s = lease_ttl_s
+        self._lease_renewal_s = lease_renewal_s
+        self._shutdown_timeout_s = shutdown_timeout_s
+        self._closed = False
+        self._prepared: dict[str, str] = {}
+        self._workers: dict[str, asyncio.Task[Any]] = {}
+        self._owners: dict[str, ExecutionOwner] = {}
+        self._recovery_task: asyncio.Task[None] | None = None
+
+    async def prepare_task(self, task_id: str) -> None:
+        """Reserve ownership before an API admission row becomes visible."""
+        if self._closed or task_id in self._prepared or task_id in self._workers:
+            raise OwnershipLostError("task admission is closed or already owned")
+        leases = getattr(self._exec_store, "leases", None)
+        if leases is None:
+            return
+        identity = str(UuidGenerator().execution_id())
+        now, until = lease_times(self._clock, self._lease_ttl_s)
+        if not await leases.claim("task:" + task_id, identity, now=now, lease_until=until):
+            raise OwnershipLostError("task already has a live owner")
+        self._prepared[task_id] = identity
+        if self._closed:
+            await self.discard_admission(task_id)
+            raise OwnershipLostError("task admission is closed")
+
+    async def discard_admission(self, task_id: str) -> None:
+        identity = self._prepared.pop(task_id, None)
+        leases = getattr(self._exec_store, "leases", None)
+        if identity is not None and leases is not None:
+            await leases.release("task:" + task_id, identity)
+
+    def _ownership_lost(self) -> None:
+        self._closed = True
+        for owner in self._owners.values():
+            owner.active = False
+        for worker in self._workers.values():
+            worker.cancel()
+
+    async def recover_interrupted(self) -> list[str]:
+        database = getattr(self._exec_store, "database", None)
+        if database is None or self._checkpoint_store is None:
+            return []
+        recovered = await recover_interrupted_tasks(database, self._checkpoint_store, self._clock,
+            live_task_ids=frozenset(self._workers))
+        cur = await database.conn.execute(
+            "SELECT 1 FROM tasks WHERE state NOT IN ('completed','failed','archived') LIMIT 1"
+        )
+        pending = await cur.fetchone()
+        await cur.close()
+        if pending is not None and self._recovery_task is None and not self._closed:
+            self._recovery_task = asyncio.create_task(self._recover_expired())
+        return recovered
+
+    async def _recover_expired(self) -> None:
+        try:
+            while not self._closed:
+                await asyncio.sleep(self._lease_renewal_s)
+                try:
+                    await self.recover_interrupted()
+                    database = getattr(self._exec_store, "database", None)
+                    cur = await database.conn.execute(
+                        "SELECT 1 FROM tasks WHERE state NOT IN ('completed','failed','archived') LIMIT 1"
+                    )
+                    pending = await cur.fetchone()
+                    await cur.close()
+                    if pending is None:
+                        break
+                except Exception:
+                    _log.exception("task.recovery_monitor_failed")
+        finally:
+            self._recovery_task = None
+
+    async def close(self) -> None:
+        self._closed = True
+        workers = tuple(task for task in self._workers.values() if task is not asyncio.current_task())
+        if self._recovery_task is not None:
+            workers += (self._recovery_task,)
+        for worker in workers:
+            worker.cancel()
+        if workers:
+            await asyncio.wait(workers, timeout=self._shutdown_timeout_s)
+        try:
+            async with asyncio.timeout(self._shutdown_timeout_s):
+                for task_id in tuple(self._prepared):
+                    await self.discard_admission(task_id)
+                await self.recover_interrupted()
+        except Exception:
+            _log.exception("task.close_recovery_failed")
 
     def cancel(self, task_id: str) -> None:
         if (tok := self._cancels.get(task_id)) is not None:
             tok.cancel()
+        if (worker := self._workers.get(task_id)) is not None:
+            worker.cancel()
         # Also persist cancellation intent (survives crash).
         try:
             asyncio.get_event_loop().create_task(self._cancel_store.request_cancellation(task_id))
@@ -142,6 +242,44 @@ class Orchestrator:
             pass  # no event loop yet (tests)
 
     async def run(self, event: InboundEvent) -> TaskResult:
+        if self._closed:
+            raise OwnershipLostError("task admission is closed")
+        task_id = str(event.task_id or self._ids.task_id())
+        event = event.model_copy(update={"task_id": task_id})
+        if task_id in self._workers:
+            raise OwnershipLostError("task already has a live worker")
+        leases = getattr(self._exec_store, "leases", None)
+        if leases is None:
+            return await self._run(event)
+        identity = self._prepared.pop(task_id, None) or str(UuidGenerator().execution_id())
+        worker = asyncio.current_task()
+        if worker is not None:
+            self._workers[task_id] = worker
+        owner = ExecutionOwner("task:" + task_id, identity, self._clock, leases,
+                               admission_open=lambda: not self._closed)
+        self._owners[task_id] = owner
+        try:
+            async with leases.hold(owner.resource_id, identity, clock=self._clock,
+                ttl_s=self._lease_ttl_s, renewal_s=self._lease_renewal_s, on_lost=self._ownership_lost):
+                if self._closed:
+                    raise OwnershipLostError("task admission is closed")
+                with bind_execution_owner(owner):
+                    try:
+                        return await self._run(event)
+                    except BaseException:
+                        try:
+                            async with asyncio.timeout(self._shutdown_timeout_s):
+                                fail = getattr(self._exec_store, "fail_task_if_running", None)
+                                if fail is not None:
+                                    await fail(task_id, self._clock.now())
+                        except Exception:
+                            _log.warning("task.interruption_not_acknowledged", task_id=task_id)
+                        raise
+        finally:
+            self._workers.pop(task_id, None)
+            self._owners.pop(task_id, None)
+
+    async def _run(self, event: InboundEvent) -> TaskResult:
         task = Task(
             id=getattr(event, "task_id", None) or self._ids.task_id(),
             correlation_id=event.correlation_id,
@@ -302,6 +440,13 @@ class Orchestrator:
                 latency_ms=int((time.perf_counter() - started) * 1000),
             )
             return result
+        except BaseException:
+            if not machine.is_terminal():
+                if machine.can(TaskState.CANCELLING):
+                    machine.transition(TaskState.CANCELLING)
+                if machine.can(TaskState.FAILED):
+                    machine.transition(TaskState.FAILED)
+            raise
         finally:
             self._cancels.pop(task.id, None)
             await self._exec_store.update_task_state(

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import AwareDatetime
 
 from atlas.interfaces.api.control_plane import AtlasTrustPlane
 from atlas.interfaces.api.dependencies import get_trust_plane
 from atlas.interfaces.api.schemas_trust import (
     ApprovalView,
+    AuditExport,
     AuditPage,
     MemoryCorrectionCommand,
     MemoryFactView,
@@ -33,20 +35,7 @@ async def task(task_id: str, plane: AtlasTrustPlane = Depends(get_trust_plane)) 
     return await plane.get_task(task_id)
 
 
-# NOTE: /approvals/pending and /approvals/{id}/decide used to be duplicated
-# here as well as in routes_approvals.py, on identical paths, with a
-# different response schema (ApprovalView vs ApprovalResponse). Both
-# implementations are functionally stubs today — AtlasControlPlane's is a
-# documented placeholder pending approval storage (see facade.py), and
-# AtlasTrustPlane's raised NotImplementedError unconditionally. Keeping two
-# non-working implementations of the same feature added confusion without
-# adding capability, so this router keeps only the single-approval lookup,
-# which routes_approvals.py does not implement at all.
-#
-# STATUS: GET /approvals/{approval_id} below always raises KeyError today —
-# AtlasTrustPlane.get_approval() is unimplemented pending the same approval
-# storage work as pending_approvals()/decide_approval(). This is a known,
-# tracked gap, not something this fix silently papers over.
+# Single-ticket read uses the same durable approval projection as the action router.
 @router.get("/approvals/{approval_id}", response_model=ApprovalView)
 async def approval(approval_id: str, plane: AtlasTrustPlane = Depends(get_trust_plane)) -> ApprovalView:
     return await plane.get_approval(approval_id)
@@ -80,8 +69,10 @@ async def audit(
     task_id: str | None = None,
     correlation_id: str | None = None,
     execution_id: str | None = None,
-    cursor: str | None = None,
+    cursor: str | None = Query(default=None, pattern=r"^[1-9][0-9]*$", max_length=20),
     limit: int = Query(default=50, ge=1, le=100),
+    since: AwareDatetime | None = None,
+    tier: int | None = Query(default=None, ge=0, le=4),
     plane: AtlasTrustPlane = Depends(get_trust_plane),
 ) -> AuditPage:
     return await plane.audit(
@@ -90,4 +81,16 @@ async def audit(
         execution_id=execution_id,
         cursor=cursor,
         limit=limit,
+        since=since,
+        tier=tier,
     )
+
+
+@router.get("/audit/export", response_model=AuditExport)
+async def export_audit(
+    since: AwareDatetime | None = None,
+    tier: int | None = Query(default=None, ge=0, le=4),
+    max_events: int = Query(default=1000, ge=1, le=1000),
+    plane: AtlasTrustPlane = Depends(get_trust_plane),
+) -> AuditExport:
+    return await plane.export_audit(since=since, tier=tier, max_events=max_events)

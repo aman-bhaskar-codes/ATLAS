@@ -2,11 +2,163 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from atlas.safety.sandbox_native import NativeSandbox
+
+
+async def test_cleanup_deadline_survives_inherited_pipe_without_eof(monkeypatch: pytest.MonkeyPatch) -> None:
+    from atlas.safety.sandbox_native import _kill_quietly
+
+    reader = asyncio.StreamReader()
+    closed = asyncio.Event()
+
+    def close() -> None:
+        reader.feed_eof()
+        closed.set()
+
+    async def wait() -> int:
+        return -9
+
+    monkeypatch.setattr(os, "killpg", lambda *_: None)
+    proc = SimpleNamespace(
+        pid=123, returncode=-9, stdout=reader, stderr=None, wait=wait, _transport=SimpleNamespace(close=close)
+    )
+    async with asyncio.timeout(0.1):
+        await _kill_quietly(proc, cleanup_timeout_s=0.01)
+    assert closed.is_set()
+
+
+def test_native_nested_mount_uses_same_specific_target_as_credential_guard() -> None:
+    mounts = {"/host/private": "/work", "/host/project": "/work/project"}
+    assert NativeSandbox._remap_path("/work/project/config", mounts) == "/host/project/config"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_run_reaps_process_on_timeout_or_cancellation(monkeypatch: pytest.MonkeyPatch, cancel: bool) -> None:
+    spawned: list[asyncio.subprocess.Process] = []
+    started = asyncio.Event()
+    create = asyncio.create_subprocess_exec
+
+    async def capture(*args: str, **kwargs: object) -> asyncio.subprocess.Process:
+        proc = await create(*args, **kwargs)  # type: ignore[arg-type]
+        spawned.append(proc)
+        started.set()
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", capture)
+    task = asyncio.create_task(
+        NativeSandbox().run([sys.executable, "-c", "import time; time.sleep(10)"], mounts={}, timeout_s=0.1)
+    )
+    try:
+        await started.wait()
+        if cancel:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            assert (await task).exit_code == 124
+        assert spawned[0].returncode is not None, "sandbox returned without reaping its process"
+    finally:
+        if spawned and spawned[0].returncode is None:
+            spawned[0].kill()
+            await spawned[0].communicate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups")
+@pytest.mark.parametrize("stream", [False, True])
+async def test_timeout_stops_descendant_processes(tmp_path: Path, stream: bool) -> None:
+    marker = tmp_path / "descendant.txt"
+    child = f"import time; from pathlib import Path; time.sleep(.3); Path({str(marker)!r}).touch()"
+    script = f"import subprocess,time; subprocess.Popen([{sys.executable!r}, '-c', {child!r}]); time.sleep(10)"
+    sandbox = NativeSandbox()
+    command = [sys.executable, "-c", script]
+    if stream:
+        async for _ in sandbox.run_stream(command, mounts={}, timeout_s=0.1):
+            pass
+    else:
+        assert (await sandbox.run(command, mounts={}, timeout_s=0.1)).exit_code == 124
+    await asyncio.sleep(0.4)
+    assert not marker.exists(), "descendant survived the sandbox timeout"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+async def test_child_environment_omits_credentials(monkeypatch: pytest.MonkeyPatch, stream: bool) -> None:
+    for key in ("OPENAI_API_KEY", "ATLAS_MASTER_KEY", "DATABASE_URL", "UNRECOGNIZED_SECRET"):
+        monkeypatch.setenv(key, "synthetic-test-credential")
+    monkeypatch.setenv("LANG", "C")
+    script = (
+        "import os; keys=('OPENAI_API_KEY','ATLAS_MASTER_KEY','DATABASE_URL','UNRECOGNIZED_SECRET'); "
+        "print(any(k in os.environ for k in keys)); print(os.environ.get('LANG')); "
+        "print(bool(os.environ.get('PATH')))"
+    )
+    sandbox = NativeSandbox()
+    command = [sys.executable, "-c", script]
+    if stream:
+        items = [item async for item in sandbox.run_stream(command, mounts={})]
+        result = items[-1]
+    else:
+        result = await sandbox.run(command, mounts={})
+    from atlas.safety.sandbox import SandboxResult
+
+    assert isinstance(result, SandboxResult)
+    assert result.exit_code == 0
+    assert result.stdout_tail.splitlines() == ["False", "C", "True"]
+
+
+@pytest.mark.asyncio
+async def test_stream_deadline_includes_wait_after_pipe_eof() -> None:
+    from atlas.safety.sandbox import SandboxResult
+
+    script = "import os,time; os.close(1); os.close(2); time.sleep(.4)"
+
+    async def collect() -> list[object]:
+        return [
+            item async for item in NativeSandbox().run_stream([sys.executable, "-c", script], mounts={}, timeout_s=0.05)
+        ]
+
+    items = await asyncio.wait_for(collect(), timeout=0.2)
+    assert isinstance(items[-1], SandboxResult)
+    assert items[-1].exit_code == 124
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+async def test_large_unbroken_output_is_drained_with_bounded_tail(stream: bool) -> None:
+    from atlas.safety.sandbox import SandboxResult
+
+    command = [sys.executable, "-c", "import sys; sys.stdout.write('x' * 200000)"]
+    sandbox = NativeSandbox()
+    if stream:
+        items = [item async for item in sandbox.run_stream(command, mounts={}, timeout_s=0.2)]
+        result = items[-1]
+    else:
+        result = await sandbox.run(command, mounts={}, timeout_s=0.2)
+    assert isinstance(result, SandboxResult)
+    assert result.exit_code == 0
+    assert result.stdout_tail == "x" * 16000
+
+
+@pytest.mark.asyncio
+async def test_stream_close_does_not_hang_when_output_queue_is_full() -> None:
+    stream = NativeSandbox().run_stream(
+        [sys.executable, "-c", "import sys,time; sys.stdout.write('x'*1000000); sys.stdout.flush(); time.sleep(10)"],
+        mounts={},
+        timeout_s=5.0,
+    )
+    await anext(stream)
+    # Let the bounded queue fill while the consumer is suspended at yield.
+    await asyncio.sleep(0.05)
+    await asyncio.wait_for(stream.aclose(), timeout=0.3)
 
 
 class TestNativeSandbox:

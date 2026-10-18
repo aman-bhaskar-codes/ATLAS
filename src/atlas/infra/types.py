@@ -7,11 +7,13 @@ gives every layer a single source of truth for wire shapes.
 
 from __future__ import annotations
 
+import base64
+import binascii
 from datetime import datetime
 from enum import IntEnum, StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from atlas.infra.ids import CorrelationId
 
@@ -184,6 +186,36 @@ class ProviderToolCall(_Frozen):
     id: str = ""
     name: str
     arguments: dict[str, object] = Field(default_factory=dict)
+    thought_signature: str | None = None  # opaque Gemini part metadata; replay unchanged
+
+
+class ImageInput(_Frozen):
+    """Inline vision input, serialized as media rather than text in the prompt.
+
+    Bound decoded data to 10 MiB and check its declared file signature. Full
+    image decoding/resizing belongs to the attachment pipeline.
+    """
+
+    mime_type: Literal["image/png", "image/jpeg", "image/webp", "image/gif"]
+    data: str = Field(min_length=1, max_length=13_981_016, repr=False)
+
+    @model_validator(mode="after")
+    def _validate_image(self) -> ImageInput:
+        try:
+            raw = base64.b64decode(self.data, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ValueError("image data must be valid base64") from exc
+        if not raw or len(raw) > 10 * 1024 * 1024:
+            raise ValueError("image data must contain at most 10 MiB")
+        signatures = {
+            "image/png": raw.startswith(b"\x89PNG\r\n\x1a\n"),
+            "image/jpeg": raw.startswith(b"\xff\xd8\xff"),
+            "image/gif": raw.startswith((b"GIF87a", b"GIF89a")),
+            "image/webp": raw.startswith(b"RIFF") and raw[8:12] == b"WEBP",
+        }
+        if not signatures[self.mime_type]:
+            raise ValueError("image data does not match its declared MIME type")
+        return self
 
 
 class ModelRequest(_Frozen):
@@ -198,6 +230,10 @@ class ModelRequest(_Frozen):
     max_tokens: int = 1024
     temperature: float = 0.2
     tools: tuple[ToolCallSpec, ...] = ()  # empty = no native function calling
+    images: tuple[ImageInput, ...] = ()
+    privacy_class: PrivacyClass = PrivacyClass.PUBLIC
+    cost_policy: CostPolicy = CostPolicy.UNRESTRICTED
+    network_policy: NetworkPolicy = NetworkPolicy.UNRESTRICTED
 
 
 class TokenCost(_Frozen):

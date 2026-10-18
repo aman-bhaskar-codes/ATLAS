@@ -45,8 +45,8 @@ executed through the *same* sandboxed tool registry. There is no side door — t
 property is enforced by an import-linter contract, not by convention.
 
 What it is **not**: a chat wrapper, a prompt-template collection, or a hosted
-service. There is no server to sign up for and no per-token bill; the default
-configuration resolves to five free OpenRouter models behind a single API key.
+service. Local operation uses Ollama without a cloud key. The default hybrid
+profile also permits configured free cloud routes; paid routes remain policy-gated.
 
 <img src="assets/divider.svg" width="100%" alt="">
 
@@ -61,8 +61,8 @@ Everything in this table was measured against the working tree on branch `main`.
 | **Coverage floors** | 63% global · 70% `safety/` · 83% `orchestration/` (CI-enforced) |
 | **Layering** | 14 layers, 3 import-linter contracts, 0 broken |
 | **Database** | SQLite (`.atlas/atlas.db`) for core data, 36 forward-only migrations · **Supabase Postgres** for domain-routed cloud persistence (IDE sessions today) |
-| **Model fleet** | 5 OpenRouter `:free` models, 1 `OPENROUTER_API_KEY`, `$0.00` per run |
-| **Embeddings** | `qwen/qwen3-embedding-0.6b`, 1024-dim, same key and base URL as chat |
+| **Model fleet** | Local Ollama, Gemini, five curated free OpenRouter routes, and two policy-gated paid routes |
+| **Embeddings** | Local `bge-m3:latest` by default; model-specific namespaces preserve previous indexes |
 | **HTTP surface** | 25 routers under `/api/v1` + WebSocket routes (events, voice) |
 | **Runtime** | Python 3.13+, `uv`-managed, phased startup with health gating |
 | **Web UI** | Next.js 16.2.11 · React 19.2.4 (separate `frontend/` workspace) |
@@ -313,41 +313,18 @@ one-step `pre_image`, so a bad consolidation sweep is revertible without a backu
 
 ## Intelligence & cost
 
-The default fleet is **five OpenRouter free models behind one key**. No Ollama, no local
-weights, no second vendor, and no per-token bill.
+The registry supports local Ollama (`local-qwen3`), Gemini (`gemini-flash`),
+five curated free OpenRouter routes, and two paid routes. Availability depends
+on the installed model, configured key, provider catalog and project quota.
+GLM 5.2 and MiniMax M3 are **paid** entries; historical `-free` configuration
+aliases migrate to their paid identity and do not bypass free-only policy.
 
-| # | Model id | OpenRouter slug | Tier role |
-|:---:|---|---|---|
-| 1 | `glm-5.2-free` | `z-ai/glm-5.2:free` | deep reasoning + planning |
-| 2 | `minimax-m3-free` | `minimax/minimax-m3:free` | long-context, **vision**, general agent |
-| 3 | `nemotron-3-ultra-free` | `nvidia/nemotron-3-ultra:free` | deep reasoning + orchestration |
-| 4 | `north-mini-code-free` | `cohere/north-mini-code:free` | fast agentic coding / tool work |
-| 5 | `laguna-s-2.1-free` | `poolside/laguna-s-2.1:free` | software engineering |
-
-All five are `cost_class: free_quota`, `usd_per_1m_input/output: 0.0`, and `enabled: true`
-in [`config/models.yaml`](config/models.yaml). Because slugs live in YAML, correcting one
-that OpenRouter renames needs **no code change**.
-
-Models are grouped into logical tiers rather than referenced directly, so retuning is a
-config edit:
-
-```yaml
-fast_models:      # cheap work that runs on every task: intent, routing, short summaries
-  - north-mini-code-free
-  - minimax-m3-free
-  - laguna-s-2.1-free
-deep_models:      # worth a stronger model: planning, recovery, verification
-  - glm-5.2-free
-  - nemotron-3-ultra-free
-  - minimax-m3-free
-fallback_models:  # last resort when a tier's picks are all unavailable
-  - minimax-m3-free
-  - glm-5.2-free
-```
-
-Tier lists are **ranking preferences applied after** the selector's hard cost, network
-and privacy filters. Listing a paid model in a zero-cost profile does not create a
-loophole — it simply has no eligible candidate.
+See [provider setup](docs/providers/gemini-local.md). Model tier lists rank
+candidates only after hard cost, network, privacy and capability filters.
+The default `free_hybrid` profile allows local and eligible free cloud routes;
+`local_free` confines model inference and embeddings to the local service.
+Gemini defaults to paid billing classification until the operator explicitly
+declares a free project. No model is downloaded automatically.
 
 ### Cost is enforced, not suggested
 
@@ -361,21 +338,23 @@ loophole — it simply has no eligible candidate.
 That last flag matters: auto-sync would silently grow the fleet on every restart, which
 makes routing non-reproducible. It is off, and it is off on purpose.
 
-### Embeddings ride the same key
+### Embedding changes preserve source data
 
-OpenRouter serves `/chat/completions`, `/embeddings`, `/audio/speech` and
-`/audio/transcriptions` on one base URL, so a single `OPENROUTER_API_KEY` covers chat,
-vectors and speech. Embeddings default to `qwen/qwen3-embedding-0.6b` at **1024 dims** —
-the same width as the bge-m3 vectors ATLAS used previously, so existing Chroma
-collections stay dimension-compatible.
+Embeddings default to local Ollama `bge-m3:latest`. Cloud embeddings require
+explicit configuration and remain subject to privacy policy. Equal vector
+width does not make different embedding models comparable: each model has a
+separate namespace. Previous collections remain intact.
 
-`ATLAS_EMBED_API_KEY` is optional and exists only to point embeddings at a *different*
-vendor (Jina, Cohere, Voyage). Leave it empty and `effective_embed_api_key()` falls back
-to the OpenRouter key. Switching vendors is a `.env` change, not a code change.
+Use **Research → Source corpus → Refresh embedding batch** to rebuild up to
+10 documents per request from stored source text, with a 30-second deadline.
+The API accepts bounded batches of 1–50 documents. Errors leave source text and
+lexical search intact; repeat batches to continue. Never delete the corpus to
+change embedding models.
 
-> **One-time migration.** If you ran ATLAS on bge-m3 embeddings before this change, old
-> and new vectors are not comparable. Wipe the store once: `rm -rf ./.atlas/chroma`.
-> Nothing auto-deletes it for you.
+Research and IDE launch separately from the command centre. Research has its
+own history, source corpus and status pages; IDE has workspaces and a dedicated
+[training workflow](docs/ide/). Composer images use local OCR text extraction;
+this does not provide visual understanding of diagrams or photographs.
 
 <img src="assets/divider.svg" width="100%" alt="">
 

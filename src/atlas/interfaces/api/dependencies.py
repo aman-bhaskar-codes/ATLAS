@@ -25,10 +25,16 @@ def get_control_plane(request: Request) -> AtlasControlPlane:
     # importlib.metadata.version("atlas"). The getattr fallback is "unknown"
     # rather than a plausible-looking number: an app built outside the managed
     # lifespan has no version to report, and saying so beats inventing one.
+    handoff_store = getattr(request.app.state, "handoff_store", None)
+    if handoff_store is None:
+        handoff_store = {}
+        request.app.state.handoff_store = handoff_store
+
     return DefaultAtlasControlPlane(
         atlas=request.app.state.atlas,
         event_store=request.app.state.event_store,
         version=getattr(request.app.state, "version", "unknown"),
+        handoff_store=handoff_store,
     )
 
 

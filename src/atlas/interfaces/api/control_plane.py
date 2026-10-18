@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Protocol
 
 from atlas.interfaces.api.schemas_trust import (
     ApprovalDecisionCommand,
     ApprovalView,
     AuditEventView,
+    AuditExport,
     AuditPage,
     MemoryCorrectionCommand,
     MemoryFactView,
@@ -45,5 +47,10 @@ class AtlasTrustPlane(Protocol):
         execution_id: str | None,
         cursor: str | None,
         limit: int,
+        since: datetime | None = None,
+        tier: int | None = None,
     ) -> AuditPage: ...
+    async def export_audit(
+        self, *, since: datetime | None, tier: int | None, max_events: int
+    ) -> AuditExport: ...
     async def audit_event(self, event_id: str) -> AuditEventView: ...

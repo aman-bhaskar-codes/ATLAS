@@ -1,0 +1,59 @@
+services:
+  # SearXNG: Zero-Cost Metasearch Engine
+  searxng:
+    image: searxng/searxng:latest
+    container_name: atlas-searxng
+    ports:
+      - "8080:8080"
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+      - UWSGI_WORKERS=4
+      - UWSGI_THREADS=4
+    volumes:
+      - searxng-data:/etc/searxng
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Valkey: Zero-Cost High-Throughput In-Memory Key-Value & Pub/Sub
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: atlas-valkey
+    ports:
+      - "6379:6379"
+    command: valkey-server --save 60 1 --loglevel notice
+    volumes:
+      - valkey-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Arize Phoenix: OpenTelemetry Tracing & LLM Evaluation Engine
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: atlas-phoenix
+    ports:
+      - "6006:6006" # Phoenix UI
+      - "4317:4317" # OTLP gRPC collector
+      - "4318:4318" # OTLP HTTP collector
+    environment:
+      - PHOENIX_PORT=6006
+      - PHOENIX_GRPC_PORT=4317
+    volumes:
+      - phoenix-data:/root/.phoenix
+    restart: unless-stopped
+
+volumes:
+  searxng-data:
+  valkey-data:
+  phoenix-data:
+
+networks:
+  default:
+    name: atlas-network

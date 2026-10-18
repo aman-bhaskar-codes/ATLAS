@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
+from atlas.interfaces.api.auth import require_admin
 from atlas.interfaces.api.dependencies import get_control_plane
 from atlas.interfaces.api.facade import AtlasControlPlane
 from atlas.interfaces.api.schemas import (
@@ -20,7 +21,7 @@ async def list_pending_approvals(
     return await control_plane.pending_approvals()
 
 
-@router.post("/approvals/{approval_id}/decide", response_model=ApprovalResponse)
+@router.post("/approvals/{approval_id}/decide", response_model=ApprovalResponse, dependencies=[Depends(require_admin)])
 async def decide_approval(
     approval_id: str,
     command: ApprovalDecisionRequest,

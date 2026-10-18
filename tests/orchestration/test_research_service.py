@@ -12,6 +12,7 @@ no registry. The fake asserts the dispatch is the governed ``knowledge`` tool.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -81,6 +82,31 @@ class FakeDispatcher:
         assert action.tool == "knowledge"
         assert action.kind == "tool_call"
         return self._outcomes.pop(0)
+
+
+async def test_research_recovery_and_close_settle_interrupted_work(db: Database) -> None:
+    store = SqliteResearchSessionStore(db)
+    await store.save_session(ResearchSessionRecord(session_id="orphan", question="what is RAG?", status="running"))
+    svc = _service(db, FakeDispatcher([]))
+    assert await svc.recover_interrupted() == 1
+    recovered = await svc.get_session("orphan")
+    assert recovered is not None and recovered.status == "failed"
+    assert (await svc.session_events("orphan"))[-1].phase == "failed"
+    assert await svc.recover_interrupted() == 0
+    started = asyncio.Event()
+
+    class WaitingDispatcher:
+        async def dispatch(self, action, correlation_id):
+            started.set()
+            await asyncio.Event().wait()
+
+    live = _service(db, WaitingDispatcher())
+    stub = await live.start_session_background("what is RAG?")
+    await started.wait()
+    await live.close()
+    final = await live.get_session(stub.session_id)
+    assert final is not None and final.status == "failed"
+    assert (await live.session_events(stub.session_id))[-1].phase == "failed"
 
 
 # A realistic deep_research observation payload (mirrors tools/research.py shapes).

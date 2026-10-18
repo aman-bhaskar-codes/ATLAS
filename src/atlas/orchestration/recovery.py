@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from atlas.infra.clock import Clock
 from atlas.infra.logging import get_logger
+from atlas.infra.execution_lease import ORPHAN_GUARD
 from atlas.orchestration.checkpoint import CheckpointStore
 
 _log = get_logger("atlas.orch.recovery")
@@ -27,6 +28,7 @@ _NON_TERMINAL = (
     "observing",
     "validating",
     "retrying",
+    "cancelling",
 )
 
 
@@ -43,20 +45,28 @@ async def recover_interrupted_tasks(
     """
     placeholders = ",".join("?" for _ in _NON_TERMINAL)
     cur = await db.conn.execute(  # type: ignore[attr-defined]
-        f"SELECT id FROM tasks WHERE state IN ({placeholders})",
+        f"SELECT id,state,payload,updated_ts FROM tasks WHERE state IN ({placeholders})",
         _NON_TERMINAL,
     )
     rows = await cur.fetchall()
+    await cur.close()
     recovered: list[str] = []
     for row in rows:
         task_id = row["id"]
         if task_id in live_task_ids:
             continue
-        await db.conn.execute(  # type: ignore[attr-defined]
-            "UPDATE tasks SET state = 'failed', updated_ts = ? WHERE id = ?",
-            (clock.now().isoformat(), task_id),
+        now = clock.now().isoformat()
+        update_cur = await db.conn.execute(  # type: ignore[attr-defined]
+            "UPDATE tasks SET state='failed',updated_ts=? WHERE id=? AND state=? AND payload=? "
+            "AND updated_ts=? AND " + ORPHAN_GUARD,
+            (now, task_id, row["state"], row["payload"], row["updated_ts"], "task:" + task_id, now),
         )
-        await checkpoints.prune(task_id)
+        matched = update_cur.rowcount == 1
+        await update_cur.close()
+        if not matched:
+            continue
+        await db.conn.commit()  # type: ignore[attr-defined]
+        await checkpoints.prune(task_id, orphaned_at=now)
         recovered.append(task_id)
     if recovered:
         await db.conn.commit()  # type: ignore[attr-defined]

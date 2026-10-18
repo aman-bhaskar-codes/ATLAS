@@ -1,11 +1,9 @@
-"""Embedder — cloud embed API (default OpenRouter) + async embedding worker.
+"""Local BGE-M3 embeddings, optional cloud adapter, and embedding worker.
 
-Embeddings go through ``CloudEmbedder``, an OpenAI-shaped ``POST
-{base_url}/embeddings`` client. It defaults to OpenRouter, which authenticates
-with the same ``OPENROUTER_API_KEY`` as the chat fleet, so the whole system needs
-exactly one key; pointing ``ATLAS_EMBED_BASE_URL``/``ATLAS_EMBED_MODEL`` at Jina,
-Cohere, Voyage, ... needs no code change. ``OllamaEmbedder`` is retained for
-local/offline use but is no longer wired by the composition root.
+The composition root defaults to ``OllamaEmbedder``. Explicit cloud embedding
+uses an OpenAI-shaped POST /embeddings client. Every live embedder declares its
+vector-space identity, so changing backend/model opens separate collections
+without treating equal dimensions as compatible embeddings.
 
 Async embedding worker:
 - Non-blocking: embeddings happen in background
@@ -18,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, Protocol
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -42,14 +41,42 @@ class EmbeddingError(Exception):
     pass
 
 
+def _embedding_identity(provider: str, endpoint: str, model: str) -> str:
+    """Name a vector space without incorporating keys or URL credentials."""
+    url = urlsplit(endpoint)
+    host = url.hostname or ""
+    if ":" in host:
+        host = f"[{host}]"
+    if url.port:
+        host = f"{host}:{url.port}"
+    canonical = urlunsplit((url.scheme.lower(), host, url.path.rstrip("/"), "", ""))
+    return f"{provider}|{canonical}|{model}"
+
+
+def embedding_space_of(embedder: Embedder) -> str:
+    """Bootstrap must never attach an unidentified embedder to legacy vectors."""
+    identity = getattr(embedder, "embedding_space", None)
+    if not isinstance(identity, str) or not identity:
+        raise EmbeddingError("embedder must declare its embedding_space before persistent vector storage is wired")
+    return identity
+
+
 class OllamaEmbedder:
+    is_local = True
+
     def __init__(self, settings: Settings, timeout_s: float = 180.0) -> None:
         self._host = settings.ollama_host.rstrip("/")
         self._model = settings.embed_model
+        model = self._model if ":" in self._model else f"{self._model}:latest"
+        self.embedding_space = _embedding_identity("ollama", self._host, model)
+        self.model_id = self.embedding_space
         # WHY explicit Timeout: bge-m3 needs ~50s to load on first request.
         # httpx.AsyncClient(timeout=N) sets ALL timeout phases to N seconds.
         # Using Timeout object makes it explicit and easier to tune per phase.
-        self._client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=timeout_s, write=10.0, pool=10.0))
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=timeout_s, write=10.0, pool=10.0),
+            trust_env=False,
+        )
 
     async def embed(self, text: str) -> list[float]:
         try:
@@ -74,20 +101,23 @@ class OllamaEmbedder:
 class CloudEmbedder:
     """Embeddings via a cloud embed API with an OpenAI-shaped endpoint.
 
-    Default target: OpenRouter ``qwen/qwen3-embedding-0.6b`` (``POST
-    {base_url}/embeddings``, ``Authorization: Bearer <key>``, 1024-dim —
-    dimension-compatible with the former bge-m3 collections), authenticated with
-    the same ``OPENROUTER_API_KEY`` as chat. Base URL + model are config-driven,
-    so switching to Jina/Cohere/Voyage/etc. needs no code change.
+    Explicit OpenRouter use can select ``qwen/qwen3-embedding-0.6b`` (POST
+    {base_url}/embeddings, Authorization: Bearer <key>) using the chat key.
+    Base URL and model are configurable. Equal dimensions never make its
+    vectors interchangeable with BGE-M3: each model gets separate collections.
 
     Contract mirrors ``OllamaEmbedder``: never returns a silent zero vector —
     any empty/all-zero response or transport failure raises ``EmbeddingError``.
     """
 
+    is_local = False
+
     def __init__(self, base_url: str, api_key: str, model: str, timeout_s: float = 90.0) -> None:
         self._base = base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
+        self.embedding_space = _embedding_identity("openai", self._base, model)
+        self.model_id = self.embedding_space
         # First cloud call can be slow (cold model); split phases explicitly.
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=timeout_s, write=10.0, pool=10.0))
 

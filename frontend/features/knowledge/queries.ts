@@ -71,3 +71,21 @@ export function useDeleteDocument() {
     }
   });
 }
+
+export function useReindexCorpus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => requestContract('/knowledge/reindex', z.object({
+      documents: z.number().int().nonnegative(),
+      embedded: z.number().int().nonnegative(),
+      errors: z.number().int().nonnegative(),
+      timed_out: z.number().int().min(0).max(1),
+    }), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit_documents: 10 }),
+    }, 35_000),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['knowledge'] }),
+    retry: false,
+  });
+}

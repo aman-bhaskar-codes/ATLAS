@@ -22,6 +22,9 @@ from typing import Any, Protocol
 
 from atlas.infra.clock import Clock
 from atlas.infra.ids import IdGenerator
+from atlas.infra.execution_lease import (
+    OWNER_GUARD, ORPHAN_GUARD, OwnershipLostError, current_execution_owner,
+)
 
 
 @dataclass(frozen=True)
@@ -42,7 +45,7 @@ class StorageBackend(Protocol):
     async def save_checkpoint(self, record: dict[str, Any]) -> str: ...
     async def latest_checkpoint(self, task_id: str) -> dict[str, Any] | None: ...
     async def list_checkpoints(self, limit: int = 100) -> list[dict[str, Any]]: ...
-    async def delete_checkpoints(self, task_id: str) -> int: ...
+    async def delete_checkpoints(self, task_id: str, *, orphaned_at: str | None = None) -> int: ...
 
 
 class SQLiteCheckpointBackend:
@@ -54,18 +57,26 @@ class SQLiteCheckpointBackend:
 
     async def save_checkpoint(self, record: dict[str, Any]) -> str:
         row_id = record.get("id") or self._ids.execution_id()
-        await self._db.conn.execute(
-            "INSERT OR REPLACE INTO execution_checkpoints "
-            "(id, task_id, tenant_id, step, state_json, created_ts) VALUES (?,?,?,?,?,?)",
-            (
+        owner = current_execution_owner()
+        params: tuple[object, ...] = (
                 row_id,
                 record["task_id"],
                 record.get("tenant_id", "local"),
                 record["step"],
                 json.dumps(record["state"]),
                 record["created_ts"],
-            ),
-        )
+            )
+        sql = "INSERT INTO execution_checkpoints (id, task_id, tenant_id, step, state_json, created_ts) "
+        update = ("ON CONFLICT(id) DO UPDATE SET task_id=excluded.task_id,tenant_id=excluded.tenant_id,"
+                  "step=excluded.step,state_json=excluded.state_json,created_ts=excluded.created_ts")
+        if owner is not None:
+            guard = owner.parameters()
+            cur = await self._db.conn.execute(sql + "SELECT ?,?,?,?,?,? WHERE " + OWNER_GUARD + " " + update
+                                             + " WHERE " + OWNER_GUARD, (*params, *guard, *guard))
+            if cur.rowcount != 1:
+                raise OwnershipLostError("checkpoint lease expired or changed owner")
+        else:
+            await self._db.conn.execute(sql + "VALUES (?,?,?,?,?,?) " + update, params)
         await self._db.conn.commit()
         return str(row_id)
 
@@ -95,8 +106,17 @@ class SQLiteCheckpointBackend:
         )
         return [{"task_id": r["task_id"], "latest_ts": r["latest"]} for r in await cur.fetchall()]
 
-    async def delete_checkpoints(self, task_id: str) -> int:
-        cur = await self._db.conn.execute("DELETE FROM execution_checkpoints WHERE task_id = ?", (task_id,))
+    async def delete_checkpoints(self, task_id: str, *, orphaned_at: str | None = None) -> int:
+        owner = current_execution_owner()
+        sql = "DELETE FROM execution_checkpoints WHERE task_id = ?"
+        params: tuple[object, ...] = (task_id,)
+        if owner is not None:
+            sql += " AND " + OWNER_GUARD
+            params += owner.parameters()
+        elif orphaned_at is not None:
+            sql += " AND " + ORPHAN_GUARD
+            params += ("task:" + task_id, orphaned_at)
+        cur = await self._db.conn.execute(sql, params)
         await self._db.conn.commit()
         return int(cur.rowcount or 0)
 
@@ -141,9 +161,9 @@ class CheckpointStore:
             created_ts=datetime.fromisoformat(record["created_ts"]),
         )
 
-    async def prune(self, task_id: str) -> int:
+    async def prune(self, task_id: str, *, orphaned_at: str | None = None) -> int:
         """Remove checkpoints for a finished task (called at terminal state)."""
-        return await self._backend.delete_checkpoints(task_id)
+        return await self._backend.delete_checkpoints(task_id, orphaned_at=orphaned_at)
 
     async def interrupted_tasks(self) -> list[str]:
         """Task ids with checkpoints but no live run — candidates for recovery."""

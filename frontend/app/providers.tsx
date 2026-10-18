@@ -1,8 +1,9 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
-import { shouldRetry } from "@/lib/api/retry";
+import { useEffect, useState } from "react";
+import { subscribeCredentialChange } from "@/lib/api/auth";
+import { fullJitterBackoff, shouldRetry } from "@/lib/api/retry";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -14,6 +15,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         // including 404s and schema mismatches, which cannot succeed on a retry.
         // See lib/api/retry.ts for the rule per status.
         retry: shouldRetry,
+        retryDelay: (attempt) => fullJitterBackoff(attempt),
       },
       mutations: {
         // Mutations are POSTs that create tasks and decide approvals. Retrying one
@@ -25,6 +27,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       },
     },
   }));
+
+  useEffect(() => subscribeCredentialChange(() => {
+    // Cancel previous requests and clear their data before fetching with the new key.
+    void queryClient.resetQueries();
+  }), [queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>

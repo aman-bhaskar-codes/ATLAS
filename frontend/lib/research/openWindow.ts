@@ -8,7 +8,7 @@
 // caller must fall back to same-window navigation rather than silently doing nothing.
 
 export const RESEARCH_WINDOW_FEATURES =
-  "noopener=false,width=1400,height=1000,menubar=no,toolbar=no,location=yes";
+  "width=1400,height=1000,menubar=no,toolbar=no,location=yes";
 
 /** The route a research session lives at. Single source of the path shape. */
 export function researchSessionPath(sessionId: string): string {
@@ -33,6 +33,7 @@ export function openResearchWindow(sessionId: string): OpenResearchResult {
   );
   // A blocked popup is either null or an already-closed window.
   if (!handle || handle.closed) return { opened: false, reason: "blocked" };
+  handle.opener = null;
   handle.focus();
   return { opened: true, window: handle };
 }

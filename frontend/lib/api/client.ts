@@ -1,11 +1,12 @@
 // frontend/lib/api/client.ts
 import { z } from "zod";
+import { authHeaders } from "./auth";
 import {
   ApprovalSchema, CapabilitySchema, CancelTaskResponseSchema,
   RuntimeHealthSchema, RuntimeStatusSchema, TaskEventSchema, TaskSchema,
 } from "./contracts";
 
-const API_BASE =
+export const API_BASE =
   process.env.NEXT_PUBLIC_ATLAS_API_URL ?? "http://localhost:8730/api/v1";
 
 const TIMEOUT_MS = 8000;
@@ -155,6 +156,16 @@ async function fetchWithTimeout(
 ): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
+  const headers = new Headers(init?.headers);
+  if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (!headers.has("X-Request-ID")) {
+    const reqId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : Math.random().toString(36).substring(2);
+    headers.set("X-Request-ID", reqId);
+  }
   try {
     return await fetch(`${API_BASE}${path}`, {
       // Every endpoint here is live runtime state on a polling interval. Without
@@ -162,7 +173,7 @@ async function fetchWithTimeout(
       // backend sent no Cache-Control for, and the UI shows a stale status pill.
       cache: "no-store",
       ...init,
-      headers: { "Content-Type": "application/json", ...init?.headers },
+      headers: authHeaders(headers),
       signal: controller.signal,
     });
   } catch (error: unknown) {
@@ -179,7 +190,7 @@ async function fetchWithTimeout(
 }
 
 /** Throw the typed error for a non-2xx response. Reads the body at most once. */
-async function throwForStatus(path: string, response: Response): Promise<never> {
+export async function throwForStatus(path: string, response: Response): Promise<never> {
   let text = "";
   try {
     text = await response.text();
@@ -210,8 +221,9 @@ async function request<T extends z.ZodTypeAny>(
   path: string,
   schema: T,
   init?: RequestInit,
+  timeoutMs = TIMEOUT_MS,
 ): Promise<z.infer<T>> {
-  const response = await fetchWithTimeout(path, init);
+  const response = await fetchWithTimeout(path, init, timeoutMs);
   if (!response.ok) await throwForStatus(path, response);
   return parseContract(path, schema, await readJSON(path, response));
 }
@@ -270,11 +282,48 @@ export const atlasApi = {
     approvalId: string,
     decision: "approve" | "deny",
     idempotency_key: string,
+    confirmation_code?: string,
   ) =>
     request(`/approvals/${encodeURIComponent(approvalId)}/decide`, ApprovalSchema, {
       method: "POST",
-      body: JSON.stringify({ decision, idempotency_key }),
+      body: JSON.stringify({ decision, idempotency_key, confirmation_code }),
     }),
+};
+
+export const LaunchPlatformResponseSchema = z.object({
+  task_id: z.string(),
+  workspace_id: z.string(),
+  handoff_token: z.string(),
+  redirect_path: z.string(),
+  platform: z.string(),
+});
+export type LaunchPlatformResponse = z.infer<typeof LaunchPlatformResponseSchema>;
+
+export const HandoffContextResponseSchema = z.object({
+  token: z.string(),
+  task_id: z.string(),
+  workspace_id: z.string(),
+  platform: z.string(),
+  parent_task_id: z.string().nullable().optional(),
+  parent_context: z.record(z.string(), z.unknown()).nullable().optional(),
+  created_ts: z.string(),
+});
+export type HandoffContextResponse = z.infer<typeof HandoffContextResponseSchema>;
+
+export const agentApi = {
+  launchPlatform: (body: {
+    parent_task_id?: string | null;
+    target: "research" | "ide";
+    workspace_name?: string | null;
+    initial_query?: string | null;
+  }) =>
+    request("/agent/launch-platform", LaunchPlatformResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  getHandoff: (token: string) =>
+    request(`/agent/handoff/${encodeURIComponent(token)}`, HandoffContextResponseSchema),
 };
 
 // --- Trust Center Endpoints (Phase 3) ---
@@ -297,10 +346,10 @@ export const trustApi = {
   getApproval: async (approvalId: string) => {
     return requestJSON(`/approvals/${approvalId}`);
   },
-  decideApproval: async (approvalId: string, decision: 'approve' | 'deny', idempotencyKey: string, requestId: string) => {
+  decideApproval: async (approvalId: string, decision: 'approve' | 'deny', idempotencyKey: string, requestId: string, confirmationCode?: string) => {
     return requestJSON(`/approvals/${approvalId}/decide`, {
       method: 'POST',
-      body: JSON.stringify({ approval_id: approvalId, decision, idempotency_key: idempotencyKey, request_id: requestId }),
+      body: JSON.stringify({ approval_id: approvalId, decision, idempotency_key: idempotencyKey, request_id: requestId, confirmation_code: confirmationCode }),
     });
   },
 
@@ -431,4 +480,3 @@ export const eventsApi = {
     return request(`/events/search${suffix}`, EventSearchResultSchema);
   },
 };
-

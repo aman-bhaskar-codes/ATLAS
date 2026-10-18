@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict
 from atlas.infra.bus import Event, MessageBus
 from atlas.infra.db import Database
 from atlas.infra.logging import get_logger
-from atlas.interfaces.api.auth import Principal, require_admin
+from atlas.interfaces.api.auth import Principal, require_admin, require_principal, require_websocket_principal
 from atlas.interfaces.api.websocket import ConnectionManager
 
 _log = get_logger("atlas.api.events")
@@ -48,7 +48,7 @@ def set_dependencies(manager: ConnectionManager, db: Database, bus: MessageBus |
     _deps = EventStreamDependencies(manager, db, bus)
 
 
-@router.websocket("/ws/events")
+@router.websocket("/ws/events", dependencies=[Depends(require_websocket_principal)])
 async def global_event_stream(websocket: WebSocket) -> None:
     """
     Global event firehose - all events from all tasks.
@@ -93,7 +93,7 @@ async def global_event_stream(websocket: WebSocket) -> None:
         _log.info("ws.global_stream_disconnected", event_type="websocket", client_id=client_id)
 
 
-@router.websocket("/ws/tasks/{task_id}/stream")
+@router.websocket("/ws/tasks/{task_id}/stream", dependencies=[Depends(require_websocket_principal)])
 async def task_scoped_stream(websocket: WebSocket, task_id: str) -> None:
     """
     Task-scoped event stream - only events for a specific task.
@@ -207,7 +207,7 @@ async def _fetch_task_history(task_id: str) -> list[dict[str, Any]]:
         return []
 
 
-@router.get("/ws/stats")
+@router.get("/ws/stats", dependencies=[Depends(require_principal)])
 async def websocket_stats() -> dict[str, Any]:
     """
     Get WebSocket connection statistics (HTTP endpoint for monitoring).
@@ -300,7 +300,7 @@ async def _search_events(
     return EventSearchResult(events=events, total=total, limit=limit, offset=offset)
 
 
-@router.get("/api/v1/events/search")
+@router.get("/api/v1/events/search", dependencies=[Depends(require_principal)])
 async def search_events(
     task_id: str | None = Query(default=None, description="Filter by task ID"),
     topic: str | None = Query(default=None, description="Event type filter (supports partial match)"),
@@ -389,9 +389,7 @@ async def replay_event(event_id: str, _admin: Principal = Depends(require_admin)
         return {"error": str(exc)}
 
 
-async def verify_webhook_signature(
-    request: Request, source: str
-) -> None:
+async def verify_webhook_signature(request: Request, source: str) -> None:
     """FastAPI dependency to verify provider-native webhook signatures."""
     from atlas.interfaces.api.webhook_auth import (
         WebhookSignatureError,
@@ -437,10 +435,7 @@ async def verify_webhook_signature(
         )
 
 
-@router.post(
-    "/api/v1/webhooks/{source}",
-    dependencies=[Depends(verify_webhook_signature)]
-)
+@router.post("/api/v1/webhooks/{source}", dependencies=[Depends(require_admin), Depends(verify_webhook_signature)])
 async def receive_webhook(
     source: str,
     request: Request,
@@ -449,8 +444,8 @@ async def receive_webhook(
 
     Two independent authentication gates compose on this endpoint:
 
-    1. **ATLAS API key** (``require_principal`` / router-level dependency):
-       proves the caller holds a valid ``ATLAS_API_KEYS`` token. In local mode
+    1. **ATLAS API key** (``require_admin`` / per-route dependency):
+       proves the caller holds an admin ``ATLAS_API_KEYS`` token. In local mode
        (no keys configured) this gate is open and returns ``ANONYMOUS_LOCAL``.
 
     2. **Provider-native signature** (this handler): when the source's secret is

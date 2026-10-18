@@ -159,8 +159,8 @@ class ResearchQuestionStatus(StrEnum):
 
 # ── Pipeline versioning (§25) ─────────────────────────────────────────────
 # Bumping any of these marks existing chunks stale for re-indexing.
-PARSER_VERSION = "1"
-CHUNKER_VERSION = "1"
+PARSER_VERSION = "2"
+CHUNKER_VERSION = "2"
 EMBEDDING_VERSION = "1"
 PIPELINE_VERSION = f"p{PARSER_VERSION}.c{CHUNKER_VERSION}.e{EMBEDDING_VERSION}"
 
@@ -283,6 +283,7 @@ class Citation(BaseModel):
     title: str
     uri: str
     quote: str
+    location: str = ""
     authority: float = 0.5
 
 

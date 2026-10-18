@@ -54,6 +54,15 @@ class TestTree:
 
 
 class TestReadDocument:
+    @pytest.mark.parametrize("filename", [".env", ".ENV", "manifest.key", "manifest.KEY", "credentials"])
+    def test_workspace_read_does_not_expose_credentials(self, tmp_path: Path, filename: str) -> None:
+        eng = _engine(tmp_path)
+        secret = tmp_path / filename
+        secret.write_text("synthetic-secret")
+        with pytest.raises(WorkspaceError, match="credential"):
+            eng.read_document(filename)
+        assert filename not in {node.path for node in eng.tree()}
+
     def test_snapshot_version_matches_content_hash(self, tmp_path: Path) -> None:
         eng = _engine(tmp_path)
         snap, content = eng.read_document("src/app.py")

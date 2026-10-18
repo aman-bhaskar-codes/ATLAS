@@ -25,12 +25,21 @@ class Section:
 
 
 @dataclass(frozen=True)
+class PageSpan:
+    page: int
+    start: int
+    end: int
+    method: str  # pdf_text | tesseract
+
+
+@dataclass(frozen=True)
 class Parsed:
     text: str
     title: str = ""
     sections: tuple[Section, ...] = ()
     kind: str = "text"  # text | markdown | html | json | csv | code | yaml
     metadata: dict[str, Any] = field(default_factory=dict)
+    pages: tuple[PageSpan, ...] = ()
 
 
 def _truncate(text: str) -> str:

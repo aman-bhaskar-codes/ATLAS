@@ -5,17 +5,26 @@ Phase 3: Document ingestion, search, and management endpoints
 
 from __future__ import annotations
 
+import asyncio
+import tempfile
 from pathlib import Path
+from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from atlas.app import Atlas
 from atlas.infra.types import ToolRequest
+from atlas.interfaces.api.auth import require_admin
 from atlas.interfaces.api.dependencies import get_atlas
 from atlas.interfaces.notify import ConfirmationRequiredError
 from atlas.knowledge.deletion import DeletionScope
+from atlas.knowledge.domain import IngestionState, KnowledgeDocument, SourceType
+from atlas.knowledge.ocr import MAX_DOCUMENT_BYTES, page_provenance
+from atlas.knowledge.reranking import FeatureReranker
 from atlas.safety.engine import DeniedError, HaltedError
+from atlas.tools.paths import PathError, resolve_in_allowlist
 
 router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
 
@@ -28,8 +37,8 @@ def _get_atlas(request: Request) -> Atlas:
 class IngestRequest(BaseModel):
     """Request to ingest a document from a path."""
 
-    source_path: str
-    source_type: str  # markdown, pdf, txt, web
+    source_path: str = Field(min_length=1, max_length=4096)
+    source_type: str  # markdown, pdf, image, txt, web
     title: str | None = None
 
 
@@ -45,8 +54,28 @@ class IngestResponse(BaseModel):
 class SearchRequest(BaseModel):
     """Request to search knowledge base."""
 
-    query: str
-    limit: int = 5
+    query: str = Field(min_length=1, max_length=4000)
+    limit: int = Field(default=5, ge=1, le=50)
+
+
+class ReindexRequest(BaseModel):
+    limit_documents: int = Field(default=10, ge=1, le=50)
+
+
+@router.post("/reindex", dependencies=[Depends(require_admin)])
+async def reindex_corpus(request: ReindexRequest, atlas: Atlas = Depends(_get_atlas)) -> dict[str, int]:
+    """Refresh one bounded embedding batch while retaining source documents."""
+    fabric = _fabric(atlas)
+    if fabric is None:
+        raise HTTPException(503, "The research corpus pipeline is unavailable.")
+    if not fabric.pipeline.embedding_reindex_available:
+        raise HTTPException(
+            503, "Configure a compatible embedding model and vector store before refreshing embeddings."
+        )
+    result: dict[str, int] = await fabric.pipeline.reindex_embeddings(
+        limit_documents=request.limit_documents, timeout_s=30.0
+    )
+    return result
 
 
 class SearchResult(BaseModel):
@@ -61,6 +90,9 @@ class SearchResult(BaseModel):
     total_chunks: int
     source_path: str
     source_type: str
+    page_start: int | None = None
+    page_end: int | None = None
+    extraction_method: str | None = None
 
 
 class SearchResponse(BaseModel):
@@ -90,71 +122,79 @@ class DocumentListResponse(BaseModel):
     total: int
 
 
+def _fabric(atlas: Atlas) -> Any:
+    return getattr(atlas, "knowledge_fabric", None)
+
+
+def _authorized_file(atlas: Atlas, raw: str) -> Path:
+    manifest = getattr(atlas, "manifest", None)
+    globs = manifest.allowed_paths.get("read", []) if manifest is not None else []
+    try:
+        path = resolve_in_allowlist(raw, globs).host
+        for raw_dir in manifest.safety.get("credential_dirs", []) if manifest is not None else []:
+            sensitive = Path(raw_dir).expanduser().resolve()
+            if path == sensitive or sensitive in path.parents:
+                raise PathError("credential directories cannot be ingested")
+        return path
+    except (PathError, OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=403, detail="source path is not permitted for knowledge ingestion") from exc
+
+
+async def _ingest_file(
+    atlas: Atlas, path: Path, source_type: str, *, title: str = "", source_uri: str = ""
+) -> IngestResponse:
+    fabric = _fabric(atlas)
+    if fabric is not None:
+        job = await fabric.pipeline.ingest_file(
+            path,
+            source_type=SourceType.USER_PROVIDED if source_uri else SourceType.LOCAL_FILE,
+            title=title,
+            source_uri=source_uri,
+        )
+        if job.state is not IngestionState.READY:
+            status = 503 if "unavailable" in job.error.lower() else 422
+            raise HTTPException(status_code=status, detail=job.error or "document ingestion failed")
+        doc = await fabric.store.get_document(job.document_id)
+        if doc is None:
+            raise HTTPException(status_code=500, detail="indexed document not found")
+        refs = await fabric.store.chunk_refs_for_document(doc.document_id)
+        return IngestResponse(document_id=doc.document_id, title=doc.title, chunks=len(refs), indexed=bool(refs))
+    store = atlas.knowledge_store
+    doc_id = await store.ingest_document(path, source_type, metadata={"title": title or path.name})
+    docs = await store.list_documents(limit=10000, offset=0)
+    doc = next((d for d in docs if d.id == doc_id), None)
+    if doc is None:
+        raise HTTPException(status_code=500, detail="document created but not found")
+    return IngestResponse(document_id=doc.id, title=doc.title, chunks=doc.chunk_count, indexed=doc.indexed)
+
+
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest_document(request: IngestRequest, atlas: Atlas = Depends(_get_atlas)) -> IngestResponse:
-    """
-    Ingest a document from filesystem path.
-
-    Streams the document, chunks it, embeds chunks, and indexes for search.
-    Returns immediately with document_id; indexing continues in background.
-    """
-    store = atlas.knowledge_store
-
-    file_path = Path(request.source_path)
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {request.source_path}")
-
-    # Ingest with progress updates (could stream via WebSocket)
-    doc_id = await store.ingest_document(
-        file_path, request.source_type, metadata={"title": request.title or file_path.stem}
-    )
-
-    # Get document details
-    docs = await store.list_documents(limit=1, offset=0)
-    doc = next((d for d in docs if d.id == doc_id), None)
-
-    if not doc:
-        raise HTTPException(status_code=500, detail="Document created but not found")
-
-    return IngestResponse(document_id=doc.id, title=doc.title, chunks=doc.chunk_count, indexed=doc.indexed)
+    """Ingest an authorized local document into the shared research corpus."""
+    path = _authorized_file(atlas, request.source_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="source file not found")
+    return await _ingest_file(atlas, path, request.source_type, title=request.title or "")
 
 
 @router.post("/ingest/upload", response_model=IngestResponse)
 async def ingest_upload(
     file: UploadFile = File(...), atlas: Atlas = Depends(_get_atlas), source_type: str = "txt", title: str | None = None
 ) -> IngestResponse:
-    """
-    Upload and ingest a document.
-
-    Accepts file upload, saves temporarily, then ingests.
-    """
-    store = atlas.knowledge_store
-
-    # Save uploaded file temporarily
-    import tempfile
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename or "doc").suffix) as tmp:
-        content = await file.read()
-        tmp.write(content)
-        tmp_path = Path(tmp.name)
-
-    try:
-        # Ingest
-        doc_id = await store.ingest_document(
-            tmp_path, source_type, metadata={"title": title or file.filename or "Uploaded Document"}
+    """Bounded uploads retain the original source name in research citations."""
+    name = Path(file.filename or "document.txt").name
+    with tempfile.TemporaryDirectory(prefix="atlas-ingest-") as directory:
+        path = Path(directory) / ("document" + Path(name).suffix.lower())
+        total = 0
+        with path.open("wb") as handle:
+            while chunk := await file.read(64 * 1024):
+                total += len(chunk)
+                if total > MAX_DOCUMENT_BYTES:
+                    raise HTTPException(status_code=413, detail="document exceeds upload size limit")
+                await asyncio.to_thread(handle.write, chunk)
+        return await _ingest_file(
+            atlas, path, source_type, title=title or name, source_uri=f"upload://{quote(name, safe='')}"
         )
-
-        # Get document details
-        docs = await store.list_documents(limit=1, offset=0)
-        doc = next((d for d in docs if d.id == doc_id), None)
-
-        if not doc:
-            raise HTTPException(status_code=500, detail="Document created but not found")
-
-        return IngestResponse(document_id=doc.id, title=doc.title, chunks=doc.chunk_count, indexed=doc.indexed)
-    finally:
-        # Clean up temp file
-        tmp_path.unlink(missing_ok=True)
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -165,8 +205,27 @@ async def search_knowledge(request: SearchRequest, atlas: Atlas = Depends(_get_a
     Returns top-K chunks ranked by vector similarity.
     Sub-100ms target for typical queries.
     """
+    fabric = _fabric(atlas)
+    if fabric is not None:
+        result = await fabric.retriever.retrieve(request.query, k=max(20, request.limit * 2))
+        ranked = FeatureReranker().rerank(request.query, result.candidates, k=request.limit)
+        matches = [
+            SearchResult(
+                chunk_id=c.chunk.chunk_id,
+                document_id=c.document.document_id,
+                document_title=c.document.title,
+                content=c.chunk.content,
+                score=c.rrf_score,
+                chunk_index=c.chunk.chunk_index,
+                total_chunks=c.chunk.total_chunks,
+                source_path=c.document.uri or c.document.source_id,
+                source_type=c.document.source_type.value,
+                **page_provenance(c.document.provenance, c.chunk.char_start, c.chunk.char_end),
+            )
+            for c in ranked
+        ]
+        return SearchResponse(query=request.query, results=matches, total=len(matches))
     store = atlas.knowledge_store
-
     results = await store.search(request.query, limit=request.limit)
 
     return SearchResponse(
@@ -196,8 +255,15 @@ async def list_documents(atlas: Atlas = Depends(_get_atlas), limit: int = 50, of
 
     Paginated response ordered by creation time (newest first).
     """
+    fabric = _fabric(atlas)
+    if fabric is not None:
+        docs = await fabric.store.list_documents(limit=limit, offset=offset)
+        items = []
+        for document in docs:
+            refs = await fabric.store.chunk_refs_for_document(document.document_id)
+            items.append(_document_item(document, len(refs)))
+        return DocumentListResponse(documents=items, total=len(items))
     store = atlas.knowledge_store
-
     docs = await store.list_documents(limit=limit, offset=offset)
 
     return DocumentListResponse(
@@ -224,8 +290,11 @@ async def delete_document(document_id: str, atlas: Atlas = Depends(_get_atlas)) 
 
     Removes from both SQL database and vector store.
     """
+    fabric = _fabric(atlas)
+    if fabric is not None:
+        await forget_research(ForgetRequest(scope="document", target=document_id), atlas)
+        return {"status": "deleted", "document_id": document_id}
     store = atlas.knowledge_store
-
     await store.delete_document(document_id)
 
     return {"status": "deleted", "document_id": document_id}
@@ -234,10 +303,17 @@ async def delete_document(document_id: str, atlas: Atlas = Depends(_get_atlas)) 
 @router.get("/documents/{document_id}")
 async def get_document(document_id: str, atlas: Atlas = Depends(_get_atlas)) -> DocumentListItem:
     """Get a single document by ID."""
+    fabric = _fabric(atlas)
+    if fabric is not None:
+        doc = await fabric.store.get_document(document_id)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="document not found")
+        refs = await fabric.store.chunk_refs_for_document(document_id)
+        return _document_item(doc, len(refs))
     store = atlas.knowledge_store
 
-    # Query for this specific document
-    docs = await store.list_documents(limit=1, offset=0)
+    # Legacy compatibility path.
+    docs = await store.list_documents(limit=10000, offset=0)
     doc = next((d for d in docs if d.id == document_id), None)
 
     if not doc:
@@ -251,6 +327,18 @@ async def get_document(document_id: str, atlas: Atlas = Depends(_get_atlas)) -> 
         chunk_count=doc.chunk_count,
         indexed=doc.indexed,
         created_ts=doc.created_ts.isoformat(),
+    )
+
+
+def _document_item(doc: KnowledgeDocument, chunks: int) -> DocumentListItem:
+    return DocumentListItem(
+        id=doc.document_id,
+        title=doc.title,
+        source_path=doc.uri or doc.source_id,
+        source_type=doc.source_type.value,
+        chunk_count=chunks,
+        indexed=bool(chunks),
+        created_ts=doc.retrieved_at.isoformat(),
     )
 
 

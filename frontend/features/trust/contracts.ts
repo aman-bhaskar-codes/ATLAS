@@ -39,6 +39,8 @@ export const ApprovalViewSchema = z.object({
   tier: z.number(),
   prompt: z.string(),
   exact_preview: z.string(),
+  code_required: z.boolean().optional().default(false),
+  confirmation_code: z.string().nullable().optional().default(null),
   warnings: z.array(z.string()),
   policy_version: z.string(),
   created_at: z.string(),
@@ -96,6 +98,15 @@ export const AuditPageSchema = z.object({
   next_cursor: z.string().nullable(),
 });
 export type AuditPage = z.infer<typeof AuditPageSchema>;
+
+export const AuditExportSchema = z.object({
+  items: z.array(AuditEventViewSchema),
+  generated_at: z.string(),
+  filters: z.object({since: z.string().nullable(), tier: z.number().nullable()}),
+  max_events: z.number().int().min(1).max(1000),
+  truncated: z.boolean(),
+});
+export type AuditExport = z.infer<typeof AuditExportSchema>;
 
 export const MemoryMutationReceiptSchema = z.object({
   accepted: z.boolean(),

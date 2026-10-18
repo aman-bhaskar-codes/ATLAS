@@ -1,8 +1,10 @@
 import { useRef, useEffect, useCallback } from "react";
+import { Paperclip } from "lucide-react";
 import { useWorkspace, type AttachmentType } from "../WorkspaceState";
 
 export function PromptEditor({ onStart }: { onStart: () => void }) {
-  const { state, dispatch } = useWorkspace();
+  const { state, dispatch, isPending } = useWorkspace();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -25,36 +27,27 @@ export function PromptEditor({ onStart }: { onStart: () => void }) {
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       onStart();
     }
   };
 
+  const addFiles = useCallback((files: File[]) => {
+    if (isPending) return;
+    dispatch({type: "ADD_ATTACHMENTS", payload: files.map(file => {
+      const suffix = file.name.split(".").pop()?.toLowerCase();
+      const type: AttachmentType = file.type.startsWith("image/") ? "image" : suffix === "pdf" ? "pdf" : suffix === "md" ? "markdown" : "code";
+      return {id: `local_${crypto.randomUUID()}`, file, type, status: "queued" as const};
+    })});
+  }, [dispatch, isPending]);
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     dispatch({ type: "SET_DRAGGING", payload: false });
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      // Process files...
-      // For now, we'll just log them or dispatch placeholder additions
-      const files = Array.from(e.dataTransfer.files);
-      const newAttachments = files.map(file => {
-        const id = `local_${Math.random().toString(36).substring(7)}`;
-        const type: AttachmentType = file.type.startsWith("image/") ? "image" : file.type === "application/pdf" ? "pdf" : "file";
-        const previewUrl = type === "image" ? URL.createObjectURL(file) : undefined;
-        return {
-          id,
-          file,
-          type,
-          status: "ready" as const,
-          previewUrl
-        };
-      });
-      dispatch({ type: "ADD_ATTACHMENTS", payload: newAttachments });
-    }
-  }, [dispatch]);
+    addFiles(Array.from(e.dataTransfer.files));
+  }, [dispatch, addFiles]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -76,24 +69,8 @@ export function PromptEditor({ onStart }: { onStart: () => void }) {
   }, [dispatch]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    if (e.clipboardData.files.length > 0) {
-      // Don't prevent default text pasting, just capture files
-      const files = Array.from(e.clipboardData.files);
-      const newAttachments = files.map(file => {
-        const id = `local_${Math.random().toString(36).substring(7)}`;
-        const type: AttachmentType = file.type.startsWith("image/") ? "image" : file.type === "application/pdf" ? "pdf" : "file";
-        const previewUrl = type === "image" ? URL.createObjectURL(file) : undefined;
-        return {
-          id,
-          file,
-          type,
-          status: "ready" as const,
-          previewUrl
-        };
-      });
-      dispatch({ type: "ADD_ATTACHMENTS", payload: newAttachments });
-    }
-  }, [dispatch]);
+    addFiles(Array.from(e.clipboardData.files));
+  }, [addFiles]);
 
   return (
     <div 
@@ -105,6 +82,8 @@ export function PromptEditor({ onStart }: { onStart: () => void }) {
     >
       <textarea
         ref={textareaRef}
+        aria-label="Task request"
+        disabled={isPending}
         value={state.text}
         onChange={(e) => dispatch({ type: "SET_TEXT", payload: e.target.value })}
         onKeyDown={handleKeyDown}
@@ -114,6 +93,15 @@ export function PromptEditor({ onStart }: { onStart: () => void }) {
         style={{ minHeight: '60px' }}
       />
 
+      <div className="flex flex-wrap items-center gap-3 px-4 pb-2 text-xs text-slate-500">
+        <input ref={fileInputRef} type="file" multiple className="hidden" aria-label="Attachment files"
+          accept=".txt,.md,.markdown,.json,.py,.js,.ts,.tsx,.jsx,.go,.rs,.cpp,.c,.h,.css,.html,.yaml,.yml,.sh,.sql,.pdf"
+          onChange={e => {addFiles(Array.from(e.target.files || [])); e.target.value = "";}} />
+        <button type="button" disabled={isPending} onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1 hover:text-slate-200">
+          <Paperclip size={13} /> Attach files
+        </button>
+        <span>Text, code, markdown, JSON, text-based PDF · 64 KiB each · up to 8 files</span>
+      </div>
       {state.isDragging && (
         <div className="absolute inset-0 z-10 bg-gold-900/10 border-2 border-dashed border-gold-500/50 rounded flex items-center justify-center backdrop-blur-[2px]">
           <span className="text-gold-400 font-medium tracking-wide">Drop files to attach</span>

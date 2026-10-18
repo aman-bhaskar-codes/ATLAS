@@ -291,6 +291,7 @@ def build_orchestration(
         world_state=world_state,  # Batch 4
         dag_executor=DagExecutor(dispatcher),  # Batch 5
         supervisor=_build_supervisor(config, gateway, reasoning, events, verifier),
+        checkpoint_store=checkpoint_store,
     )
 
     return OrchestrationComponents(

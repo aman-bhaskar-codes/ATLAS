@@ -2,7 +2,7 @@ import { X, FileText, Image as ImageIcon, Code2, FileCode2, Paperclip, Loader2 }
 import { Attachment, useWorkspace } from "../WorkspaceState";
 
 export function AttachmentCard({ attachment }: { attachment: Attachment }) {
-  const { dispatch } = useWorkspace();
+  const { dispatch, isPending } = useWorkspace();
 
   const handleRemove = () => {
     dispatch({ type: "REMOVE_ATTACHMENT", payload: attachment.id });
@@ -23,7 +23,9 @@ export function AttachmentCard({ attachment }: { attachment: Attachment }) {
       {/* Remove Button */}
       <button 
         onClick={handleRemove}
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-ember-400"
+        disabled={isPending}
+        aria-label={`Remove ${attachment.file.name}`}
+        className="absolute top-2 right-2 opacity-100 transition-opacity text-slate-400 hover:text-ember-400"
         title="Remove attachment"
       >
         <X size={14} />
@@ -31,11 +33,7 @@ export function AttachmentCard({ attachment }: { attachment: Attachment }) {
 
       {/* Preview / Icon */}
       <div className="w-10 h-10 flex items-center justify-center bg-ink-900 rounded overflow-hidden flex-shrink-0 border border-ink-800">
-        {attachment.type === "image" && attachment.previewUrl ? (
-          <img src={attachment.previewUrl} alt={attachment.file.name} className="w-full h-full object-cover" />
-        ) : (
-          getIcon()
-        )}
+        {getIcon()}
       </div>
 
       {/* Details */}
@@ -52,6 +50,8 @@ export function AttachmentCard({ attachment }: { attachment: Attachment }) {
               <Loader2 size={10} className="animate-spin" /> Uploading...
             </span>
           )}
+          {attachment.status === "queued" && <span className="text-[10px] text-slate-400">Queued</span>}
+          {attachment.status === "ready" && <span className="text-[10px] text-jade-400">Uploaded</span>}
           {Boolean(attachment.metadata?.ocr_detected) && (
             <span className="text-[10px] bg-jade-900/50 text-jade-400 px-1 rounded-sm border border-jade-500/20">
               OCR
@@ -63,6 +63,7 @@ export function AttachmentCard({ attachment }: { attachment: Attachment }) {
             </span>
           )}
         </div>
+        {attachment.error && <span role="alert" className="text-xs text-ember-400 mt-1">{attachment.error}</span>}
       </div>
     </div>
   );

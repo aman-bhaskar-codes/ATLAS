@@ -20,7 +20,13 @@ from fastapi.testclient import TestClient
 from atlas.interfaces.api.dependencies import get_atlas
 from atlas.interfaces.api.routes_agent import router as agent_router
 from atlas.orchestration.agent_engine.event_reader import AgentRunEvent
-from atlas.orchestration.agent_engine.records import AgentEngineResult, AgentRunRecord, StopReason
+from atlas.orchestration.agent_engine.records import (
+    AgentCheckpoint,
+    AgentEngineResult,
+    AgentRunRecord,
+    AgentStep,
+    StopReason,
+)
 from atlas.orchestration.agent_engine.service import AgentRunError, AgentRunNotReady
 
 BASE = "/api/v1/agent"
@@ -151,6 +157,32 @@ def test_background_run_returns_running_stub_with_null_result() -> None:
     assert body["status"] == "running"
     assert body["result"] is None  # M2.2: a running stub serializes with a null trace
     assert ("start_run_background", "async please") in svc.calls
+
+
+def test_running_checkpoint_is_exposed_without_a_terminal_result() -> None:
+    active = _running("active", "in flight").model_copy(
+        update={
+            "checkpoint": AgentCheckpoint(
+                steps=(AgentStep(index=0, assistant_text="working"),), model_calls=3, tool_calls=2, tokens_used=55
+            )
+        }
+    )
+
+    class ActiveService(FakeAgentService):
+        async def get_run(self, run_id: str) -> AgentRunRecord:
+            return active
+
+        async def list_runs(self, **kwargs: object) -> tuple[AgentRunRecord, ...]:
+            return (active,)
+
+    client = _client(service=ActiveService())
+    detail = client.get(f"{BASE}/runs/active").json()
+    assert detail["status"] == "running" and detail["result"] is None
+    assert detail["checkpoint"]["steps"][0]["assistant_text"] == "working"
+    assert detail["checkpoint"]["tokens_used"] == 55
+    summary = client.get(f"{BASE}/runs").json()["runs"][0]
+    assert summary["model_calls"] == 3 and summary["tool_calls"] == 2
+    assert summary["tokens_used"] == 55 and summary["final_text"] == ""
 
 
 def test_list_tolerates_running_stub_rows() -> None:

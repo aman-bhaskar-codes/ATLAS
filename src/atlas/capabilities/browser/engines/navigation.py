@@ -35,7 +35,7 @@ class NavigationEngine:
         # Default-deny egress runs BEFORE reputation: it fails closed, whereas the
         # reputation checker fails open. An out-of-scope or internal target never
         # reaches the page provider.
-        self._egress.check(url)
+        await self._egress.check_resolved(url)
 
         if self._reputation is not None:
             result = await self._reputation.check(url)
@@ -49,6 +49,9 @@ class NavigationEngine:
         provider, provider_session_id, tab_id = self._pages.get_provider(handle)
 
         try:
+            if not provider.capabilities.request_interception:
+                raise NavigationError("Browser provider does not support egress interception")
+            await provider.set_egress_policy(provider_session_id, tab_id, self._egress)
             await provider.goto(provider_session_id, tab_id, url)
             _log.info(f"Navigated to {url}", extra={"cid": cid})
         except Exception as exc:

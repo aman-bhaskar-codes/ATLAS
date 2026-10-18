@@ -23,24 +23,35 @@ from atlas.intelligence.contracts import Constraints, ModelSpec
 from atlas.intelligence.errors import RoutingError
 from atlas.intelligence.health.health_monitor import HealthMonitor
 from atlas.intelligence.registry.capability_index import CapabilityIndex
+from atlas.intelligence.registry.provider_registry import ProviderRegistry
 
 
 class ModelSelector:
-    def __init__(self, index: CapabilityIndex, health: HealthMonitor) -> None:
+    def __init__(
+        self,
+        index: CapabilityIndex,
+        health: HealthMonitor,
+        *,
+        providers: ProviderRegistry | None = None,
+    ) -> None:
         self._index = index
         self._health = health
+        self._providers = providers
 
     def select(self, required: CapabilitySet, constraints: Constraints) -> list[ModelSpec]:
         candidates = self._index.candidates(required)
         candidates = [c for c in candidates if self._passes(c, constraints)]
         if constraints.pinned_model:
-            candidates = [c for c in candidates if c.id == constraints.pinned_model] or candidates
+            pinned = [c for c in candidates if c.id == constraints.pinned_model]
+            candidates = pinned if constraints.require_pinned_model else pinned or candidates
         if not candidates:
             raise RoutingError(f"no model satisfies {sorted(c.value for c in required)}")
         ranked = sorted(candidates, key=lambda m: self._score(m, constraints), reverse=True)
         return ranked
 
     def _passes(self, m: ModelSpec, c: Constraints) -> bool:
+        if self._providers is not None and self._providers.get(m.provider) is None:
+            return False
         # --- Existing filters ---
         if c.min_context and m.context_length < c.min_context:
             return False

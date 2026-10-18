@@ -87,9 +87,9 @@ export function WorkspacesDashboard() {
   }
 
   return (
-    <div style={{ display: 'flex', gap: '1.5rem', height: '100%' }}>
+    <div className="workspace-launcher-grid">
       {/* Left panel: List of workspaces */}
-      <div className="panel" style={{ width: '350px', display: 'flex', flexDirection: 'column' }}>
+      <div className="panel" style={{ display: 'flex', flexDirection: 'column' }}>
         <div className="section-head" style={{ padding: '1rem', borderBottom: '1px solid var(--line)' }}>
           <h3 style={{ margin: 0, color: 'var(--paper-100)', fontSize: '1rem' }}>Workspaces</h3>
         </div>
@@ -106,10 +106,14 @@ export function WorkspacesDashboard() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {workspaces.map((ws: Workspace) => (
-              <div
+              <button
+                type="button"
                 key={ws.workspace_id}
+                aria-pressed={selectedWorkspaceId === ws.workspace_id}
                 onClick={() => setSelectedWorkspaceId(ws.workspace_id)}
                 style={{
+                  textAlign: 'left',
+                  width: '100%',
                   border: '1px solid',
                   borderColor: selectedWorkspaceId === ws.workspace_id ? 'var(--gold-500)' : 'var(--line)',
                   background: selectedWorkspaceId === ws.workspace_id ? 'var(--ink-850)' : 'var(--ink-900)',
@@ -123,7 +127,7 @@ export function WorkspacesDashboard() {
                 <div style={{ color: 'var(--paper-500)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {ws.root_paths[0]}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -154,10 +158,8 @@ function CreateWorkspaceForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !rootPath.trim()) return;
-    openMutation.mutate({ name, root_path: rootPath });
-    setName('');
-    setRootPath('');
+    if (!name.trim() || !rootPath.trim() || openMutation.isPending) return;
+    openMutation.mutate({ name: name.trim(), root_path: rootPath.trim() }, { onSuccess: () => { setName(''); setRootPath(''); } });
   };
 
   return (
@@ -165,9 +167,10 @@ function CreateWorkspaceForm() {
       <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--paper-100)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
         <Plus size={14} /> Open Workspace
       </div>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <form noValidate onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <input
           type="text"
+          aria-label="Workspace name"
           placeholder="Workspace Name"
           value={name}
           onChange={e => setName(e.target.value)}
@@ -179,6 +182,7 @@ function CreateWorkspaceForm() {
         />
         <input
           type="text"
+          aria-label="Workspace absolute path"
           placeholder="Absolute Path (/Users/...)"
           value={rootPath}
           onChange={e => setRootPath(e.target.value)}
@@ -233,7 +237,7 @@ function WorkspaceDetails({ workspaceId, workspaces }: { workspaceId: string, wo
         </div>
       </div>
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div className="workspace-detail-grid" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         
         {/* File Tree */}
         <div style={{ flex: 1, borderRight: '1px solid var(--line)', padding: '1rem', overflowY: 'auto' }}>

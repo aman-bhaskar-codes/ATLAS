@@ -125,7 +125,7 @@ export function ResearchWorkspace({ sessionId }: { sessionId: string }) {
       </header>
 
       {/* Two-column: answer + rail */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: "1.5rem", alignItems: "start" }}>
+      <div className="research-result-grid">
         {/* Answer column */}
         <main style={{ minWidth: 0 }}>
           {running && (
@@ -203,18 +203,6 @@ export function ResearchWorkspace({ sessionId }: { sessionId: string }) {
   );
 }
 
-/** Bare full-window shell — no Command Center chrome (branched off in AppChrome). */
 function ResearchShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--ink-950)",
-        color: "var(--paper-100)",
-        padding: "2rem clamp(1rem, 5vw, 4rem)",
-      }}
-    >
-      <div style={{ maxWidth: "1100px", margin: "0 auto" }}>{children}</div>
-    </div>
-  );
+  return <div className="research-session">{children}</div>;
 }

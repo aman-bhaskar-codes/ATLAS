@@ -21,6 +21,7 @@ from atlas.knowledge.domain import (
     Evidence,
     make_evidence_id,
 )
+from atlas.knowledge.ocr import page_provenance
 from atlas.knowledge.retrieval import Candidate
 
 _NUMBER_RE = re.compile(
@@ -52,6 +53,11 @@ class EvidenceSelector:
             seen_quotes.add(quote)
             doc = cand.document
             heading_loc = f"§ {cand.chunk.heading}" if cand.chunk.heading else f"chunk {cand.chunk.chunk_index}"
+            page = page_provenance(doc.provenance, cand.chunk.char_start, cand.chunk.char_end)
+            if page:
+                heading_loc = f"page {page['page_start']}"
+                if page["page_end"] != page["page_start"]:
+                    heading_loc += f"-{page['page_end']}"
             ev = Evidence(
                 evidence_id=make_evidence_id(doc.document_id, quote),
                 document_id=doc.document_id,
@@ -69,6 +75,7 @@ class EvidenceSelector:
                     "security_status": doc.security_status.value,
                     "freshness": doc.freshness,
                     "rrf_score": round(cand.rrf_score, 4),
+                    **page,
                 },
             ).with_hash()
             picked.append(ev)

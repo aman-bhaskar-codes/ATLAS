@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class RuntimeStatusResponse(BaseModel):
@@ -99,6 +99,12 @@ class ApprovalResponse(BaseModel):
     warnings: list[str]
     expires_at: datetime
     status: Literal["pending", "approved", "denied", "expired"]
+    exact_preview: str = ""
+    policy_version: str = "1"
+    created_at: datetime
+    decision_source: Literal["dashboard", "telegram", "cli"] | None = None
+    code_required: bool = False
+    confirmation_code: str | None = None
 
 
 class CapabilityResponse(BaseModel):
@@ -113,14 +119,20 @@ class CapabilityResponse(BaseModel):
 
 class AttachmentRef(BaseModel):
     id: str
-    type: str
+    type: Literal["image", "pdf", "code", "markdown", "file"]
 
 
 class CreateTaskRequest(BaseModel):
-    request: str = Field(min_length=1, max_length=20_000)
+    request: str = Field(max_length=20_000)
     source: Literal["api"] = "api"
     idempotency_key: str = Field(min_length=16)
-    attachments: list[AttachmentRef] = Field(default_factory=list)
+    attachments: list[AttachmentRef] = Field(default_factory=list, max_length=8)
+
+    @model_validator(mode="after")
+    def require_input(self) -> CreateTaskRequest:
+        if not self.request.strip() and not self.attachments:
+            raise ValueError("A request or attachment is required")
+        return self
 
 
 class CancelTaskRequest(BaseModel):
@@ -139,7 +151,8 @@ class CancelTaskResponse(BaseModel):
 
 class ApprovalDecisionRequest(BaseModel):
     decision: Literal["approve", "deny"]
-    idempotency_key: str = Field(min_length=16)
+    idempotency_key: str = Field(min_length=16, max_length=200)
+    confirmation_code: str | None = Field(default=None, pattern=r"^[0-9]{4}$", min_length=4, max_length=4)
 
 
 class ErrorEnvelope(BaseModel):
@@ -154,3 +167,29 @@ class ErrorDetail(BaseModel):
     request_id: str
     retryable: bool = False
     detail: Any = None
+
+
+class LaunchPlatformRequest(BaseModel):
+    parent_task_id: str | None = None
+    target: Literal["research", "ide"]
+    workspace_name: str | None = None
+    initial_query: str | None = None
+
+
+class LaunchPlatformResponse(BaseModel):
+    task_id: str
+    workspace_id: str
+    handoff_token: str
+    redirect_path: str
+    platform: str
+
+
+class HandoffContextResponse(BaseModel):
+    token: str
+    task_id: str
+    workspace_id: str
+    platform: str
+    parent_task_id: str | None = None
+    parent_context: dict[str, Any] | None = None
+    created_ts: str
+
